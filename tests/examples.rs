@@ -263,3 +263,17 @@ fn lambdas() {
     assert_compile_error("lambda_capture", "fn main() {\n    var n = 0\n    let f = fn() {\n        n += 1\n    }\n}", "cannot change `n` inside a lambda");
     assert_compile_error("lambda_self", "class A {\n    x: int\n    fn m() {\n        let f = fn() => self.x\n    }\n}\nfn main() {}", "`self` cannot be used inside a lambda");
 }
+
+#[test]
+fn generics() {
+    let (code, out, err) = run_file("tests/generics.kl");
+    assert_eq!(code, 0, "{}", err);
+    assert_eq!(out, "2 2 2 1 none\na\nx 5 5 x\n15\n3 z 3\n[1, 2] [ab, ab, ab]\nRex\nnone\n");
+    let h = "class Holder<T> {\n    value: T\n    fn get() -> T {\n        return self.value\n    }\n}\n";
+    assert_compile_error("generic_infer", &format!("{}fn main() {{ let b = Holder() }}", h), "cannot tell what `T` is");
+    assert_compile_error("generic_arity", &format!("{}fn main() {{ let b: Holder<int, str> = Holder() }}", h), "needs 1 type argument");
+    assert_compile_error("generic_ops", "fn add<T>(a: T, b: T) -> T {\n    return a + b\n}\nfn main() {}", "cannot apply `+` to `T` and `T`");
+    let (code, _, err) = run_source("generic_unset", &format!("{}fn main() {{\n    print(Holder<int>().get())\n}}\n", h));
+    assert_eq!(code, 101);
+    assert!(err.contains("field `value` was read before it was set"), "{}", err);
+}

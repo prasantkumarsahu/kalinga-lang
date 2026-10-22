@@ -25,6 +25,10 @@ pub enum Type {
     Func(Vec<Type>, Box<Type>),
     /// Placeholder for "not known yet" in expected-type hints (lambda results).
     Unknown,
+    /// A type parameter (`T`) inside generic code.
+    Param(String),
+    /// An instance of a generic class: `Stack<int>`.
+    Generic(String, Vec<Type>),
     /// Type of the `none` literal before it meets an expected optional type.
     NoneLit,
 }
@@ -35,7 +39,7 @@ impl Type {
     }
 
     pub fn is_object(&self) -> bool {
-        matches!(self, Type::Class(_) | Type::Interface(_))
+        matches!(self, Type::Class(_) | Type::Interface(_) | Type::Generic(..))
     }
 }
 
@@ -53,6 +57,11 @@ impl fmt::Display for Type {
             Type::Class(n) | Type::Interface(n) | Type::Enum(n) => write!(f, "{}", n),
             Type::NoneLit => write!(f, "none"),
             Type::Unknown => write!(f, "_"),
+            Type::Param(n) => write!(f, "{}", n),
+            Type::Generic(n, args) => {
+                let a: Vec<String> = args.iter().map(|t| t.to_string()).collect();
+                write!(f, "{}<{}>", n, a.join(", "))
+            }
             Type::Func(ps, r) => {
                 let ps: Vec<String> = ps.iter().map(|p| p.to_string()).collect();
                 if **r == Type::Void {
@@ -99,6 +108,8 @@ pub struct ClassInfo {
     pub abstract_methods: HashSet<String>,
     pub init: Option<Signature>,
     pub children: Vec<String>,
+    /// Type parameters of a generic class (empty otherwise).
+    pub tparams: Vec<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -126,6 +137,8 @@ pub struct TypeNames {
     pub classes: HashSet<String>,
     pub ifaces: HashSet<String>,
     pub enums: HashSet<String>,
+    /// Generic classes and their number of type parameters.
+    pub generic: HashMap<String, usize>,
 }
 
 #[derive(Debug)]
@@ -136,6 +149,8 @@ pub struct Model {
     pub interfaces: HashMap<String, InterfaceInfo>,
     pub interface_order: Vec<String>,
     pub functions: HashMap<String, Signature>,
+    /// Type parameters of generic functions.
+    pub fn_tparams: HashMap<String, Vec<String>>,
     pub enums: HashMap<String, EnumInfo>,
     pub enum_order: Vec<String>,
     /// Enums whose payloads can all be printed and compared.
@@ -157,6 +172,7 @@ impl Model {
             interfaces: HashMap::new(),
             interface_order: vec![],
             functions: HashMap::new(),
+            fn_tparams: HashMap::new(),
             enums: HashMap::new(),
             enum_order: vec![],
             plain_enums: HashSet::new(),
@@ -187,10 +203,25 @@ impl Model {
             classes: prog.classes.iter().map(|c| c.name.clone()).collect(),
             ifaces: prog.interfaces.iter().map(|i| i.name.clone()).collect(),
             enums: prog.enums.iter().map(|e| e.name.clone()).collect(),
+            generic: prog.classes.iter().filter(|c| !c.tparams.is_empty()).map(|c| (c.name.clone(), c.tparams.len())).collect(),
+        };
+        let check_tparams = |tps: &[String], pos: Pos| -> Result<()> {
+            for (i, t) in tps.iter().enumerate() {
+                if !t.starts_with(|c: char| c.is_uppercase()) {
+                    return err(format!("type parameters must start with an uppercase letter: `{}`", t), pos);
+                }
+                if type_names.contains(t.as_str()) || RESERVED_TYPES.contains(&t.as_str()) {
+                    return err(format!("type parameter `{}` has the same name as a type", t), pos);
+                }
+                if tps[..i].contains(t) {
+                    return err(format!("type parameter `{}` listed twice", t), pos);
+                }
+            }
+            Ok(())
         };
         let class_names = names.classes.clone();
         let iface_names = names.ifaces.clone();
-        let resolve = |t: &TypeExpr| resolve_type(t, &names);
+        let resolve = |t: &TypeExpr| resolve_type(t, &names, &[]);
 
         // Enums.
         for e in &prog.enums {
@@ -296,7 +327,14 @@ impl Model {
             if f.is_override || f.is_private || f.is_static || f.is_abstract {
                 return err("`override`, `private`, `static` and `abstract` are only allowed on class members", f.pos);
             }
-            m.functions.insert(f.name.clone(), signature(&f.params, &f.ret, &resolve)?);
+            check_tparams(&f.tparams, f.pos)?;
+            if f.name == "main" && !f.tparams.is_empty() {
+                return err("`main` cannot be generic", f.pos);
+            }
+            let tps = f.tparams.clone();
+            let resolve_fn = |t: &TypeExpr| resolve_type(t, &names, &tps);
+            m.functions.insert(f.name.clone(), signature(&f.params, &f.ret, &resolve_fn)?);
+            m.fn_tparams.insert(f.name.clone(), f.tparams.clone());
         }
         match m.functions.get("main") {
             None => return err("program has no `fn main()`", Pos { line: 1, col: 1, file: 0 }),
@@ -309,6 +347,22 @@ impl Model {
 
         // 4. Classes: bases, fields, methods.
         for c in &prog.classes {
+            check_tparams(&c.tparams, c.pos)?;
+            let tps = c.tparams.clone();
+            let resolve = |t: &TypeExpr| resolve_type(t, &names, &tps);
+            if !c.tparams.is_empty() {
+                if !c.bases.is_empty() {
+                    return err("generic classes cannot extend classes or implement interfaces (yet)", c.bases[0].1);
+                }
+                if c.is_abstract || c.methods.iter().any(|m| m.is_static) {
+                    return err("generic classes cannot be abstract or have `static fn`s (yet)", c.pos);
+                }
+            }
+            for (b, pos) in &c.bases {
+                if names.generic.contains_key(b) {
+                    return err(format!("`{}` is generic and cannot be extended (yet)", b), *pos);
+                }
+            }
             let mut parent = None;
             let mut interfaces = Vec::new();
             for (b, pos) in &c.bases {
@@ -401,6 +455,7 @@ impl Model {
                     abstract_methods,
                     init,
                     children: vec![],
+                    tparams: c.tparams.clone(),
                 },
             );
         }
@@ -710,8 +765,19 @@ impl Model {
         class_trait(&owner)
     }
 
-    pub fn resolve(&self, t: &TypeExpr) -> Result<Type> {
-        resolve_type(t, &self.names)
+    pub fn resolve(&self, t: &TypeExpr, tparams: &[String]) -> Result<Type> {
+        resolve_type(t, &self.names, tparams)
+    }
+
+    /// Fields of a generic class whose type is a bare type parameter are stored as
+    /// `Option<T>` (there is no default value for an unknown type).
+    pub fn is_wrapped_field(&self, class: &str, field: &str) -> bool {
+        self.classes.get(class).is_some_and(|c| c.fields.iter().any(|(n, t)| n == field && matches!(t, Type::Param(_))))
+    }
+
+    /// Maps a generic class's type parameters to concrete arguments.
+    pub fn bindings(&self, class: &str, args: &[Type]) -> HashMap<String, Type> {
+        self.classes[class].tparams.iter().cloned().zip(args.iter().cloned()).collect()
     }
 
     /// Values that can be printed and compared with `==`.
@@ -791,7 +857,63 @@ fn check_type_name(name: &str, pos: Pos) -> Result<()> {
     Ok(())
 }
 
-fn resolve_type(t: &TypeExpr, names: &TypeNames) -> Result<Type> {
+/// Replaces type parameters using `map` (unknown parameters are left as they are).
+pub fn subst(t: &Type, map: &HashMap<String, Type>) -> Type {
+    match t {
+        Type::Param(n) => map.get(n).cloned().unwrap_or_else(|| t.clone()),
+        Type::Array(i) => Type::Array(Box::new(subst(i, map))),
+        Type::Optional(i) => Type::Optional(Box::new(subst(i, map))),
+        Type::Map(k, v) => Type::Map(Box::new(subst(k, map)), Box::new(subst(v, map))),
+        Type::Func(ps, r) => Type::Func(ps.iter().map(|p| subst(p, map)).collect(), Box::new(subst(r, map))),
+        Type::Generic(n, args) => Type::Generic(n.clone(), args.iter().map(|a| subst(a, map)).collect()),
+        other => other.clone(),
+    }
+}
+
+pub fn subst_sig(sig: &Signature, map: &HashMap<String, Type>) -> Signature {
+    Signature { params: sig.params.iter().map(|(n, t)| (n.clone(), subst(t, map))).collect(), ret: subst(&sig.ret, map) }
+}
+
+/// Learns type-parameter bindings by matching `pattern` (may contain `T`) against `actual`.
+pub fn unify(pattern: &Type, actual: &Type, map: &mut HashMap<String, Type>) {
+    match (pattern, actual) {
+        (_, Type::NoneLit | Type::Unknown) => {}
+        (Type::Param(n), a) => {
+            map.entry(n.clone()).or_insert_with(|| a.clone());
+        }
+        (Type::Array(p), Type::Array(a)) | (Type::Optional(p), Type::Optional(a)) => unify(p, a, map),
+        (Type::Optional(p), a) => unify(p, a, map),
+        (Type::Map(pk, pv), Type::Map(ak, av)) => {
+            unify(pk, ak, map);
+            unify(pv, av, map);
+        }
+        (Type::Func(pp, pr), Type::Func(ap, ar)) if pp.len() == ap.len() => {
+            for (p, a) in pp.iter().zip(ap) {
+                unify(p, a, map);
+            }
+            unify(pr, ar, map);
+        }
+        (Type::Generic(pn, pa), Type::Generic(an, aa)) if pn == an => {
+            for (p, a) in pa.iter().zip(aa) {
+                unify(p, a, map);
+            }
+        }
+        _ => {}
+    }
+}
+
+pub fn has_params(t: &Type) -> bool {
+    match t {
+        Type::Param(_) => true,
+        Type::Array(i) | Type::Optional(i) => has_params(i),
+        Type::Map(k, v) => has_params(k) || has_params(v),
+        Type::Func(ps, r) => ps.iter().any(has_params) || has_params(r),
+        Type::Generic(_, args) => args.iter().any(has_params),
+        _ => false,
+    }
+}
+
+fn resolve_type(t: &TypeExpr, names: &TypeNames, tparams: &[String]) -> Result<Type> {
     Ok(match t {
         TypeExpr::Int => Type::Int,
         TypeExpr::Float => Type::Float,
@@ -799,18 +921,18 @@ fn resolve_type(t: &TypeExpr, names: &TypeNames) -> Result<Type> {
         TypeExpr::Str => Type::Str,
         TypeExpr::Void => Type::Void,
         TypeExpr::Array(inner) => {
-            let i = resolve_type(inner, names)?;
+            let i = resolve_type(inner, names, tparams)?;
             if i == Type::Void {
                 return err("array of void is not allowed", Pos::default());
             }
             Type::Array(Box::new(i))
         }
         TypeExpr::Map(k, v) => {
-            let kt = resolve_type(k, names)?;
+            let kt = resolve_type(k, names, tparams)?;
             if !is_map_key(&kt) {
                 return err(format!("map keys must be `int`, `str` or `bool`, not `{}`", kt), Pos::default());
             }
-            let vt = resolve_type(v, names)?;
+            let vt = resolve_type(v, names, tparams)?;
             if vt == Type::Void {
                 return err("map of void is not allowed", Pos::default());
             }
@@ -819,22 +941,45 @@ fn resolve_type(t: &TypeExpr, names: &TypeNames) -> Result<Type> {
         TypeExpr::Func(ps, r) => {
             let mut params = Vec::new();
             for p in ps {
-                let t = resolve_type(p, names)?;
+                let t = resolve_type(p, names, tparams)?;
                 if t == Type::Void {
                     return err("a function parameter cannot be void", Pos::default());
                 }
                 params.push(t);
             }
-            Type::Func(params, Box::new(resolve_type(r, names)?))
+            Type::Func(params, Box::new(resolve_type(r, names, tparams)?))
         }
         TypeExpr::Optional(inner) => {
-            let i = resolve_type(inner, names)?;
+            let i = resolve_type(inner, names, tparams)?;
             if matches!(i, Type::Optional(_)) {
                 return err("nested optional `T??` is not allowed", Pos::default());
             }
             Type::Optional(Box::new(i))
         }
-        TypeExpr::Named(n, pos) => {
+        TypeExpr::Named(n, args, pos) => {
+            if tparams.contains(n) {
+                if !args.is_empty() {
+                    return err(format!("type parameter `{}` does not take type arguments", n), *pos);
+                }
+                return Ok(Type::Param(n.clone()));
+            }
+            if let Some(&arity) = names.generic.get(n) {
+                if args.len() != arity {
+                    return err(format!("`{}` needs {} type argument(s), e.g. `{}<int>`", n, arity, n), *pos);
+                }
+                let mut targs = Vec::new();
+                for a in args {
+                    let t = resolve_type(a, names, tparams)?;
+                    if t == Type::Void {
+                        return err("`void` cannot be a type argument", *pos);
+                    }
+                    targs.push(t);
+                }
+                return Ok(Type::Generic(n.clone(), targs));
+            }
+            if !args.is_empty() {
+                return err(format!("`{}` is not generic and takes no type arguments", n), *pos);
+            }
             if names.classes.contains(n) {
                 Type::Class(n.clone())
             } else if names.ifaces.contains(n) {

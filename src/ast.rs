@@ -7,7 +7,8 @@ pub enum TypeExpr {
     Bool,
     Str,
     Void,
-    Named(String, Pos),
+    /// A class, interface or enum name, with type arguments for generic classes.
+    Named(String, Vec<TypeExpr>, Pos),
     Array(Box<TypeExpr>),
     Map(Box<TypeExpr>, Box<TypeExpr>),
     Optional(Box<TypeExpr>),
@@ -25,6 +26,8 @@ pub struct Param {
 #[derive(Debug, Clone)]
 pub struct FnDecl {
     pub name: String,
+    /// Type parameters: `fn first<T>(...)`.
+    pub tparams: Vec<String>,
     pub params: Vec<Param>,
     pub ret: TypeExpr,
     pub body: Vec<Stmt>,
@@ -55,6 +58,8 @@ pub struct InitDecl {
 #[derive(Debug, Clone)]
 pub struct ClassDecl {
     pub name: String,
+    /// Type parameters: `class Stack<T>`.
+    pub tparams: Vec<String>,
     /// Names after `:` — at most one class, any number of interfaces.
     pub bases: Vec<(String, Pos)>,
     pub fields: Vec<FieldDecl>,
@@ -170,8 +175,8 @@ pub enum ExprKind {
     Interp(Vec<InterpPart>),
     Binary(BinOp, Box<Expr>, Box<Expr>),
     Unary(UnOp, Box<Expr>),
-    /// `name(args)` — a function call or a constructor.
-    Call(String, Vec<Expr>),
+    /// `name(args)` / `name<T>(args)` — a function call or a constructor.
+    Call(String, Vec<TypeExpr>, Vec<Expr>),
     /// `obj.name(args)`
     MethodCall(Box<Expr>, String, Vec<Expr>),
     /// `obj.name`

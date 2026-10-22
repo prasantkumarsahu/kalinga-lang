@@ -9,7 +9,7 @@ use std::collections::HashMap;
 use std::fmt::Write as _;
 
 use crate::ast::*;
-use crate::checker::{class_trait, is_map_key, Model, Signature, Type, BUILTINS};
+use crate::checker::{class_trait, has_params, is_map_key, subst, subst_sig, unify, Model, Signature, Type, BUILTINS};
 use crate::error::{err, Pos, Result};
 
 pub fn generate(prog: &Program, model: &Model) -> Result<String> {
@@ -63,6 +63,8 @@ struct Ctx {
     loops: usize,
     /// Lambdas being generated, innermost last.
     lambdas: Vec<LambdaFrame>,
+    /// Type parameters in scope (generic function or class).
+    tparams: Vec<String>,
 }
 
 /// Variables from outside a lambda that its body uses (they are cloned into the closure).
@@ -74,7 +76,7 @@ struct LambdaFrame {
 
 impl Ctx {
     fn new(class: Option<String>, ret: Type, in_init: bool) -> Ctx {
-        Ctx { scopes: vec![HashMap::new()], class, ret, in_init, is_static: false, loops: 0, lambdas: vec![] }
+        Ctx { scopes: vec![HashMap::new()], class, ret, in_init, is_static: false, loops: 0, lambdas: vec![], tparams: vec![] }
     }
 
     /// Finds a variable. Variables from outside the current lambda are recorded as
@@ -150,6 +152,11 @@ impl<'a> Gen<'a> {
                 }
             }
             Type::Unknown => "_".into(),
+            Type::Param(n) => n.clone(),
+            Type::Generic(n, args) => {
+                let a: Vec<String> = args.iter().map(|t| self.rty(t)).collect();
+                format!("Rc<RefCell<{}<{}>>>", n, a.join(", "))
+            }
         }
     }
 
@@ -232,6 +239,7 @@ impl<'a> Gen<'a> {
                 let code = match &f.default {
                     Some(e) => {
                         let mut cx = Ctx::new(None, Type::Void, false);
+                        cx.tparams = info.tparams.clone();
                         self.expr_to(&mut cx, e, &ty)?
                     }
                     None => self.default_value(&ty),
@@ -245,6 +253,7 @@ impl<'a> Gen<'a> {
                 }
                 let sig = if meth.is_static { info.statics[&meth.name].clone() } else { info.methods[&meth.name].clone() };
                 let mut cx = Ctx::new(Some(cname.clone()), sig.ret.clone(), false);
+                cx.tparams = info.tparams.clone();
                 cx.is_static = meth.is_static;
                 let body = self.body_in(&mut cx, &sig, &meth.body, meth.pos, &meth.name, 2)?;
                 let key = if meth.is_static { format!("static {}", meth.name) } else { meth.name.clone() };
@@ -252,7 +261,9 @@ impl<'a> Gen<'a> {
             }
             if let Some(init) = &info.decl.init {
                 let sig = info.init.clone().unwrap();
-                let body = self.body(Some(cname.clone()), &sig, &init.body, true, init.pos, "init", 2)?;
+                let mut cx = Ctx::new(Some(cname.clone()), Type::Void, true);
+                cx.tparams = info.tparams.clone();
+                let body = self.body_in(&mut cx, &sig, &init.body, init.pos, "init", 2)?;
                 init_bodies.insert(cname.clone(), body);
             }
         }
@@ -263,11 +274,14 @@ impl<'a> Gen<'a> {
 
         for f in &prog.functions {
             let sig = self.m.functions[&f.name].clone();
-            let body = self.body(None, &sig, &f.body, false, f.pos, &f.name, 1)?;
+            let mut cx = Ctx::new(None, sig.ret.clone(), false);
+            cx.tparams = f.tparams.clone();
+            let body = self.body_in(&mut cx, &sig, &f.body, f.pos, &f.name, 1)?;
             writeln!(
                 out,
-                "\nfn {}({}){} {{\n{}}}",
+                "\nfn {}{}({}){} {{\n{}}}",
                 fn_id(&f.name),
+                generic_params(&f.tparams),
                 self.params_decl(&sig),
                 self.ret_suffix(&sig.ret),
                 body
@@ -374,6 +388,7 @@ impl<'a> Gen<'a> {
             Type::Str => "String::new()".into(),
             Type::Array(_) => "Vec::new()".into(),
             Type::Map(..) => "BTreeMap::new()".into(),
+            Type::Param(_) => "None".into(),
             Type::Optional(_) => "None".into(),
             // Checker requires an explicit default for object fields.
             _ => unreachable!("no default for {}", t),
@@ -393,15 +408,22 @@ impl<'a> Gen<'a> {
         let fields = m.all_fields(cname);
         let ancestors = m.ancestors(cname);
 
+        let generic = !info.tparams.is_empty();
+        let self_ty = if generic { format!("{}<{}>", cname, info.tparams.join(", ")) } else { cname.to_string() };
+
         writeln!(out, "\n// ===== class {} =====", cname).unwrap();
         // struct
-        writeln!(out, "struct {} {{", cname).unwrap();
-        writeln!(out, "    __self: std::rc::Weak<RefCell<{}>>,", cname).unwrap();
+        writeln!(out, "struct {} {{", self_ty).unwrap();
+        writeln!(out, "    __self: std::rc::Weak<RefCell<{}>>,", self_ty).unwrap();
         for (f, t, _) in &fields {
-            writeln!(out, "    {}: {},", rid(f), self.rty(t)).unwrap();
+            let rt = if matches!(t, Type::Param(_)) { format!("Option<{}>", self.rty(t)) } else { self.rty(t) };
+            writeln!(out, "    {}: {},", rid(f), rt).unwrap();
         }
         out.push_str("}\n");
 
+        if generic {
+            writeln!(out, "impl{} {} {{", generic_params(&info.tparams), self_ty).unwrap();
+        } else {
         // trait for dynamic dispatch
         let mut supers: Vec<String> = vec![];
         if let Some(p) = &info.parent {
@@ -426,9 +448,10 @@ impl<'a> Gen<'a> {
 
         // inherent impl
         writeln!(out, "impl {} {{", cname).unwrap();
+        }
         let ctor = m.find_init(cname);
         let ctor_params = ctor.as_ref().map(|(_, s)| self.params_decl(s)).unwrap_or_default();
-        writeln!(out, "    fn __new({}) -> Rc<RefCell<{}>> {{", ctor_params, cname).unwrap();
+        writeln!(out, "    fn __new({}) -> Rc<RefCell<{}>> {{", ctor_params, self_ty).unwrap();
         out.push_str("        Rc::new_cyclic(|__w| {\n");
         writeln!(out, "            let mut __o = {} {{", cname).unwrap();
         out.push_str("                __self: __w.clone(),\n");
@@ -490,6 +513,10 @@ impl<'a> Gen<'a> {
         }
         out.push_str("}\n");
 
+        if generic {
+            return;
+        }
+
         // trait impls
         let forward = |out: &mut String, mname: &str, sig: &Signature| {
             let names = self.params_names(sig);
@@ -535,22 +562,7 @@ impl<'a> Gen<'a> {
         }
     }
 
-    /// Generates the statements of a function, method or init body.
-    #[allow(clippy::too_many_arguments)]
-    fn body(
-        &self,
-        class: Option<String>,
-        sig: &Signature,
-        stmts: &[Stmt],
-        in_init: bool,
-        pos: Pos,
-        name: &str,
-        depth: usize,
-    ) -> Result<String> {
-        let mut cx = Ctx::new(class, sig.ret.clone(), in_init);
-        self.body_in(&mut cx, sig, stmts, pos, name, depth)
-    }
-
+    /// Generates the statements of a function, method, init or lambda body.
     fn body_in(&self, cx: &mut Ctx, sig: &Signature, stmts: &[Stmt], pos: Pos, name: &str, depth: usize) -> Result<String> {
         for (p, t) in &sig.params {
             cx.declare(p, t.clone(), false, pos)?;
@@ -594,7 +606,7 @@ impl<'a> Gen<'a> {
             StmtKind::Let { name, mutable, ty, value } => {
                 let (code, t) = match ty {
                     Some(te) => {
-                        let t = self.m.resolve(te).map_err(|mut e| {
+                        let t = self.m.resolve(te, &cx.tparams).map_err(|mut e| {
                             if e.pos == Pos::default() {
                                 e.pos = s.pos;
                             }
@@ -846,10 +858,18 @@ impl<'a> Gen<'a> {
                 return Ok(format!("{{ let __v = {}; let __k = {}; {}{}.insert(__k, __v); }}", v, kc, pre, bplace));
             }
         }
+        let wrapped = self.wrapped_target(cx, target)?;
         let v = {
             let mut n = 0;
             let (pre, place, ty) = self.place(cx, target, &mut n)?;
             let v = self.assign_value(cx, op, &ty, value)?;
+            if wrapped {
+                let new = match op {
+                    AssignOp::Set => "__v".to_string(),
+                    _ => self.compound(format!("__unset({}.clone(), \"field\")", place), op, &ty),
+                };
+                return Ok(format!("{{ let __v = {}; {}let __n = {}; {} = Some(__n); }}", v, pre, new, place));
+            }
             let stmt = match (op, &ty) {
                 (AssignOp::Set, _) => format!("{} = __v;", place),
                 (AssignOp::Add, Type::Str) => format!("{}.push_str(&__v);", place),
@@ -858,6 +878,103 @@ impl<'a> Gen<'a> {
             format!("{{ let __v = {}; {}{} }}", v, pre, stmt)
         };
         Ok(v)
+    }
+
+    /// Is `target` a field stored as `Option<T>` (a bare type parameter in a generic class)?
+    fn wrapped_target(&self, cx: &mut Ctx, target: &Expr) -> Result<bool> {
+        if let ExprKind::Field(recv, f) = &target.kind {
+            let class = if matches!(recv.kind, ExprKind::SelfRef) {
+                cx.class.clone()
+            } else {
+                match self.recv(cx, recv)?.1 {
+                    Type::Generic(c, _) => Some(c),
+                    _ => None,
+                }
+            };
+            return Ok(class.is_some_and(|c| self.m.is_wrapped_field(&c, f)));
+        }
+        Ok(false)
+    }
+
+    /// Type of `self` inside a class (generic classes use their own parameters).
+    fn class_type(&self, class: &str) -> Type {
+        let tps = &self.m.classes[class].tparams;
+        if tps.is_empty() {
+            Type::Class(class.to_string())
+        } else {
+            Type::Generic(class.to_string(), tps.iter().map(|t| Type::Param(t.clone())).collect())
+        }
+    }
+
+    /// Evaluates the arguments of a call to something generic, inferring its type
+    /// parameters. Returns (let-bindings, argument names, bound types, return type).
+    #[allow(clippy::too_many_arguments)]
+    fn infer_call(
+        &self,
+        cx: &mut Ctx,
+        tparams: &[String],
+        targs: &[TypeExpr],
+        sig: &Signature,
+        args: &[Expr],
+        expected: Option<&Type>,
+        pos: Pos,
+        what: &str,
+    ) -> Result<(String, String, Vec<Type>, Type)> {
+        if args.len() != sig.params.len() {
+            return err(format!("`{}` takes {} argument(s) but {} were given", what, sig.params.len(), args.len()), pos);
+        }
+        let mut map: HashMap<String, Type> = HashMap::new();
+        if !targs.is_empty() {
+            if targs.len() != tparams.len() {
+                return err(format!("`{}` takes {} type argument(s), not {}", what, tparams.len(), targs.len()), pos);
+            }
+            for (tp, te) in tparams.iter().zip(targs) {
+                let t = self.m.resolve(te, &cx.tparams).map_err(|e| crate::checker::at_pos(e, pos))?;
+                map.insert(tp.clone(), t);
+            }
+        } else if let Some(exp) = expected {
+            unify(&sig.ret, exp, &mut map);
+        }
+        let mut evaluated: Vec<Option<(String, Type)>> = vec![None; args.len()];
+        // Plain arguments first, so lambdas can then get full parameter types.
+        for pass in 0..2 {
+            for (i, a) in args.iter().enumerate() {
+                let is_lambda = matches!(a.kind, ExprKind::Lambda { .. });
+                if (pass == 0) == is_lambda {
+                    continue;
+                }
+                let pt = subst(&sig.params[i].1, &map);
+                let (code, t) = if !has_params(&pt) {
+                    (self.expr_to(cx, a, &pt)?, pt.clone())
+                } else if is_lambda {
+                    self.expr(cx, a, Some(&unknown_params(&pt)))?
+                } else {
+                    self.expr(cx, a, None)?
+                };
+                unify(&sig.params[i].1, &t, &mut map);
+                evaluated[i] = Some((code, t));
+            }
+        }
+        for tp in tparams {
+            if !map.contains_key(tp) {
+                return err(format!("cannot tell what `{}` is for `{}`; write it, e.g. `{}<int>(...)`", tp, what, what), pos);
+            }
+        }
+        let mut binds = String::new();
+        let mut names = vec![];
+        for (i, ev) in evaluated.into_iter().enumerate() {
+            let (code, t) = ev.unwrap();
+            let want = subst(&sig.params[i].1, &map);
+            let code = self.coerce(code, &t, &want, args[i].pos)?;
+            write!(binds, "let __a{} = {}; ", i, code).unwrap();
+            names.push(format!("__a{}", i));
+        }
+        let bound: Vec<Type> = tparams.iter().map(|t| map[t].clone()).collect();
+        Ok((binds, names.join(", "), bound, subst(&sig.ret, &map)))
+    }
+
+    fn turbofish(&self, types: &[Type]) -> String {
+        format!("::<{}>", types.iter().map(|t| self.rty(t)).collect::<Vec<_>>().join(", "))
     }
 
     fn compound(&self, current: String, op: AssignOp, ty: &Type) -> String {
@@ -907,6 +1024,10 @@ impl<'a> Gen<'a> {
                 match &rt {
                     Type::Class(c) if !self.m.has_subclasses(c) => {
                         let t = self.field_type(cx, c, f, e.pos)?;
+                        Ok((String::new(), format!("{}.borrow_mut().{}", rcode, rid(f)), t))
+                    }
+                    Type::Generic(c, targs) => {
+                        let t = subst(&self.field_type(cx, c, f, e.pos)?, &self.m.bindings(c, targs));
                         Ok((String::new(), format!("{}.borrow_mut().{}", rcode, rid(f)), t))
                     }
                     Type::Class(_) => err("cannot modify part of a field through a base-class reference; add a method to the class instead", e.pos),
@@ -1035,7 +1156,7 @@ impl<'a> Gen<'a> {
                 if cx.in_init {
                     return err("`self` cannot be used as a value inside `init` (the object is not finished yet)", e.pos);
                 }
-                let ty = Type::Class(class);
+                let ty = self.class_type(&class);
                 Ok((format!("(self.__self.upgrade().unwrap() as {})", self.rty(&ty)), ty))
             }
             ExprKind::Downcast { value, class, test_only } => self.downcast(cx, value, class, *test_only, e.pos),
@@ -1118,7 +1239,7 @@ impl<'a> Gen<'a> {
                 }
             }
             ExprKind::Binary(op, l, r) => self.binary(cx, *op, l, r, e.pos),
-            ExprKind::Call(name, args) => self.call(cx, name, args, e.pos),
+            ExprKind::Call(name, targs, args) => self.call(cx, name, targs, args, expected, e.pos),
             ExprKind::MethodCall(recv, name, args) => self.method_call(cx, recv, name, args, e.pos),
             ExprKind::Field(recv, f) => {
                 if let Some(t) = self.type_receiver(cx, recv) {
@@ -1127,10 +1248,22 @@ impl<'a> Gen<'a> {
                 if matches!(recv.kind, ExprKind::SelfRef) {
                     let class = self.self_class(cx, recv.pos)?;
                     let t = self.field_type(cx, &class, f, e.pos)?;
+                    if self.m.is_wrapped_field(&class, f) {
+                        return Ok((format!("__unset(self.{}.clone(), {:?})", rid(f), f), t));
+                    }
                     return Ok((clone_if(format!("self.{}", rid(f)), &t), t));
                 }
                 let (rcode, rt) = self.recv(cx, recv)?;
                 match &rt {
+                    Type::Generic(c, targs) => {
+                        let t = subst(&self.field_type(cx, c, f, e.pos)?, &self.m.bindings(c, targs));
+                        let read = if self.m.is_wrapped_field(c, f) {
+                            format!("__unset({}.borrow().{}.clone(), {:?})", rcode, rid(f), f)
+                        } else {
+                            clone_if(format!("{}.borrow().{}", rcode, rid(f)), &t)
+                        };
+                        Ok((format!("{{ let __t = {}; __t }}", read), t))
+                    }
                     Type::Class(c) => {
                         let t = self.field_type(cx, c, f, e.pos)?;
                         let read = if self.m.has_subclasses(c) {
@@ -1200,14 +1333,14 @@ impl<'a> Gen<'a> {
         let mut ptypes = Vec::new();
         for (i, (name, ty, ppos)) in params.iter().enumerate() {
             let t = match (ty, &hint) {
-                (Some(te), _) => self.m.resolve(te).map_err(|e| crate::checker::at_pos(e, *ppos))?,
+                (Some(te), _) => self.m.resolve(te, &cx.tparams).map_err(|e| crate::checker::at_pos(e, *ppos))?,
                 (None, Some((ps, _))) if ps[i] != Type::Unknown => ps[i].clone(),
                 _ => return err(format!("cannot tell the type of `{}`; write it, e.g. `fn({}: int) => ...`", name, name), *ppos),
             };
             ptypes.push(t);
         }
         let declared_ret = match ret {
-            Some(te) => Some(self.m.resolve(te).map_err(|e| crate::checker::at_pos(e, pos))?),
+            Some(te) => Some(self.m.resolve(te, &cx.tparams).map_err(|e| crate::checker::at_pos(e, pos))?),
             None => hint.as_ref().map(|(_, r)| r.clone()).filter(|r| *r != Type::Unknown),
         };
 
@@ -1272,6 +1405,9 @@ impl<'a> Gen<'a> {
     fn downcast(&self, cx: &mut Ctx, value: &Expr, target: &str, test_only: bool, pos: Pos) -> Result<(String, Type)> {
         if !self.m.classes.contains_key(target) {
             return err(format!("`as`/`is` need a class name, and `{}` is not a class", target), pos);
+        }
+        if !self.m.classes[target].tparams.is_empty() {
+            return err(format!("cannot use `as`/`is` with generic class `{}`", target), pos);
         }
         let (code, ty) = self.expr(cx, value, None)?;
         let target_ty = Type::Class(target.to_string());
@@ -1339,7 +1475,26 @@ impl<'a> Gen<'a> {
         }
     }
 
-    fn call(&self, cx: &mut Ctx, name: &str, args: &[Expr], pos: Pos) -> Result<(String, Type)> {
+    #[allow(clippy::too_many_arguments)]
+    fn call(&self, cx: &mut Ctx, name: &str, targs: &[TypeExpr], args: &[Expr], expected: Option<&Type>, pos: Pos) -> Result<(String, Type)> {
+        let generic_class = self.m.classes.get(name).is_some_and(|c| !c.tparams.is_empty());
+        let generic_fn = self.m.fn_tparams.get(name).is_some_and(|t| !t.is_empty());
+        if !targs.is_empty() && !generic_class && !generic_fn {
+            return err(format!("`{}` is not generic and takes no type arguments", name), pos);
+        }
+        if generic_class && cx.lookup(name).is_none() {
+            let tparams = self.m.classes[name].tparams.clone();
+            let sig = self.m.find_init(name).map(|(_, s)| s).unwrap_or(Signature { params: vec![], ret: Type::Void });
+            let sig = Signature { params: sig.params, ret: self.class_type(name) };
+            let (binds, names, bound, ret) = self.infer_call(cx, &tparams, targs, &sig, args, expected, pos, name)?;
+            return Ok((format!("{{ {}{}{}::__new({}) }}", binds, name, self.turbofish(&bound), names), ret));
+        }
+        if generic_fn && cx.lookup(name).is_none() {
+            let tparams = self.m.fn_tparams[name].clone();
+            let sig = self.m.functions[name].clone();
+            let (binds, names, bound, ret) = self.infer_call(cx, &tparams, targs, &sig, args, expected, pos, name)?;
+            return Ok((format!("{{ {}{}{}({}) }}", binds, fn_id(name), self.turbofish(&bound), names), ret));
+        }
         if let Some(v) = cx.lookup(name) {
             return match v.ty.clone() {
                 Type::Func(ps, r) => self.call_value(cx, format!("&{}", v.rust), &ps, &r, args, pos, name),
@@ -1547,6 +1702,16 @@ impl<'a> Gen<'a> {
         let (rcode, rt) = self.recv(cx, recv)?;
         match &rt {
             Type::Array(_) | Type::Str | Type::Map(..) => self.value_method(cx, &rcode, &rt, name, args, pos),
+            Type::Generic(c, targs) => {
+                let (owner, sig) = match self.m.find_method(c, name) {
+                    Some(x) => x,
+                    None => return err(format!("`{}` has no method `{}`", rt, name), pos),
+                };
+                self.check_method_access(cx, &owner, name, pos)?;
+                let sig = subst_sig(&sig, &self.m.bindings(c, targs));
+                let (binds, names) = self.args(cx, &sig, args, pos, name)?;
+                Ok((format!("{{ let __r = &{}; {}let __t = __r.borrow_mut().{}({}); __t }}", rcode, binds, rid(name), names), sig.ret))
+            }
             Type::Class(c) => {
                 let sig = match self.m.find_method(c, name) {
                     Some((owner, s)) => {
@@ -1690,6 +1855,28 @@ impl<'a> Gen<'a> {
     }
 }
 
+/// `<T: Clone + 'static, U: ...>` for a Rust generic item (empty when not generic).
+fn generic_params(tparams: &[String]) -> String {
+    if tparams.is_empty() {
+        String::new()
+    } else {
+        format!("<{}>", tparams.iter().map(|t| format!("{}: Clone + 'static", t)).collect::<Vec<_>>().join(", "))
+    }
+}
+
+/// Replaces type parameters with `Unknown`, for use as an expected-type hint.
+fn unknown_params(t: &Type) -> Type {
+    match t {
+        Type::Param(_) => Type::Unknown,
+        Type::Array(i) => Type::Array(Box::new(unknown_params(i))),
+        Type::Optional(i) => Type::Optional(Box::new(unknown_params(i))),
+        Type::Map(k, v) => Type::Map(Box::new(unknown_params(k)), Box::new(unknown_params(v))),
+        Type::Func(ps, r) => Type::Func(ps.iter().map(unknown_params).collect(), Box::new(unknown_params(r))),
+        Type::Generic(n, args) => Type::Generic(n.clone(), args.iter().map(unknown_params).collect()),
+        other => other.clone(),
+    }
+}
+
 fn op_sym(op: AssignOp) -> &'static str {
     match op {
         AssignOp::Set => "",
@@ -1770,6 +1957,9 @@ fn __map_get<K: Ord + __KlShow, V: Clone>(m: &BTreeMap<K, V>, k: &K) -> V {
 fn __map_slot<K: Ord + __KlShow, V>(m: &mut BTreeMap<K, V>, k: K) -> &mut V {
     let shown = k.__show();
     match m.get_mut(&k) { Some(v) => v, None => panic!("key not found: {}", shown) }
+}
+fn __unset<T>(v: Option<T>, name: &str) -> T {
+    match v { Some(x) => x, None => panic!("field `{}` was read before it was set", name) }
 }
 fn __parse_int(s: &str) -> i64 {
     match s.trim().parse::<i64>() { Ok(v) => v, Err(_) => panic!("cannot convert \"{}\" to int", s) }

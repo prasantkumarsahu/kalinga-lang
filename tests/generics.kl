@@ -1,0 +1,65 @@
+class Stack<T> {
+    items: [T]
+
+    fn push(x: T) { self.items.push(x) }
+    fn pop() -> T? { return self.items.pop() }
+    fn peek() -> T? {
+        if len(self.items) == 0 { return none }
+        return self.items[len(self.items) - 1]
+    }
+    fn size() -> int { return len(self.items) }
+}
+
+class Pair<A, B> {
+    first: A
+    second: B
+    init(first: A, second: B) {
+        self.first = first
+        self.second = second
+    }
+    fn swap() -> Pair<B, A> { return Pair(self.second, self.first) }
+}
+
+class Dog { name: str = "Rex" }
+
+fn first<T>(xs: [T]) -> T? {
+    if len(xs) == 0 { return none }
+    return xs[0]
+}
+
+fn map_all<T, U>(xs: [T], f: fn(T) -> U) -> [U] {
+    var out: [U] = []
+    for x in xs { out.push(f(x)) }
+    return out
+}
+
+fn repeat<T>(x: T, n: int) -> [T] {
+    var out: [T] = []
+    for i in 0..n { out.push(x) }
+    return out
+}
+
+fn main() {
+    let s: Stack<int> = Stack()
+    s.push(1)
+    s.push(2)
+    print(s.size(), s.peek(), s.pop(), s.pop(), s.pop())
+
+    let names = Stack<str>()
+    names.push("a")
+    print(names.peek())
+
+    let p = Pair("x", 5)
+    let q = p.swap()
+    print(p.first, p.second, q.first, q.second)
+    p.second += 10
+    print(p.second)
+
+    print(first([3, 4]), first(["z"]), first(map_all([1, 2], fn(x) => x * 3)))
+    print(map_all(["a", "bb"], fn(s) => len(s)), repeat("ab", 3))
+    let dogs = Stack<Dog>()
+    dogs.push(Dog())
+    if let d = dogs.peek() { print(d.name) }
+    let e: [str] = []
+    print(first(e))
+}

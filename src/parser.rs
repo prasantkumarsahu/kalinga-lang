@@ -156,6 +156,7 @@ impl Parser {
     fn function(&mut self, mods: Mods) -> Result<FnDecl> {
         let pos = self.expect(Tok::Fn, "`fn`")?;
         let (name, _) = self.ident("function name")?;
+        let tparams = self.tparams()?;
         let params = self.params()?;
         let ret = self.ret_type()?;
         let body = if mods.is_abstract {
@@ -169,6 +170,7 @@ impl Parser {
         };
         Ok(FnDecl {
             name,
+            tparams,
             params,
             ret,
             body,
@@ -178,6 +180,35 @@ impl Parser {
             is_abstract: mods.is_abstract,
             pos,
         })
+    }
+
+    /// `<T, U>` after a function or class name.
+    fn tparams(&mut self) -> Result<Vec<String>> {
+        let mut out = Vec::new();
+        if self.eat(&Tok::Lt) {
+            loop {
+                out.push(self.ident("a type parameter name")?.0);
+                if !self.eat(&Tok::Comma) {
+                    break;
+                }
+            }
+            self.expect(Tok::Gt, "`>` to close the type parameters")?;
+        }
+        Ok(out)
+    }
+
+    /// `<int, str>` type arguments.
+    fn targs(&mut self) -> Result<Vec<TypeExpr>> {
+        self.expect(Tok::Lt, "`<`")?;
+        let mut out = Vec::new();
+        loop {
+            out.push(self.ty()?);
+            if !self.eat(&Tok::Comma) {
+                break;
+            }
+        }
+        self.expect(Tok::Gt, "`>` to close the type arguments")?;
+        Ok(out)
     }
 
     /// `private`, `static`, `abstract`, `override` in any order before a class member.
@@ -203,17 +234,21 @@ impl Parser {
     fn class(&mut self, is_abstract: bool) -> Result<ClassDecl> {
         let pos = self.expect(Tok::Class, "`class`")?;
         let (name, _) = self.ident("class name")?;
+        let tparams = self.tparams()?;
         let mut bases = Vec::new();
         if self.eat(&Tok::Colon) {
             loop {
                 bases.push(self.ident("base class or interface name")?);
+                if self.check(&Tok::Lt) {
+                    return err("generic classes cannot be extended (yet)", self.pos());
+                }
                 if !self.eat(&Tok::Comma) {
                     break;
                 }
             }
         }
         self.expect(Tok::LBrace, "`{` to start class body")?;
-        let mut class = ClassDecl { name, bases, fields: vec![], init: None, methods: vec![], is_abstract, pos };
+        let mut class = ClassDecl { name, tparams, bases, fields: vec![], init: None, methods: vec![], is_abstract, pos };
         self.skip_newlines();
         while !self.check(&Tok::RBrace) {
             let mpos = self.pos();
@@ -370,7 +405,10 @@ impl Parser {
                 "bool" => TypeExpr::Bool,
                 "str" => TypeExpr::Str,
                 "void" => TypeExpr::Void,
-                _ => TypeExpr::Named(n, pos),
+                _ => {
+                    let args = if self.check(&Tok::Lt) { self.targs()? } else { vec![] };
+                    TypeExpr::Named(n, args, pos)
+                }
             },
             Tok::LBracket => {
                 let inner = self.ty()?;
@@ -704,8 +742,17 @@ impl Parser {
             Tok::None => ExprKind::None,
             Tok::SelfKw => ExprKind::SelfRef,
             Tok::Ident(name) => {
+                // `name<T>(...)`: try type arguments, fall back to a comparison.
+                let mut targs = vec![];
+                if self.check(&Tok::Lt) {
+                    let save = self.i;
+                    match self.targs() {
+                        Ok(t) if self.check(&Tok::LParen) => targs = t,
+                        _ => self.i = save,
+                    }
+                }
                 if self.check(&Tok::LParen) {
-                    ExprKind::Call(name, self.args()?)
+                    ExprKind::Call(name, targs, self.args()?)
                 } else {
                     ExprKind::Ident(name)
                 }
