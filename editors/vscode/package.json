@@ -1,8 +1,8 @@
 {
   "name": "kalinga-lang",
   "displayName": "Kalinga Language",
-  "description": "Syntax highlighting, snippets, live error checking and run commands for the Kalinga language (.kl)",
-  "version": "0.1.0",
+  "description": "Syntax highlighting, code completion, signature help, snippets, live error checking and run commands for the Kalinga language (.kl)",
+  "version": "0.2.0",
   "publisher": "kalinga",
   "license": "MIT",
   "engines": {
@@ -14,6 +14,9 @@
     "Linters"
   ],
   "main": "./extension.js",
+  "scripts": {
+    "test": "node --test"
+  },
   "contributes": {
     "languages": [
       {

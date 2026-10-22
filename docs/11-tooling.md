@@ -49,6 +49,10 @@ The extension lives in [`editors/vscode`](../editors/vscode/README.md).
 ### Features
 
 - Syntax highlighting for keywords, types, classes, functions, strings, numbers and comments
+- Code completion after `.` (fields and methods, including inherited ones), for variables,
+  functions, classes and built-ins, for types after `:` and `->`, and `override fn` stubs
+  inside a class body. `//` comments above a declaration appear as its documentation.
+- Parameter hints while typing the arguments of a call
 - Errors underlined as you type (runs `kalinga check --stdin` about 0.4 s after you stop)
 - ▶ **Run** button in the editor title bar, and `Ctrl+F5`
 - Commands (Ctrl+Shift+P): **Kalinga: Run File**, **Kalinga: Build Executable**,
@@ -82,7 +86,7 @@ cargo install --path .
 ```bash
 cd editors/vscode
 npx @vscode/vsce package
-code --install-extension kalinga-lang-0.1.0.vsix
+code --install-extension kalinga-lang-0.2.0.vsix
 ```
 
 ### Settings

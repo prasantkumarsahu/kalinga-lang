@@ -2,6 +2,7 @@
 const vscode = require("vscode");
 const { execFile } = require("child_process");
 const path = require("path");
+const completion = require("./completion");
 
 const LANG = "kalinga";
 const CHECK_DELAY_MS = 400;
@@ -145,6 +146,47 @@ async function emitRust() {
   });
 }
 
+const ITEM_KINDS = {
+  keyword: vscode.CompletionItemKind.Keyword,
+  variable: vscode.CompletionItemKind.Variable,
+  field: vscode.CompletionItemKind.Field,
+  method: vscode.CompletionItemKind.Method,
+  function: vscode.CompletionItemKind.Function,
+  constructor: vscode.CompletionItemKind.Constructor,
+  class: vscode.CompletionItemKind.Class,
+  interface: vscode.CompletionItemKind.Interface,
+  type: vscode.CompletionItemKind.TypeParameter,
+};
+
+const completionProvider = {
+  provideCompletionItems(document, position) {
+    const items = completion.complete(document.getText(), document.offsetAt(position));
+    return items.map((it) => {
+      const item = new vscode.CompletionItem(it.label, ITEM_KINDS[it.kind] || vscode.CompletionItemKind.Text);
+      item.insertText = it.snippet ? new vscode.SnippetString(it.insertText) : it.insertText;
+      if (it.detail) item.detail = it.detail;
+      if (it.documentation) item.documentation = new vscode.MarkdownString(it.documentation);
+      if (it.sortText) item.sortText = it.sortText;
+      if (it.label.startsWith("override fn ")) item.filterText = it.label.slice("override fn ".length);
+      return item;
+    });
+  },
+};
+
+const signatureProvider = {
+  provideSignatureHelp(document, position) {
+    const sig = completion.signatureHelp(document.getText(), document.offsetAt(position));
+    if (!sig) return null;
+    const info = new vscode.SignatureInformation(sig.label, sig.documentation ? new vscode.MarkdownString(sig.documentation) : undefined);
+    info.parameters = sig.params.map((p) => new vscode.ParameterInformation(p));
+    const help = new vscode.SignatureHelp();
+    help.signatures = [info];
+    help.activeSignature = 0;
+    help.activeParameter = sig.activeParameter;
+    return help;
+  },
+};
+
 function activate(context) {
   diagnostics = vscode.languages.createDiagnosticCollection(LANG);
   context.subscriptions.push(
@@ -152,6 +194,8 @@ function activate(context) {
     vscode.commands.registerCommand("kalinga.run", runFile),
     vscode.commands.registerCommand("kalinga.build", buildFile),
     vscode.commands.registerCommand("kalinga.emit", emitRust),
+    vscode.languages.registerCompletionItemProvider(LANG, completionProvider, "."),
+    vscode.languages.registerSignatureHelpProvider(LANG, signatureProvider, "(", ","),
     vscode.workspace.onDidOpenTextDocument(check),
     vscode.workspace.onDidSaveTextDocument(check),
     vscode.workspace.onDidChangeTextDocument((e) => {
