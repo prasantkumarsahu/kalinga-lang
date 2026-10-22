@@ -8,7 +8,7 @@
 | `kalinga build <file.kl>` | Compile to an executable next to the source (`file.exe` on Windows). |
 | `kalinga build <file.kl> -o <name>` | Compile to the given output path. |
 | `kalinga emit <file.kl>` | Print the generated Rust code. |
-| `kalinga check <file.kl>` | Report errors only; does not invoke `rustc`. |
+| `kalinga check <file.kl>` | Report errors only; does not invoke `rustc`. `fn main()` is optional here, so files that are only imported can be checked too. |
 | `kalinga -v` (also `-version`, `--version`) | Print the installed version, e.g. `kalinga 0.2.0`. |
 | `kalinga check <name.kl> --stdin` | Check source read from stdin, reporting errors under `<name.kl>`. Used by editors for unsaved files. |
 

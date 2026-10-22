@@ -165,7 +165,9 @@ const RESERVED_TYPES: &[&str] = &[
 ];
 
 impl Model {
-    pub fn build(prog: &Program) -> Result<Model> {
+    /// `require_main` is false when only checking a file, which may be a library
+    /// meant to be imported by another file.
+    pub fn build(prog: &Program, require_main: bool) -> Result<Model> {
         let mut m = Model {
             classes: HashMap::new(),
             class_order: vec![],
@@ -337,7 +339,7 @@ impl Model {
             m.fn_tparams.insert(f.name.clone(), f.tparams.clone());
         }
         match m.functions.get("main") {
-            None => return err("program has no `fn main()`", Pos { line: 1, col: 1, file: 0 }),
+            None if require_main => return err("program has no `fn main()`", Pos { line: 1, col: 1, file: 0 }),
             Some(sig) if !sig.params.is_empty() || sig.ret != Type::Void => {
                 let pos = prog.functions.iter().find(|f| f.name == "main").unwrap().pos;
                 return err("`main` must take no parameters and return nothing", pos);

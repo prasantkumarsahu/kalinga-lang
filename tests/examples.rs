@@ -99,6 +99,12 @@ fn check_reads_stdin() {
     assert!(err.starts_with("buffer.kl:2:18: error: expected `int`, found `bool`"), "{}", err);
 
     assert_eq!(kalinga(&["check", "examples/oop.kl"]).status.code(), Some(0));
+
+    // Files meant to be imported have no `main`; `check` accepts them, `run` does not.
+    assert_eq!(kalinga(&["check", "examples/shapes/geometry.kl"]).status.code(), Some(0));
+    let (code, _, err) = run_file("examples/shapes/geometry.kl");
+    assert_eq!(code, 1);
+    assert!(err.contains("program has no `fn main()`"), "{}", err);
 }
 
 #[test]

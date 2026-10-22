@@ -16,7 +16,9 @@ usage:
   kalinga run   <file.kl>              compile and run
   kalinga build <file.kl> [-o <exe>]   compile to a native executable
   kalinga emit  <file.kl>              print the generated Rust code
-  kalinga check <file.kl> [--stdin]    report errors only (--stdin reads the source from stdin)
+  kalinga check <file.kl> [--stdin]    report errors only; `fn main()` is optional, so files
+                                       meant to be imported can be checked (--stdin reads the
+                                       source from stdin)
   kalinga -v | --version               print the installed version";
 
 fn main() {
@@ -72,7 +74,7 @@ fn main() {
             } else {
                 std::fs::read_to_string(&file).map_err(|e| format!("cannot read {}: {}", file.display(), e))
             };
-            source.and_then(|src| driver::to_rust(&file.display().to_string(), &src)).map(|_| 0)
+            source.and_then(|src| driver::check(&file.display().to_string(), &src)).map(|_| 0)
         }
         _ => {
             eprintln!("unknown command `{}`\n\n{}", cmd, USAGE);

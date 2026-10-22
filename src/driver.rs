@@ -67,8 +67,18 @@ fn load(root_name: &str, root_source: &str) -> Result<(Program, SourceMap), Stri
 /// `file` is the name used for the root file and to resolve its imports.
 /// Errors are already rendered for display.
 pub fn to_rust(file: &str, source: &str) -> Result<String, String> {
+    compile(file, source, true)
+}
+
+/// Reports errors without requiring `fn main()`, so files meant to be imported can be
+/// checked on their own (this is what editors run).
+pub fn check(file: &str, source: &str) -> Result<(), String> {
+    compile(file, source, false).map(|_| ())
+}
+
+fn compile(file: &str, source: &str, require_main: bool) -> Result<String, String> {
     let (program, map) = load(file, source)?;
-    let model = checker::Model::build(&program).map_err(|e| map.render(&e))?;
+    let model = checker::Model::build(&program, require_main).map_err(|e| map.render(&e))?;
     codegen::generate(&program, &model).map_err(|e| map.render(&e))
 }
 
