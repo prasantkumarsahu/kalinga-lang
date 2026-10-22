@@ -8,7 +8,7 @@ use std::collections::HashMap;
 use std::fmt::Write as _;
 
 use crate::ast::*;
-use crate::checker::{class_trait, Model, Signature, Type, BUILTINS};
+use crate::checker::{class_trait, is_map_key, Model, Signature, Type, BUILTINS};
 use crate::error::{err, Pos, Result};
 
 pub fn generate(prog: &Program, model: &Model) -> Result<String> {
@@ -89,6 +89,7 @@ fn showable(t: &Type) -> bool {
     match t {
         Type::Int | Type::Float | Type::Bool | Type::Str => true,
         Type::Array(i) | Type::Optional(i) => showable(i),
+        Type::Map(k, v) => showable(k) && showable(v),
         _ => false,
     }
 }
@@ -108,6 +109,7 @@ impl<'a> Gen<'a> {
             Type::Str => "String".into(),
             Type::Void | Type::NoneLit => "()".into(),
             Type::Array(i) => format!("Vec<{}>", self.rty(i)),
+            Type::Map(k, v) => format!("BTreeMap<{}, {}>", self.rty(k), self.rty(v)),
             Type::Optional(i) => format!("Option<{}>", self.rty(i)),
             Type::Class(c) => {
                 if self.m.has_subclasses(c) {
@@ -149,6 +151,11 @@ impl<'a> Gen<'a> {
             (Type::Class(_), Type::Class(_)) | (Type::Class(_), Type::Interface(_)) => {
                 format!("({} as {})", code, self.rty(to))
             }
+            (Type::Map(_, a), Type::Map(_, b)) => format!(
+                "({}).into_iter().map(|(__k, __v)| (__k, {})).collect::<BTreeMap<_, _>>()",
+                code,
+                self.coerce("__v".into(), a, b, pos)?
+            ),
             (Type::Array(a), Type::Array(b)) => format!(
                 "({}).into_iter().map(|__v| {}).collect::<Vec<_>>()",
                 code,
@@ -236,6 +243,7 @@ impl<'a> Gen<'a> {
             Type::Bool => "false".into(),
             Type::Str => "String::new()".into(),
             Type::Array(_) => "Vec::new()".into(),
+            Type::Map(..) => "BTreeMap::new()".into(),
             Type::Optional(_) => "None".into(),
             // Checker requires an explicit default for object fields.
             _ => unreachable!("no default for {}", t),
@@ -487,6 +495,7 @@ impl<'a> Gen<'a> {
                         let (code, t) = self.expr(cx, e, None)?;
                         match t {
                             Type::Array(inner) => (code, *inner, false),
+                            Type::Map(k, _) => (format!("({}).into_keys()", code), *k, false),
                             Type::Str => (format!("({}).chars()", code), Type::Str, true),
                             other => return err(format!("cannot loop over `{}` (expected an array, string or `a..b` range)", other), e.pos),
                         }
@@ -564,6 +573,16 @@ impl<'a> Gen<'a> {
                 }
             }
         }
+        // `m[k] = v` inserts (the key may be new).
+        if let (ExprKind::Index(base, key), AssignOp::Set) = (&target.kind, op) {
+            let mut n = 0;
+            let (pre, bplace, bt) = self.place(cx, base, &mut n)?;
+            if let Type::Map(k, vt) = bt {
+                let v = self.expr_to(cx, value, &vt)?;
+                let kc = self.expr_to(cx, key, &k)?;
+                return Ok(format!("{{ let __v = {}; let __k = {}; {}{}.insert(__k, __v); }}", v, kc, pre, bplace));
+            }
+        }
         let v = {
             let mut n = 0;
             let (pre, place, ty) = self.place(cx, target, &mut n)?;
@@ -626,6 +645,12 @@ impl<'a> Gen<'a> {
             }
             ExprKind::Index(base, idx) => {
                 let (pre, bplace, bt) = self.place(cx, base, n)?;
+                if let Type::Map(k, v) = bt {
+                    let kc = self.expr_to(cx, idx, &k)?;
+                    let tmp = format!("__k{}", n);
+                    *n += 1;
+                    return Ok((format!("{}let {} = {}; ", pre, tmp, kc), format!("(*__map_slot(&mut {}, {}))", bplace, tmp), *v));
+                }
                 let elem = match bt {
                     Type::Array(i) => *i,
                     other => return err(format!("cannot index into `{}`", other), e.pos),
@@ -723,6 +748,45 @@ impl<'a> Gen<'a> {
                 }
                 Ok((format!("vec![{}]", codes.join(", ")), Type::Array(Box::new(elem))))
             }
+            ExprKind::Map(entries) => {
+                let (kt, vt) = match (expected, entries.first()) {
+                    (Some(Type::Map(k, v)), _) => ((**k).clone(), (**v).clone()),
+                    (_, Some((k, v))) => (self.expr(cx, k, None)?.1, self.expr(cx, v, None)?.1),
+                    (_, None) => return err("cannot infer the type of `{}`; add a type, e.g. `let m: {str: int} = {}`", e.pos),
+                };
+                if !is_map_key(&kt) {
+                    return err(format!("map keys must be `int`, `str` or `bool`, not `{}`", kt), e.pos);
+                }
+                let mut code = String::from("{ let mut __m = BTreeMap::new(); ");
+                for (k, v) in entries {
+                    let kc = self.expr_to(cx, k, &kt)?;
+                    let vc = self.expr_to(cx, v, &vt).map_err(|mut er| {
+                        er.msg = format!("{} (all map values must have the same type; annotate the variable to mix subclasses)", er.msg);
+                        er
+                    })?;
+                    write!(code, "__m.insert({}, {}); ", kc, vc).unwrap();
+                }
+                code.push_str("__m }");
+                Ok((code, Type::Map(Box::new(kt), Box::new(vt))))
+            }
+            ExprKind::Interp(parts) => {
+                let mut fmt = String::new();
+                let mut args = vec![];
+                for p in parts {
+                    match p {
+                        InterpPart::Lit(s) => fmt.push_str(&s.replace('{', "{{").replace('}', "}}")),
+                        InterpPart::Expr(x) => {
+                            let (c, t) = self.expr(cx, x, None)?;
+                            if !showable(&t) {
+                                return err(format!("cannot put a `{}` value into a string", t), x.pos);
+                            }
+                            fmt.push_str("{}");
+                            args.push(format!("__KlShow::__show(&{})", c));
+                        }
+                    }
+                }
+                Ok((format!("format!({:?}, {})", fmt, args.join(", ")), Type::Str))
+            }
             ExprKind::Unary(op, inner) => {
                 let (code, t) = self.expr(cx, inner, None)?;
                 match (op, &t) {
@@ -752,13 +816,17 @@ impl<'a> Gen<'a> {
                         };
                         Ok((format!("{{ let __t = {}; __t }}", read), t))
                     }
-                    Type::Array(_) | Type::Str if f == "len" => err("`len` is a method: use `.len()`", e.pos),
+                    Type::Array(_) | Type::Str | Type::Map(..) if f == "len" => err("`len` is a method: use `.len()`", e.pos),
                     Type::Interface(i) => err(format!("interface `{}` has no fields; only methods can be used", i), e.pos),
                     other => err(format!("`{}` has no field `{}`", other, f), e.pos),
                 }
             }
             ExprKind::Index(base, idx) => {
                 let (bcode, bt) = self.recv(cx, base)?;
+                if let Type::Map(k, v) = bt {
+                    let kc = self.expr_to(cx, idx, &k)?;
+                    return Ok((format!("{{ let __k = {}; __map_get(&{}, &__k) }}", kc, bcode), *v));
+                }
                 let elem = match bt {
                     Type::Array(i) => *i,
                     other => return err(format!("cannot index into `{}`", other), e.pos),
@@ -881,9 +949,9 @@ impl<'a> Gen<'a> {
                 }
                 let (c, t) = self.recv(cx, &args[0])?;
                 match t {
-                    Type::Array(_) => Ok((format!("({}.len() as i64)", c), Type::Int)),
+                    Type::Array(_) | Type::Map(..) => Ok((format!("({}.len() as i64)", c), Type::Int)),
                     Type::Str => Ok((format!("({}.chars().count() as i64)", c), Type::Int)),
-                    other => err(format!("`len` needs an array or string, found `{}`", other), pos),
+                    other => err(format!("`len` needs an array, map or string, found `{}`", other), pos),
                 }
             }
             "str" => {
@@ -941,8 +1009,18 @@ impl<'a> Gen<'a> {
             return Ok((format!("{{ {}self.{}({}) }}", binds, rid(name), names), sig.ret));
         }
 
-        // Mutating array methods need a mutable place.
-        if name == "push" || name == "pop" {
+        // Mutating array/map methods need a mutable place.
+        let recv_ty = self.recv(cx, recv)?.1;
+        if let (Type::Map(k, v), "remove") = (&recv_ty, name) {
+            let mut n = 0;
+            let (pre, place, _) = self.place(cx, recv, &mut n)?;
+            if args.len() != 1 {
+                return err("`remove` takes exactly 1 argument (the key)", pos);
+            }
+            let kc = self.expr_to(cx, &args[0], k)?;
+            return Ok((format!("{{ let __k = {}; {}{}.remove(&__k) }}", kc, pre, place), Type::Optional(v.clone())));
+        }
+        if matches!(recv_ty, Type::Array(_)) && (name == "push" || name == "pop") {
             let mut n = 0;
             let (pre, place, t) = self.place(cx, recv, &mut n)?;
             let elem = match &t {
@@ -964,7 +1042,7 @@ impl<'a> Gen<'a> {
 
         let (rcode, rt) = self.recv(cx, recv)?;
         match &rt {
-            Type::Array(_) | Type::Str => self.value_method(cx, &rcode, &rt, name, args, pos),
+            Type::Array(_) | Type::Str | Type::Map(..) => self.value_method(cx, &rcode, &rt, name, args, pos),
             Type::Class(c) => {
                 let sig = match self.m.find_method(c, name) {
                     Some((_, s)) => s,
@@ -1013,6 +1091,28 @@ impl<'a> Gen<'a> {
                 }
                 let v = self.expr_to(cx, &args[0], elem)?;
                 Ok((format!("{}.contains(&{})", rcode, v), Type::Bool))
+            }
+            (Type::Map(_, _), "len") => {
+                arity(0)?;
+                Ok((format!("({}.len() as i64)", rcode), Type::Int))
+            }
+            (Type::Map(k, v), "get") => {
+                arity(1)?;
+                let kc = self.expr_to(cx, &args[0], k)?;
+                Ok((format!("{}.get(&{}).cloned()", rcode, kc), Type::Optional(v.clone())))
+            }
+            (Type::Map(k, _), "has") => {
+                arity(1)?;
+                let kc = self.expr_to(cx, &args[0], k)?;
+                Ok((format!("{}.contains_key(&{})", rcode, kc), Type::Bool))
+            }
+            (Type::Map(k, _), "keys") => {
+                arity(0)?;
+                Ok((format!("{}.keys().cloned().collect::<Vec<_>>()", rcode), Type::Array(k.clone())))
+            }
+            (Type::Map(_, v), "values") => {
+                arity(0)?;
+                Ok((format!("{}.values().cloned().collect::<Vec<_>>()", rcode), Type::Array(v.clone())))
             }
             (Type::Str, "len") => {
                 arity(0)?;
@@ -1078,6 +1178,7 @@ const PRELUDE: &str = r#"// Generated by the Kalinga compiler. Do not edit.
 #![allow(warnings)]
 #![allow(arithmetic_overflow, unconditional_panic)]
 use std::cell::RefCell;
+use std::collections::BTreeMap;
 use std::rc::Rc;
 
 trait __KlShow { fn __show(&self) -> String; }
@@ -1095,6 +1196,12 @@ impl<T: __KlShow> __KlShow for Vec<T> {
         format!("[{}]", parts.join(", "))
     }
 }
+impl<K: __KlShow, V: __KlShow> __KlShow for BTreeMap<K, V> {
+    fn __show(&self) -> String {
+        let parts: Vec<String> = self.iter().map(|(k, v)| format!("{}: {}", k.__show(), v.__show())).collect();
+        format!("{{{}}}", parts.join(", "))
+    }
+}
 impl<T: __KlShow> __KlShow for Option<T> {
     fn __show(&self) -> String { match self { Some(v) => v.__show(), None => "none".to_string() } }
 }
@@ -1103,6 +1210,13 @@ impl<T: __KlShow> __KlShow for Option<T> {
 fn __idx(i: i64) -> usize {
     if i < 0 { panic!("index {} is negative", i) }
     i as usize
+}
+fn __map_get<K: Ord + __KlShow, V: Clone>(m: &BTreeMap<K, V>, k: &K) -> V {
+    match m.get(k) { Some(v) => v.clone(), None => panic!("key not found: {}", k.__show()) }
+}
+fn __map_slot<K: Ord + __KlShow, V>(m: &mut BTreeMap<K, V>, k: K) -> &mut V {
+    let shown = k.__show();
+    match m.get_mut(&k) { Some(v) => v, None => panic!("key not found: {}", shown) }
 }
 fn __parse_int(s: &str) -> i64 {
     match s.trim().parse::<i64>() { Ok(v) => v, Err(_) => panic!("cannot convert \"{}\" to int", s) }

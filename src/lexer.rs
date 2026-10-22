@@ -1,8 +1,13 @@
 use crate::error::{err, Pos, Result};
-use crate::token::{Tok, Token};
+use crate::token::{StrPart, Tok, Token};
 
 pub fn lex(source: &str) -> Result<Vec<Token>> {
-    Lexer { chars: source.chars().collect(), i: 0, line: 1, col: 1, depth: 0, out: Vec::new() }.run()
+    lex_at(source, Pos { line: 1, col: 1, ..Pos::default() })
+}
+
+/// Lexes `source` as if it started at `start` (used for `{...}` inside strings).
+pub fn lex_at(source: &str, start: Pos) -> Result<Vec<Token>> {
+    Lexer { chars: source.chars().collect(), i: 0, line: start.line, col: start.col, depth: 0, out: Vec::new() }.run()
 }
 
 struct Lexer {
@@ -100,13 +105,79 @@ impl Lexer {
         Ok(self.out)
     }
 
+    /// Raw source of a `{...}` interpolation, after the opening `{`.
+    fn interpolation(&mut self, pos: Pos) -> Result<String> {
+        let mut code = String::new();
+        let mut depth = 0;
+        loop {
+            match self.peek() {
+                None | Some('\n') => return err("unterminated `{` in string", pos),
+                Some('}') if depth == 0 => {
+                    self.bump();
+                    break;
+                }
+                Some('"') => {
+                    // A string inside the interpolation, e.g. "{m["key"]}".
+                    code.push(self.bump().unwrap());
+                    loop {
+                        match self.bump() {
+                            None | Some('\n') => return err("unterminated string", pos),
+                            Some('\\') => {
+                                code.push('\\');
+                                if let Some(c) = self.bump() {
+                                    code.push(c);
+                                }
+                            }
+                            Some('"') => {
+                                code.push('"');
+                                break;
+                            }
+                            Some(c) => code.push(c),
+                        }
+                    }
+                }
+                Some(c) => {
+                    if c == '{' {
+                        depth += 1;
+                    } else if c == '}' {
+                        depth -= 1;
+                    }
+                    code.push(c);
+                    self.bump();
+                }
+            }
+        }
+        if code.trim().is_empty() {
+            return err("empty `{}` in string (write `{{` for a literal brace)", pos);
+        }
+        Ok(code)
+    }
+
     fn string(&mut self, pos: Pos) -> Result<()> {
         self.bump();
         let mut s = String::new();
+        let mut parts: Vec<StrPart> = Vec::new();
         loop {
             match self.bump() {
                 None | Some('\n') => return err("unterminated string", pos),
                 Some('"') => break,
+                Some('{') if self.peek() == Some('{') => {
+                    self.bump();
+                    s.push('{');
+                }
+                Some('}') if self.peek() == Some('}') => {
+                    self.bump();
+                    s.push('}');
+                }
+                Some('{') => {
+                    let code_pos = self.pos();
+                    let code = self.interpolation(code_pos)?;
+                    if !s.is_empty() {
+                        parts.push(StrPart::Lit(std::mem::take(&mut s)));
+                    }
+                    parts.push(StrPart::Code(code, code_pos));
+                }
+                Some('}') => return err("unmatched `}` in string (write `}}` for a literal brace)", self.pos()),
                 Some('\\') => {
                     let esc = self.bump();
                     s.push(match esc {
@@ -122,7 +193,14 @@ impl Lexer {
                 Some(c) => s.push(c),
             }
         }
-        self.push(Tok::Str(s), pos);
+        if parts.is_empty() {
+            self.push(Tok::Str(s), pos);
+        } else {
+            if !s.is_empty() {
+                parts.push(StrPart::Lit(s));
+            }
+            self.push(Tok::InterpStr(parts), pos);
+        }
         Ok(())
     }
 

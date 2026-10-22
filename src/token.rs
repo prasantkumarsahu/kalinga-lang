@@ -1,11 +1,19 @@
 use crate::error::Pos;
 
+/// Piece of an interpolated string: literal text or the source of a `{...}` expression.
+#[derive(Debug, Clone, PartialEq)]
+pub enum StrPart {
+    Lit(String),
+    Code(String, Pos),
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum Tok {
     // literals and names
     Int(i64),
     Float(f64),
     Str(String),
+    InterpStr(Vec<StrPart>),
     Ident(String),
 
     // keywords
@@ -103,7 +111,7 @@ impl Tok {
         match self {
             Tok::Int(n) => format!("number `{}`", n),
             Tok::Float(n) => format!("number `{}`", n),
-            Tok::Str(_) => "string".to_string(),
+            Tok::Str(_) | Tok::InterpStr(_) => "string".to_string(),
             Tok::Ident(s) => format!("`{}`", s),
             Tok::Newline => "end of line".to_string(),
             Tok::Eof => "end of file".to_string(),

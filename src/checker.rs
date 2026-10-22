@@ -16,6 +16,7 @@ pub enum Type {
     Str,
     Void,
     Array(Box<Type>),
+    Map(Box<Type>, Box<Type>),
     Optional(Box<Type>),
     Class(String),
     Interface(String),
@@ -42,6 +43,7 @@ impl fmt::Display for Type {
             Type::Str => write!(f, "str"),
             Type::Void => write!(f, "void"),
             Type::Array(t) => write!(f, "[{}]", t),
+            Type::Map(k, v) => write!(f, "{{{}: {}}}", k, v),
             Type::Optional(t) => write!(f, "{}?", t),
             Type::Class(n) | Type::Interface(n) => write!(f, "{}", n),
             Type::NoneLit => write!(f, "none"),
@@ -97,7 +99,7 @@ pub struct Model {
 
 pub const BUILTINS: &[&str] = &["print", "len", "str", "int", "float", "input"];
 const RESERVED_TYPES: &[&str] = &[
-    "Rc", "RefCell", "String", "Vec", "Option", "Some", "None", "Box", "Self", "std", "main",
+    "Rc", "RefCell", "String", "Vec", "BTreeMap", "Option", "Some", "None", "Box", "Self", "std", "main",
     "int", "float", "bool", "str", "void",
 ];
 
@@ -197,7 +199,7 @@ impl Model {
                 if fields.iter().any(|(n, _): &(String, Type)| n == &f.name) {
                     return err(format!("field `{}` declared twice", f.name), f.pos);
                 }
-                let ty = resolve(&f.ty)?;
+                let ty = resolve(&f.ty).map_err(|e| at_pos(e, f.pos))?;
                 if ty == Type::Void {
                     return err("fields cannot have type void", f.pos);
                 }
@@ -471,9 +473,22 @@ impl Model {
             (Type::Class(d), Type::Class(c)) => self.is_subclass(d, c),
             (Type::Class(d), Type::Interface(i)) => self.all_interfaces(d).contains(i),
             (Type::Array(a), Type::Array(b)) => self.assignable(a, b),
+            (Type::Map(ka, va), Type::Map(kb, vb)) => ka == kb && self.assignable(va, vb),
             _ => false,
         }
     }
+}
+
+/// Gives a position to errors raised without one (e.g. from type resolution).
+pub fn at_pos(mut e: crate::error::CompileError, pos: Pos) -> crate::error::CompileError {
+    if e.pos == Pos::default() {
+        e.pos = pos;
+    }
+    e
+}
+
+pub fn is_map_key(t: &Type) -> bool {
+    matches!(t, Type::Int | Type::Str | Type::Bool)
 }
 
 pub fn class_trait(class: &str) -> String {
@@ -504,6 +519,17 @@ fn resolve_type(t: &TypeExpr, classes: &HashSet<String>, ifaces: &HashSet<String
             }
             Type::Array(Box::new(i))
         }
+        TypeExpr::Map(k, v) => {
+            let kt = resolve_type(k, classes, ifaces)?;
+            if !is_map_key(&kt) {
+                return err(format!("map keys must be `int`, `str` or `bool`, not `{}`", kt), Pos::default());
+            }
+            let vt = resolve_type(v, classes, ifaces)?;
+            if vt == Type::Void {
+                return err("map of void is not allowed", Pos::default());
+            }
+            Type::Map(Box::new(kt), Box::new(vt))
+        }
         TypeExpr::Optional(inner) => {
             let i = resolve_type(inner, classes, ifaces)?;
             if matches!(i, Type::Optional(_)) {
@@ -533,12 +559,7 @@ fn signature(
         if ps.iter().any(|(n, _)| n == &p.name) {
             return err(format!("parameter `{}` declared twice", p.name), p.pos);
         }
-        let t = resolve(&p.ty).map_err(|mut e| {
-            if e.pos == Pos::default() {
-                e.pos = p.pos;
-            }
-            e
-        })?;
+        let t = resolve(&p.ty).map_err(|e| at_pos(e, p.pos))?;
         if t == Type::Void {
             return err("parameters cannot have type void", p.pos);
         }

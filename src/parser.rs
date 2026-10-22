@@ -1,9 +1,21 @@
 use crate::ast::*;
 use crate::error::{err, Pos, Result};
-use crate::token::{Tok, Token};
+use crate::token::{StrPart, Tok, Token};
 
 pub fn parse(tokens: Vec<Token>) -> Result<Program> {
     Parser { tokens, i: 0 }.program()
+}
+
+/// Parses the expression inside a `{...}` string interpolation.
+fn parse_embedded(code: &str, at: Pos) -> Result<Expr> {
+    let tokens = crate::lexer::lex_at(code, at)?;
+    let mut p = Parser { tokens, i: 0 };
+    let e = p.expr()?;
+    p.skip_newlines();
+    if !p.check(&Tok::Eof) {
+        return err(format!("unexpected {} in string interpolation", p.peek().describe()), p.pos());
+    }
+    Ok(e)
 }
 
 struct Parser {
@@ -215,6 +227,14 @@ impl Parser {
                 let inner = self.ty()?;
                 self.expect(Tok::RBracket, "`]`")?;
                 TypeExpr::Array(Box::new(inner))
+            }
+            Tok::LBrace => {
+                let key = self.ty()?;
+                self.expect(Tok::Colon, "`:` between the key and value types of a map")?;
+                let value = self.ty()?;
+                self.skip_newlines();
+                self.expect(Tok::RBrace, "`}`")?;
+                TypeExpr::Map(Box::new(key), Box::new(value))
             }
             other => return err(format!("expected a type, found {}", other.describe()), pos),
         };
@@ -459,6 +479,34 @@ impl Parser {
             Tok::Int(v) => ExprKind::Int(v),
             Tok::Float(v) => ExprKind::Float(v),
             Tok::Str(s) => ExprKind::Str(s),
+            Tok::InterpStr(parts) => {
+                let mut out = Vec::new();
+                for p in parts {
+                    match p {
+                        StrPart::Lit(s) => out.push(InterpPart::Lit(s)),
+                        StrPart::Code(code, at) => out.push(InterpPart::Expr(parse_embedded(&code, at)?)),
+                    }
+                }
+                ExprKind::Interp(out)
+            }
+            Tok::LBrace => {
+                let mut entries = Vec::new();
+                self.skip_newlines();
+                while !self.check(&Tok::RBrace) {
+                    let k = self.expr()?;
+                    self.expect(Tok::Colon, "`:` between a map key and its value")?;
+                    let v = self.expr()?;
+                    entries.push((k, v));
+                    self.skip_newlines();
+                    if !self.eat(&Tok::Comma) {
+                        break;
+                    }
+                    self.skip_newlines();
+                }
+                self.skip_newlines();
+                self.expect(Tok::RBrace, "`}` to close the map")?;
+                ExprKind::Map(entries)
+            }
             Tok::True => ExprKind::Bool(true),
             Tok::False => ExprKind::Bool(false),
             Tok::None => ExprKind::None,

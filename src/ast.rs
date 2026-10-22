@@ -9,6 +9,7 @@ pub enum TypeExpr {
     Void,
     Named(String, Pos),
     Array(Box<TypeExpr>),
+    Map(Box<TypeExpr>, Box<TypeExpr>),
     Optional(Box<TypeExpr>),
 }
 
@@ -136,6 +137,10 @@ pub enum ExprKind {
     SelfRef,
     Ident(String),
     Array(Vec<Expr>),
+    /// `{k: v, ...}`
+    Map(Vec<(Expr, Expr)>),
+    /// `"text {expr} text"`
+    Interp(Vec<InterpPart>),
     Binary(BinOp, Box<Expr>, Box<Expr>),
     Unary(UnOp, Box<Expr>),
     /// `name(args)` — a function call or a constructor.
@@ -149,6 +154,12 @@ pub enum ExprKind {
     SuperInit(Vec<Expr>),
     /// `super.name(args)`
     SuperCall(String, Vec<Expr>),
+}
+
+#[derive(Debug, Clone)]
+pub enum InterpPart {
+    Lit(String),
+    Expr(Expr),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

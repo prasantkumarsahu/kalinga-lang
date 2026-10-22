@@ -137,3 +137,40 @@ fn runtime_errors_are_safe() {
     assert_eq!(code, 101);
     assert!(err.contains("overflow"), "{}", err);
 }
+
+// ---------------------------------------------------------------- v0.2 features
+
+fn assert_runs(name: &str, source: &str, expected: &str) {
+    let (code, out, err) = run_source(name, source);
+    assert_eq!(code, 0, "{} failed:\n{}", name, err);
+    assert_eq!(out, expected, "output of {}", name);
+}
+
+#[test]
+fn string_interpolation() {
+    assert_runs(
+        "interp",
+        "fn main() {\n    let name = \"Asha\"\n    let xs = [1, 2]\n    print(\"Hi {name}! {len(xs) * 10}% {xs} {{literal}}\")\n}\n",
+        "Hi Asha! 20% [1, 2] {literal}\n",
+    );
+}
+
+#[test]
+fn maps() {
+    assert_runs(
+        "maps",
+        "fn main() {\n    var m: {str: int} = {}\n    m[\"b\"] = 2\n    m[\"a\"] = 1\n    m[\"a\"] += 5\n    var lists = {1: [10]}\n    lists[1].push(20)\n    print(m, m[\"a\"], m.get(\"z\"), m.has(\"b\"), len(m))\n    print(m.keys(), m.values(), lists, m.remove(\"b\"), m)\n    for k in lists { print(k) }\n}\n",
+        "{a: 6, b: 2} 6 none true 2\n[a, b] [6, 2] {1: [10, 20]} 2 {a: 6}\n1\n",
+    );
+    let (code, _, err) = run_source("map_missing", "fn main() {\n    let m = {\"a\": 1}\n    print(m[\"b\"])\n}\n");
+    assert_eq!(code, 101);
+    assert!(err.contains("key not found: b"), "{}", err);
+}
+
+#[test]
+fn error_map_and_interp() {
+    assert_compile_error("map_empty", "fn main() { let m = {} }", "cannot infer the type of `{}`");
+    assert_compile_error("map_key", "fn main() { let m: {float: int} = {} }", "map keys must be `int`, `str` or `bool`");
+    assert_compile_error("interp_obj", "class A {}\nfn main() {\n    let a = A()\n    print(\"{a}\")\n}", "cannot put a `A` value into a string");
+    assert_compile_error("interp_brace", "fn main() { print(\"a } b\") }", "unmatched `}` in string");
+}
