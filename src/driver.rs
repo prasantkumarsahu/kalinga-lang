@@ -39,6 +39,36 @@ fn load(root_name: &str, root_source: &str) -> Result<(Program, SourceMap), Stri
         let parsed = lexer::lex(text, id).and_then(parser::parse).map_err(|e| map.render(&e))?;
 
         let dir = path.parent().map(Path::to_path_buf).unwrap_or_default();
+        for (file, pos) in &parsed.rust_files {
+            let target = dir.join(file);
+            let canonical = std::fs::canonicalize(&target).map_err(|_| {
+                map.render(&CompileError::new(format!("cannot find Rust file `{}` (looked for {})", file, target.display()), *pos))
+            })?;
+            let shown = canonical.display().to_string();
+            // Windows canonical paths start with `\\?\`, which `#[path]` does not need.
+            let shown = shown.strip_prefix(r"\\?\").unwrap_or(&shown).to_string();
+            if program.rust_files.iter().any(|(p, _)| p == &shown) {
+                continue;
+            }
+            let module = shown.rsplit(['/', '\\']).next().unwrap_or("").to_string();
+            if program.rust_files.iter().any(|(p, _)| p.rsplit(['/', '\\']).next() == Some(module.as_str())) {
+                let e = CompileError::new(format!("two Rust files are named `{}`; rename one", module), *pos);
+                return Err(map.render(&e));
+            }
+            program.rust_files.push((shown, *pos));
+        }
+        for (name, version, pos) in &parsed.crates {
+            if let Some((_, v, _)) = program.crates.iter().find(|(n, _, _)| n == name) {
+                if v != version {
+                    let e = CompileError::new(format!("crate `{}` is used with two versions: \"{}\" and \"{}\"", name, v, version), *pos);
+                    return Err(map.render(&e));
+                }
+                continue;
+            }
+            program.crates.push((name.clone(), version.clone(), *pos));
+        }
+        program.extern_types.extend(parsed.extern_types);
+        program.extern_fns.extend(parsed.extern_fns);
         for (import, pos) in &parsed.imports {
             let target = dir.join(import);
             let canonical = match std::fs::canonicalize(&target) {
@@ -59,6 +89,7 @@ fn load(root_name: &str, root_source: &str) -> Result<(Program, SourceMap), Stri
         program.classes.extend(parsed.classes);
         program.interfaces.extend(parsed.interfaces);
         program.enums.extend(parsed.enums);
+        program.structs.extend(parsed.structs);
     }
     Ok((program, map))
 }
@@ -67,7 +98,15 @@ fn load(root_name: &str, root_source: &str) -> Result<(Program, SourceMap), Stri
 /// `file` is the name used for the root file and to resolve its imports.
 /// Errors are already rendered for display.
 pub fn to_rust(file: &str, source: &str) -> Result<String, String> {
-    compile(file, source, true)
+    compile(file, source, true).map(|(rust, _)| rust)
+}
+
+/// What the Rust build needs besides the generated source.
+struct Native {
+    /// crates.io dependencies: (name, version).
+    crates: Vec<(String, String)>,
+    /// Whether the program calls hand-written Rust (`use rust` / `extern fn`).
+    uses_rust: bool,
 }
 
 /// Reports errors without requiring `fn main()`, so files meant to be imported can be
@@ -76,10 +115,15 @@ pub fn check(file: &str, source: &str) -> Result<(), String> {
     compile(file, source, false).map(|_| ())
 }
 
-fn compile(file: &str, source: &str, require_main: bool) -> Result<String, String> {
+fn compile(file: &str, source: &str, require_main: bool) -> Result<(String, Native), String> {
     let (program, map) = load(file, source)?;
     let model = checker::Model::build(&program, require_main).map_err(|e| map.render(&e))?;
-    codegen::generate(&program, &model).map_err(|e| map.render(&e))
+    let rust = codegen::generate(&program, &model).map_err(|e| map.render(&e))?;
+    let native = Native {
+        crates: program.crates.iter().map(|(n, v, _)| (n.clone(), v.clone())).collect(),
+        uses_rust: !program.rust_files.is_empty() || !program.extern_fns.is_empty() || !program.crates.is_empty(),
+    };
+    Ok((rust, native))
 }
 
 fn stem(path: &Path) -> String {
@@ -96,15 +140,18 @@ fn stem(path: &Path) -> String {
 /// Compiles `input` to a native executable at `output` (or a temp location).
 pub fn build(input: &Path, output: Option<PathBuf>) -> Result<PathBuf, String> {
     let source = std::fs::read_to_string(input).map_err(|e| format!("cannot read {}: {}", input.display(), e))?;
-    let rust = to_rust(&input.display().to_string(), &source)?;
+    let (rust, native) = compile(&input.display().to_string(), &source, true)?;
 
     let name = stem(input);
     let work = std::env::temp_dir().join("kalinga-build");
     std::fs::create_dir_all(&work).map_err(|e| format!("cannot create {}: {}", work.display(), e))?;
+    let exe = output.unwrap_or_else(|| work.join(format!("{}{}", name, std::env::consts::EXE_SUFFIX)));
+    if !native.crates.is_empty() {
+        return build_with_cargo(&work, &name, &rust, &native, &exe);
+    }
     let rs_path = work.join(format!("{}.rs", name));
     std::fs::write(&rs_path, rust).map_err(|e| format!("cannot write {}: {}", rs_path.display(), e))?;
 
-    let exe = output.unwrap_or_else(|| work.join(format!("{}{}", name, std::env::consts::EXE_SUFFIX)));
     let result = Command::new("rustc")
         .args(["--edition", "2024", "-O", "-C", "overflow-checks=on", "--crate-name", &name])
         .arg(&rs_path)
@@ -113,13 +160,63 @@ pub fn build(input: &Path, output: Option<PathBuf>) -> Result<PathBuf, String> {
         .output()
         .map_err(|e| format!("cannot run `rustc` (is Rust installed and on PATH?): {}", e))?;
     if !result.status.success() {
-        return Err(format!(
-            "internal compiler error: generated Rust failed to compile.\nGenerated file: {}\n{}",
-            rs_path.display(),
-            String::from_utf8_lossy(&result.stderr)
-        ));
+        return Err(rust_failure(&native, &rs_path, &String::from_utf8_lossy(&result.stderr)));
     }
     Ok(exe)
+}
+
+fn rust_failure(native: &Native, generated: &Path, stderr: &str) -> String {
+    if native.uses_rust {
+        format!(
+            "error: the Rust compiler rejected the program.\nThis program uses Rust code (`use rust`, `use crate` or `extern fn`): check that each \
+             `extern` declaration matches the Rust code it names.\nGenerated file: {}\n{}",
+            generated.display(),
+            stderr
+        )
+    } else {
+        format!("internal compiler error: generated Rust failed to compile.\nGenerated file: {}\n{}", generated.display(), stderr)
+    }
+}
+
+/// Builds a program that uses crates.io libraries with cargo. Compiled libraries are kept
+/// in a shared target folder, so only the first build that uses a crate is slow.
+fn build_with_cargo(work: &Path, name: &str, rust: &str, native: &Native, exe: &Path) -> Result<PathBuf, String> {
+    let project = work.join("cargo").join(name);
+    let src = project.join("src");
+    std::fs::create_dir_all(&src).map_err(|e| format!("cannot create {}: {}", src.display(), e))?;
+    let mut manifest = format!(
+        "[package]\nname = \"{}\"\nversion = \"0.0.0\"\nedition = \"2024\"\n\n[workspace]\n\n[profile.release]\noverflow-checks = true\n\n[dependencies]\n",
+        name.replace('_', "-")
+    );
+    for (krate, version) in &native.crates {
+        manifest.push_str(&format!("{} = {:?}\n", krate, version));
+    }
+    let manifest_path = project.join("Cargo.toml");
+    let deps_changed = std::fs::read_to_string(&manifest_path).ok().as_deref() != Some(manifest.as_str());
+    std::fs::write(&manifest_path, &manifest).map_err(|e| format!("cannot write Cargo.toml: {}", e))?;
+    let main_rs = src.join("main.rs");
+    std::fs::write(&main_rs, rust).map_err(|e| format!("cannot write {}: {}", main_rs.display(), e))?;
+
+    let target = work.join("cargo-target");
+    if deps_changed {
+        eprintln!("building with cargo (a crate used for the first time is downloaded and compiled once)...");
+    }
+    let result = Command::new("cargo")
+        .args(["build", "--release", "--quiet", "--manifest-path"])
+        .arg(project.join("Cargo.toml"))
+        .env("CARGO_TARGET_DIR", &target)
+        .output()
+        .map_err(|e| format!("cannot run `cargo` (is Rust installed and on PATH?): {}", e))?;
+    if !result.status.success() {
+        let stderr = String::from_utf8_lossy(&result.stderr);
+        if stderr.contains("failed to select a version") || stderr.contains("no matching package") || stderr.contains("failed to get") {
+            return Err(format!("error: cargo could not get the crates this program uses (check the names, versions and your internet connection)\n{}", stderr));
+        }
+        return Err(rust_failure(native, &main_rs, &stderr));
+    }
+    let built = target.join("release").join(format!("{}{}", name.replace('_', "-"), std::env::consts::EXE_SUFFIX));
+    std::fs::copy(&built, exe).map_err(|e| format!("cannot copy {} to {}: {}", built.display(), exe.display(), e))?;
+    Ok(exe.to_path_buf())
 }
 
 /// Builds and runs the program, returning its exit code.

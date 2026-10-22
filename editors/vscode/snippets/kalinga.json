@@ -222,5 +222,71 @@
       "}"
     ],
     "description": "Downcast with if let"
+  },
+  "struct": {
+    "prefix": "struct",
+    "body": [
+      "struct ${1:Vec2} {",
+      "\t${2:x}: ${3:float}",
+      "\t${4:y}: ${3:float}",
+      "",
+      "\top +(o: ${1:Vec2}) -> ${1:Vec2} {",
+      "\t\treturn ${1:Vec2}(self.${2:x} + o.${2:x}, self.${4:y} + o.${4:y})",
+      "\t}",
+      "}"
+    ],
+    "description": "Value-type struct with an operator"
+  },
+  "mut fn": {
+    "prefix": "mfn",
+    "body": [
+      "mut fn ${1:name}(${2}) {",
+      "\t$0",
+      "}"
+    ],
+    "description": "Struct method that changes self"
+  },
+  "operator": {
+    "prefix": "op",
+    "body": [
+      "op ${1|+,-,*,/,%|}(${2:other}: ${3:Type}) -> ${4:Type} {",
+      "\treturn $0",
+      "}"
+    ],
+    "description": "Operator overload in a struct"
+  },
+  "use rust": {
+    "prefix": "userust",
+    "body": [
+      "use rust \"${1:native/file.rs}\""
+    ],
+    "description": "Compile a Rust file into the program"
+  },
+  "use crate": {
+    "prefix": "usecrate",
+    "body": [
+      "use crate \"${1:name}\" = \"${2:1}\""
+    ],
+    "description": "Use a crates.io library"
+  },
+  "extern fn": {
+    "prefix": "extern",
+    "body": [
+      "extern fn ${1:name}(${2}) -> ${3:int}"
+    ],
+    "description": "Declare a Rust function"
+  },
+  "game loop": {
+    "prefix": "gameloop",
+    "body": [
+      "var last = Time.now()",
+      "while ${1:running} {",
+      "\tlet now = Time.now()",
+      "\tlet dt = now - last",
+      "\tlast = now",
+      "\t$0",
+      "}"
+    ],
+    "description": "Frame loop with delta time"
   }
 }

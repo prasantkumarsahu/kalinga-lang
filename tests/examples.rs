@@ -315,3 +315,69 @@ fn v02_examples() {
         assert_eq!(out, expected, "{}", file);
     }
 }
+
+// ---------------------------------------------------------------- v0.3 features
+
+#[test]
+fn structs_and_operators() {
+    let (code, out, err) = run_file("tests/structs.kl");
+    assert_eq!(code, 0, "{}", err);
+    assert_eq!(
+        out,
+        "Vec2(x: 1.0, y: 2.0) Vec2(x: 10.0, y: 2.0) true\n\
+         Vec2(x: 11.0, y: 4.0) Vec2(x: -9.0, y: 0.0) Vec2(x: 2.0, y: 4.0) Vec2(x: -1.0, y: -2.0) Vec2(x: 0.0, y: 0.0)\n\
+         Vec2(x: 7.0, y: 9.0) 7.0 Vec2(x: 7.0, y: 9.0)\nfalse true\ntrue false\nVec2(x: 5.0, y: 0.0) Vec2(x: 3.0, y: 3.0) 1\n"
+    );
+    let v = "struct V {\n    x: float\n    mut fn grow() {\n        self.x += 1.0\n    }\n    op +(o: V) -> V {\n        return V(self.x + o.x)\n    }\n}\n";
+    assert_compile_error("struct_mut", "struct W {\n    x: int\n    fn bad() {\n        self.x = 1\n    }\n}\nfn main() {}", "declare it `mut fn`");
+    assert_compile_error("struct_let", &format!("{}fn main() {{\n    let v = V(1.0)\n    v.grow()\n}}", v), "`grow` is a `mut fn`");
+    assert_compile_error("struct_op", &format!("{}fn main() {{\n    print(V(1.0) * 2.0)\n}}", v), "has no `op *` taking a `float`");
+    assert_compile_error("struct_args", &format!("{}fn main() {{ print(V()) }}", v), "takes 1 argument(s)");
+    assert_compile_error("struct_loop", "struct L { next: L? }\nfn main() {}", "contains itself");
+}
+
+#[test]
+fn math_random_time() {
+    let (code, out, err) = run_file("tests/stdlib.kl");
+    assert_eq!(code, 0, "{}", err);
+    assert_eq!(
+        out,
+        "4.0 1024.0 3 2.5 3 1.5\n2.0 3.0 3.0 10 0.0\n2.5 -1 100 5.0 true\ntrue\nranges ok: true\n[1, 2, 3, 4, 5, 6] true none\ntrue true\n"
+    );
+    assert_compile_error("math_mixed", "fn main() { print(Math.min(1, 2.0)) }", "all `int` or all `float`");
+    let (code, _, err) = run_source("rand_bounds", "fn main() {\n    print(Random.int(5, 5))\n}\n");
+    assert_eq!(code, 101);
+    assert!(err.contains("the second number must be greater"), "{}", err);
+}
+
+#[test]
+fn rust_interop() {
+    let (code, out, err) = run_file("tests/interop/main.kl");
+    assert_eq!(code, 0, "{}", err);
+    assert_eq!(out, "  0.0: #\n  2.0: ##\n  4.0: ###\n  8.0: #\n14.0 hello none\n5.0 3.0\n");
+    assert_compile_error("extern_dup", "extern fn print(x: int)\nfn main() {}", "already a built-in function");
+    assert_compile_error("rust_missing", "use rust \"nope.rs\"\nfn main() {}", "cannot find Rust file `nope.rs`");
+}
+
+/// Needs internet the first time (downloads the `fastrand` crate): `cargo test -- --ignored`.
+#[test]
+#[ignore]
+fn rust_crates() {
+    let (code, out, err) = run_file("tests/crates/main.kl");
+    assert_eq!(code, 0, "{}", err);
+    assert_eq!(out, "fastrand works: true true\n");
+}
+
+#[test]
+fn v03_examples() {
+    let (code, out, err) = run_file("examples/particles.kl");
+    assert_eq!(code, 0, "{}", err);
+    assert_eq!(
+        out,
+        "frame 0: 10000 particles, highest at 8 cm\nframe 30: 10000 particles, highest at 122 cm\nframe 60: 9841 particles, highest at -8 cm\n\
+         frame 90: 4776 particles, highest at -384 cm\n120 frames of 10000 particles took under a second: true\n"
+    );
+    let (code, out, err) = run_file("examples/interop/main.kl");
+    assert_eq!(code, 0, "{}", err);
+    assert_eq!(out, "mean 5.0, std dev 2.0\n[[7.0, 10.0], [15.0, 22.0]]\n4.0\n");
+}

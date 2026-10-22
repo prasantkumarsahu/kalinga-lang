@@ -9,7 +9,7 @@ use std::collections::{HashMap, HashSet};
 use std::fmt::Write as _;
 
 use crate::ast::*;
-use crate::checker::{class_trait, has_params, is_map_key, subst, subst_sig, unify, Model, Signature, Type, BUILTINS};
+use crate::checker::{class_trait, has_params, is_map_key, subst, subst_sig, unify, Model, Signature, StructOp, Type, BUILTINS};
 use crate::error::{err, Pos, Result};
 
 pub fn generate(prog: &Program, model: &Model) -> Result<String> {
@@ -58,6 +58,10 @@ struct Ctx {
     class: Option<String>,
     ret: Type,
     in_init: bool,
+    /// Struct whose method (or operator) body is being generated.
+    strukt: Option<String>,
+    /// Inside a struct's `mut fn`: `self` may be changed.
+    self_mut: bool,
     /// Inside a `static fn`: no `self`.
     is_static: bool,
     loops: usize,
@@ -76,7 +80,18 @@ struct LambdaFrame {
 
 impl Ctx {
     fn new(class: Option<String>, ret: Type, in_init: bool) -> Ctx {
-        Ctx { scopes: vec![HashMap::new()], class, ret, in_init, is_static: false, loops: 0, lambdas: vec![], tparams: vec![] }
+        Ctx {
+            scopes: vec![HashMap::new()],
+            class,
+            ret,
+            in_init,
+            strukt: None,
+            self_mut: false,
+            is_static: false,
+            loops: 0,
+            lambdas: vec![],
+            tparams: vec![],
+        }
     }
 
     /// Finds a variable. Variables from outside the current lambda are recorded as
@@ -146,7 +161,7 @@ impl<'a> Gen<'a> {
                 }
             }
             Type::Interface(i) => format!("Rc<RefCell<dyn {}>>", i),
-            Type::Enum(e) => e.clone(),
+            Type::Enum(e) | Type::Struct(e) | Type::Extern(e) => e.clone(),
             Type::Func(ps, r) => {
                 let ps: Vec<String> = ps.iter().map(|p| self.rty(p)).collect();
                 if **r == Type::Void {
@@ -213,6 +228,7 @@ impl<'a> Gen<'a> {
         // Bodies come first: generating them records which classes need a self-pointer
         // (`self` as a value, `as`/`is` targets), which decides how classes are emitted.
         let (method_bodies, init_bodies, field_defaults) = self.class_bodies()?;
+        let structs = self.struct_code()?;
         let mut functions = String::new();
         for f in &prog.functions {
             let sig = self.m.functions[&f.name].clone();
@@ -233,6 +249,10 @@ impl<'a> Gen<'a> {
 
         let mut out = String::new();
         out.push_str(PRELUDE);
+        for (path, _) in &prog.rust_files {
+            let module = format!("__rs_{}", rust_module_name(path));
+            writeln!(out, "\n#[path = {:?}]\nmod {};\nuse {}::*;", path, module, module).unwrap();
+        }
 
         for iname in &self.m.interface_order {
             let info = &self.m.interfaces[iname];
@@ -252,6 +272,7 @@ impl<'a> Gen<'a> {
         for ename in &self.m.enum_order {
             self.enum_decl(&mut out, ename);
         }
+        out.push_str(&structs);
         for cname in &self.m.class_order {
             self.class(&mut out, cname, &method_bodies, &init_bodies, &field_defaults);
         }
@@ -305,6 +326,263 @@ impl<'a> Gen<'a> {
             }
         }
         Ok((method_bodies, init_bodies, field_defaults))
+    }
+
+    /// Rust code for every struct: definition, constructor, methods, operators, printing.
+    fn struct_code(&self) -> Result<String> {
+        let mut out = String::new();
+        for name in &self.m.struct_order {
+            let info = &self.m.structs[name];
+            let plain = self.m.plain_structs.contains(name);
+            writeln!(out, "\n// ===== struct {} =====", name).unwrap();
+            writeln!(out, "#[derive(Clone{})]", if plain { ", PartialEq" } else { "" }).unwrap();
+            writeln!(out, "struct {} {{", name).unwrap();
+            for (f, t) in &info.fields {
+                writeln!(out, "    {}: {},", rid(f), self.rty(t)).unwrap();
+            }
+            out.push_str("}\n");
+            writeln!(out, "impl {} {{", name).unwrap();
+            for meth in &info.decl.methods {
+                let m = &info.methods[&meth.name];
+                let mut cx = Ctx::new(None, m.sig.ret.clone(), false);
+                cx.strukt = Some(name.clone());
+                cx.self_mut = m.is_mut;
+                cx.is_static = m.is_static;
+                let body = self.body_in(&mut cx, &m.sig, &meth.body, meth.pos, &meth.name, 2)?;
+                if m.is_static {
+                    writeln!(out, "    fn __s_{}({}){} {{\n{}    }}", meth.name, self.params_decl(&m.sig), self.ret_suffix(&m.sig.ret), body).unwrap();
+                } else {
+                    let recv = if m.is_mut { "&mut self" } else { "&self" };
+                    writeln!(
+                        out,
+                        "    fn {}({}{}){} {{\n{}    }}",
+                        rid(&meth.name),
+                        recv,
+                        self.comma_params(&m.sig),
+                        self.ret_suffix(&m.sig.ret),
+                        body
+                    )
+                    .unwrap();
+                }
+            }
+            for (o, decl) in info.ops.iter().zip(&info.decl.ops) {
+                let sig = Signature {
+                    params: decl.params.iter().map(|p| p.name.clone()).zip(o.param.iter().cloned()).collect(),
+                    ret: o.ret.clone(),
+                };
+                let mut cx = Ctx::new(None, o.ret.clone(), false);
+                cx.strukt = Some(name.clone());
+                let body = self.body_in(&mut cx, &sig, &decl.body, decl.pos, &format!("op {}", o.op.rust()), 2)?;
+                writeln!(out, "    fn __op_{}(&self{}){} {{\n{}    }}", o.index, self.comma_params(&sig), self.ret_suffix(&o.ret), body).unwrap();
+            }
+            out.push_str("}\n");
+            if plain {
+                let parts: Vec<String> = info.fields.iter().map(|(f, _)| format!("{}: {{}}", f)).collect();
+                let shows: Vec<String> = info.fields.iter().map(|(f, _)| format!("self.{}.__show()", rid(f))).collect();
+                writeln!(
+                    out,
+                    "impl __KlShow for {} {{\n    fn __show(&self) -> String {{ format!(\"{}({})\"{}{}) }}\n}}",
+                    name,
+                    name,
+                    parts.join(", "),
+                    if shows.is_empty() { "" } else { ", " },
+                    shows.join(", ")
+                )
+                .unwrap();
+            }
+        }
+        Ok(out)
+    }
+
+    /// Type of struct field `f`, checking `private` access.
+    fn struct_field_type(&self, cx: &Ctx, st: &str, f: &str, pos: Pos) -> Result<Type> {
+        let info = &self.m.structs[st];
+        match info.fields.iter().find(|(n, _)| n == f) {
+            Some((_, t)) => {
+                if info.private_fields.contains(f) && cx.strukt.as_deref() != Some(st) {
+                    return err(format!("field `{}` is private to `{}`", f, st), pos);
+                }
+                Ok(t.clone())
+            }
+            None if info.methods.contains_key(f) => err(format!("`{}` is a method of `{}`; call it with `()`", f, st), pos),
+            None => err(format!("`{}` has no field `{}`", st, f), pos),
+        }
+    }
+
+    /// The operator method of struct `st` for `op` with a right-hand side of type `rhs`.
+    fn find_op(&self, st: &str, op: BinOp, rhs: Option<&Type>) -> Option<StructOp> {
+        let ops = &self.m.structs[st].ops;
+        let candidates = ops.iter().filter(|o| o.op == op);
+        match rhs {
+            None => candidates.into_iter().find(|o| o.param.is_none()).cloned(),
+            Some(rt) => {
+                let all: Vec<&StructOp> = candidates.filter(|o| o.param.is_some()).collect();
+                all.iter().find(|o| o.param.as_ref() == Some(rt)).or_else(|| all.iter().find(|o| self.m.assignable(rt, o.param.as_ref().unwrap()))).map(|o| (*o).clone())
+            }
+        }
+    }
+
+    /// Calls `method` on a struct value: on `self`, on a place (for `mut fn`), or on any value.
+    fn struct_method_call(&self, cx: &mut Ctx, st: &str, recv: &Expr, name: &str, args: &[Expr], pos: Pos) -> Result<(String, Type)> {
+        let info = &self.m.structs[st];
+        let m = match info.methods.get(name) {
+            Some(m) if !m.is_static => m.clone(),
+            Some(_) => return err(format!("`{}` is a `static fn`; call it as `{}.{}(...)`", name, st, name), pos),
+            None => return err(format!("`{}` has no method `{}`", st, name), pos),
+        };
+        if m.is_private && cx.strukt.as_deref() != Some(st) {
+            return err(format!("method `{}` is private to `{}`", name, st), pos);
+        }
+        let (binds, names) = self.args(cx, &m.sig, args, pos, name)?;
+        if matches!(recv.kind, ExprKind::SelfRef) {
+            if m.is_mut && !cx.self_mut {
+                return err(format!("`{}` changes `self`, so it can only be called from another `mut fn`", name), pos);
+            }
+            return Ok((format!("{{ {}self.{}({}) }}", binds, rid(name), names), m.sig.ret));
+        }
+        if m.is_mut {
+            let mut n = 0;
+            let (pre, place, _) = self.place(cx, recv, &mut n).map_err(|mut e| {
+                e.msg = format!("{} (`{}` is a `mut fn`, so it needs a variable it can change)", e.msg, name);
+                e
+            })?;
+            return Ok((format!("{{ {}{}let __t = {}.{}({}); __t }}", pre, binds, place, rid(name), names), m.sig.ret));
+        }
+        let (setup, rcode, _) = self.receiver(cx, recv)?;
+        Ok((format!("{{ {}{}let __t = {}.{}({}); __t }}", setup, binds, rcode, rid(name), names), m.sig.ret))
+    }
+
+    /// `Math`, `Random` or `Time` used as a receiver (unless a variable shadows it).
+    fn library_receiver(&self, cx: &Ctx, recv: &Expr) -> Option<String> {
+        match &recv.kind {
+            ExprKind::Ident(n) if matches!(n.as_str(), "Math" | "Random" | "Time") && cx.lookup(n).is_none() => Some(n.clone()),
+            _ => None,
+        }
+    }
+
+    /// A numeric argument as an `f64` (ints are converted).
+    fn float_arg(&self, cx: &mut Ctx, e: &Expr, what: &str) -> Result<String> {
+        match self.expr(cx, e, None)? {
+            (c, Type::Float) => Ok(c),
+            (c, Type::Int) => Ok(format!("(({}) as f64)", c)),
+            (_, t) => err(format!("`{}` needs a number, found `{}`", what, t), e.pos),
+        }
+    }
+
+    /// Arguments of the same numeric type (`int` or `float`) for min/max/clamp/abs/sign.
+    fn same_number_args(&self, cx: &mut Ctx, args: &[Expr], what: &str) -> Result<(Vec<String>, Type)> {
+        let mut codes = vec![];
+        let mut ty: Option<Type> = None;
+        for a in args {
+            let (c, t) = self.expr(cx, a, None)?;
+            if !matches!(t, Type::Int | Type::Float) {
+                return err(format!("`{}` needs numbers, found `{}`", what, t), a.pos);
+            }
+            if let Some(prev) = &ty {
+                if *prev != t {
+                    return err(format!("`{}` needs all `int` or all `float` arguments; convert with `float(x)`", what), a.pos);
+                }
+            }
+            ty = Some(t);
+            codes.push(c);
+        }
+        Ok((codes, ty.unwrap_or(Type::Float)))
+    }
+
+    fn library_call(&self, cx: &mut Ctx, ns: &str, name: &str, args: &[Expr], pos: Pos) -> Result<(String, Type)> {
+        let what = format!("{}.{}", ns, name);
+        let arity = |n: usize| -> Result<()> {
+            if args.len() == n { Ok(()) } else { err(format!("`{}` takes {} argument(s), but {} were given", what, n, args.len()), pos) }
+        };
+        match (ns, name) {
+            ("Math", "sqrt" | "sin" | "cos" | "tan" | "asin" | "acos" | "atan" | "exp" | "ln" | "log10" | "floor" | "ceil" | "round") => {
+                arity(1)?;
+                let x = self.float_arg(cx, &args[0], &what)?;
+                let f = if name == "ln" { "ln" } else { name };
+                Ok((format!("({}).{}()", x, f), Type::Float))
+            }
+            ("Math", "pow" | "atan2" | "hypot") => {
+                arity(2)?;
+                let a = self.float_arg(cx, &args[0], &what)?;
+                let b = self.float_arg(cx, &args[1], &what)?;
+                let f = if name == "pow" { "powf" } else { name };
+                Ok((format!("({}).{}({})", a, f, b), Type::Float))
+            }
+            ("Math", "lerp") => {
+                arity(3)?;
+                let a = self.float_arg(cx, &args[0], &what)?;
+                let b = self.float_arg(cx, &args[1], &what)?;
+                let t = self.float_arg(cx, &args[2], &what)?;
+                Ok((format!("{{ let __a = {}; __a + ({} - __a) * {} }}", a, b, t), Type::Float))
+            }
+            ("Math", "abs" | "sign") => {
+                arity(1)?;
+                let (c, t) = self.same_number_args(cx, args, &what)?;
+                let f = if name == "abs" { "abs" } else { "signum" };
+                Ok((format!("({}).{}()", c[0], f), t))
+            }
+            ("Math", "min" | "max") => {
+                arity(2)?;
+                let (c, t) = self.same_number_args(cx, args, &what)?;
+                Ok((format!("({}).{}({})", c[0], name, c[1]), t))
+            }
+            ("Math", "clamp") => {
+                arity(3)?;
+                let (c, t) = self.same_number_args(cx, args, &what)?;
+                Ok((format!("__clamp({}, {}, {})", c[0], c[1], c[2]), t))
+            }
+            ("Random", "int") => {
+                arity(2)?;
+                let lo = self.expr_to(cx, &args[0], &Type::Int)?;
+                let hi = self.expr_to(cx, &args[1], &Type::Int)?;
+                Ok((format!("__rand_int({}, {})", lo, hi), Type::Int))
+            }
+            ("Random", "float") => {
+                arity(0)?;
+                Ok(("__rand_float()".into(), Type::Float))
+            }
+            ("Random", "chance") => {
+                arity(1)?;
+                let p = self.float_arg(cx, &args[0], &what)?;
+                Ok((format!("(__rand_float() < {})", p), Type::Bool))
+            }
+            ("Random", "seed") => {
+                arity(1)?;
+                let n = self.expr_to(cx, &args[0], &Type::Int)?;
+                Ok((format!("__rand_seed({})", n), Type::Void))
+            }
+            ("Random", "pick") => {
+                arity(1)?;
+                let (setup, rcode, t) = self.receiver(cx, &args[0])?;
+                let Type::Array(elem) = t else {
+                    return err(format!("`Random.pick` needs an array, found `{}`", t), args[0].pos);
+                };
+                Ok((format!("{{ {}let __xs = &{}; if __xs.is_empty() {{ None }} else {{ Some(__xs[__rand_int(0, __xs.len() as i64) as usize].clone()) }} }}", setup, rcode), Type::Optional(elem)))
+            }
+            ("Random", "shuffle") => {
+                arity(1)?;
+                let mut n = 0;
+                let (pre, place, t) = self.place(cx, &args[0], &mut n)?;
+                if !matches!(t, Type::Array(_)) {
+                    return err(format!("`Random.shuffle` needs an array, found `{}`", t), args[0].pos);
+                }
+                Ok((format!("{{ {}__shuffle(&mut {}); }}", pre, place), Type::Void))
+            }
+            ("Time", "now") => {
+                arity(0)?;
+                Ok(("__time_now()".into(), Type::Float))
+            }
+            ("Time", "millis") => {
+                arity(0)?;
+                Ok(("__time_millis()".into(), Type::Int))
+            }
+            ("Time", "sleep") => {
+                arity(1)?;
+                let secs = self.float_arg(cx, &args[0], &what)?;
+                Ok((format!("__time_sleep({})", secs), Type::Void))
+            }
+            _ => err(format!("`{}` has no function `{}`", ns, name), pos),
+        }
     }
 
     fn is_cast_target(&self, class: &str) -> bool {
@@ -893,6 +1171,28 @@ impl<'a> Gen<'a> {
             }
         }
         let wrapped = self.wrapped_target(cx, target)?;
+        if op != AssignOp::Set {
+            let mut n = 0;
+            let (pre, place, ty) = self.place(cx, target, &mut n)?;
+            if let Type::Struct(st) = &ty {
+                let bin = match op {
+                    AssignOp::Add => BinOp::Add,
+                    AssignOp::Sub => BinOp::Sub,
+                    AssignOp::Mul => BinOp::Mul,
+                    AssignOp::Div => BinOp::Div,
+                    _ => BinOp::Rem,
+                };
+                let (vc, vt) = self.expr(cx, value, None)?;
+                let Some(o) = self.find_op(st, bin, Some(&vt)) else {
+                    return err(format!("`{}` has no `op {}` taking a `{}`", st, bin.rust(), vt), value.pos);
+                };
+                if o.ret != ty {
+                    return err(format!("`{}=` needs `op {}` to return `{}`, but it returns `{}`", bin.rust(), bin.rust(), st, o.ret), value.pos);
+                }
+                let vc = self.coerce(vc, &vt, o.param.as_ref().unwrap(), value.pos)?;
+                return Ok(format!("{{ let __v = {}; {}let __n = {}.__op_{}(__v); {} = __n; }}", vc, pre, place, o.index, place));
+            }
+        }
         let v = {
             let mut n = 0;
             let (pre, place, ty) = self.place(cx, target, &mut n)?;
@@ -1050,9 +1350,22 @@ impl<'a> Gen<'a> {
                     return err("cannot assign to an enum variant", e.pos);
                 }
                 if matches!(recv.kind, ExprKind::SelfRef) {
+                    if let Some(st) = cx.strukt.clone() {
+                        if !cx.self_mut {
+                            return err("this method changes `self`; declare it `mut fn`", e.pos);
+                        }
+                        let t = self.struct_field_type(cx, &st, f, e.pos)?;
+                        return Ok((String::new(), format!("self.{}", rid(f)), t));
+                    }
                     let class = self.self_class(cx, recv.pos)?;
                     let t = self.field_type(cx, &class, f, e.pos)?;
                     return Ok((String::new(), format!("self.{}", rid(f)), t));
+                }
+                // A field of a struct value: change it where the struct lives.
+                if let Type::Struct(st) = self.recv(cx, recv)?.1 {
+                    let t = self.struct_field_type(cx, &st, f, e.pos)?;
+                    let (pre, bplace, _) = self.place(cx, recv, n)?;
+                    return Ok((pre, format!("{}.{}", bplace, rid(f)), t));
                 }
                 let (rcode, rt) = self.recv(cx, recv)?;
                 match &rt {
@@ -1163,6 +1476,20 @@ impl<'a> Gen<'a> {
     fn recv_place(&self, cx: &mut Ctx, e: &Expr, n: &mut usize) -> Result<Option<(String, String, Type)>> {
         match &e.kind {
             ExprKind::Ident(name) => Ok(cx.lookup(name).map(|v| (String::new(), v.rust.clone(), v.ty.clone()))),
+            ExprKind::Field(recv, f) if matches!(recv.kind, ExprKind::SelfRef) && cx.strukt.is_some() => {
+                if cx.is_static {
+                    return Ok(None);
+                }
+                let st = cx.strukt.clone().unwrap();
+                let t = self.struct_field_type(cx, &st, f, e.pos)?;
+                Ok(Some((String::new(), format!("self.{}", rid(f)), t)))
+            }
+            ExprKind::Field(recv, f) if !matches!(recv.kind, ExprKind::SelfRef) => {
+                let Some((pre, bplace, bt)) = self.recv_place(cx, recv, n)? else { return Ok(None) };
+                let Type::Struct(st) = bt else { return Ok(None) };
+                let t = self.struct_field_type(cx, &st, f, e.pos)?;
+                Ok(Some((pre, format!("{}.{}", bplace, rid(f)), t)))
+            }
             ExprKind::Field(recv, f) if matches!(recv.kind, ExprKind::SelfRef) => {
                 let class = self.self_class(cx, recv.pos)?;
                 if self.m.is_wrapped_field(&class, f) {
@@ -1223,6 +1550,12 @@ impl<'a> Gen<'a> {
                 _ => Ok(("None".into(), Type::NoneLit)),
             },
             ExprKind::SelfRef => {
+                if let Some(st) = cx.strukt.clone() {
+                    if cx.is_static {
+                        return err("`self` is not available in a `static fn`", e.pos);
+                    }
+                    return Ok(("self.clone()".into(), Type::Struct(st)));
+                }
                 let class = self.self_class(cx, e.pos)?;
                 if cx.in_init {
                     return err("`self` cannot be used as a value inside `init` (the object is not finished yet)", e.pos);
@@ -1305,6 +1638,10 @@ impl<'a> Gen<'a> {
                 let (code, t) = self.expr(cx, inner, None)?;
                 match (op, &t) {
                     (UnOp::Neg, Type::Int | Type::Float) => Ok((format!("(-{})", code), t)),
+                    (UnOp::Neg, Type::Struct(st)) => match self.find_op(st, BinOp::Sub, None) {
+                        Some(o) => Ok((format!("{{ let __l = {}; __l.__op_{}() }}", code, o.index), o.ret)),
+                        None => err(format!("`{}` has no `op -()` for negation", st), e.pos),
+                    },
                     (UnOp::Not, Type::Bool) => Ok((format!("(!{})", code), t)),
                     (UnOp::Neg, _) => err(format!("cannot negate `{}`", t), e.pos),
                     (UnOp::Not, _) => err(format!("`!` needs a `bool`, found `{}`", t), e.pos),
@@ -1317,7 +1654,23 @@ impl<'a> Gen<'a> {
                 if let Some(t) = self.type_receiver(cx, recv) {
                     return self.variant_value(cx, &t, f, None, e.pos);
                 }
+                if let Some(ns) = self.library_receiver(cx, recv) {
+                    return match (ns.as_str(), f.as_str()) {
+                        ("Math", "PI") => Ok(("std::f64::consts::PI".into(), Type::Float)),
+                        ("Math", "TAU") => Ok(("std::f64::consts::TAU".into(), Type::Float)),
+                        ("Math", "E") => Ok(("std::f64::consts::E".into(), Type::Float)),
+                        ("Math", "INF") => Ok(("f64::INFINITY".into(), Type::Float)),
+                        _ => err(format!("`{}.{}` is not a value; library functions are called with `()`", ns, f), e.pos),
+                    };
+                }
                 if matches!(recv.kind, ExprKind::SelfRef) {
+                    if let Some(st) = cx.strukt.clone() {
+                        if cx.is_static {
+                            return err("`self` is not available in a `static fn`", e.pos);
+                        }
+                        let t = self.struct_field_type(cx, &st, f, e.pos)?;
+                        return Ok((clone_if(format!("self.{}", rid(f)), &t), t));
+                    }
                     let class = self.self_class(cx, recv.pos)?;
                     let t = self.field_type(cx, &class, f, e.pos)?;
                     if self.m.is_wrapped_field(&class, f) {
@@ -1327,6 +1680,11 @@ impl<'a> Gen<'a> {
                 }
                 let (setup, rcode, rt) = self.receiver(cx, recv)?;
                 match &rt {
+                    Type::Struct(st) => {
+                        let t = self.struct_field_type(cx, st, f, e.pos)?;
+                        let read = clone_if(format!("{}.{}", rcode, rid(f)), &t);
+                        Ok((if setup.is_empty() { read } else { format!("{{ {}let __t = {}; __t }}", setup, read) }, t))
+                    }
                     Type::Generic(c, targs) => {
                         let t = subst(&self.field_type(cx, c, f, e.pos)?, &self.m.bindings(c, targs));
                         let read = if self.m.is_wrapped_field(c, f) {
@@ -1509,6 +1867,15 @@ impl<'a> Gen<'a> {
     fn binary(&self, cx: &mut Ctx, op: BinOp, l: &Expr, r: &Expr, pos: Pos) -> Result<(String, Type)> {
         let (lc, lt) = self.expr(cx, l, None)?;
         let (rc, rt) = self.expr(cx, r, None)?;
+        if let Type::Struct(st) = &lt {
+            if matches!(op, BinOp::Add | BinOp::Sub | BinOp::Mul | BinOp::Div | BinOp::Rem) {
+                let Some(o) = self.find_op(st, op, Some(&rt)) else {
+                    return err(format!("`{}` has no `op {}` taking a `{}`", st, op.rust(), rt), pos);
+                };
+                let rc = self.coerce(rc, &rt, o.param.as_ref().unwrap(), r.pos)?;
+                return Ok((format!("{{ let __l = {}; let __r = {}; __l.__op_{}(__r) }}", lc, rc, o.index), o.ret));
+            }
+        }
         use BinOp::*;
         match op {
             And | Or => {
@@ -1578,6 +1945,27 @@ impl<'a> Gen<'a> {
         if BUILTINS.contains(&name) {
             return self.builtin(cx, name, args, pos);
         }
+        if let Some(info) = self.m.structs.get(name) {
+            let (min, max) = (info.required_args(), info.fields.len());
+            if args.len() < min || args.len() > max {
+                let range = if min == max { format!("{}", max) } else { format!("{} to {}", min, max) };
+                return err(format!("`{}(...)` takes {} argument(s) (its fields in order) but {} were given", name, range, args.len()), pos);
+            }
+            let mut binds = String::new();
+            let mut inits = vec![];
+            for (i, (f, t)) in info.fields.iter().enumerate() {
+                let code = match args.get(i) {
+                    Some(a) => self.expr_to(cx, a, t)?,
+                    None => {
+                        let mut dcx = Ctx::new(None, Type::Void, false);
+                        self.expr_to(&mut dcx, info.decl.fields[i].default.as_ref().unwrap(), t)?
+                    }
+                };
+                write!(binds, "let __a{} = {}; ", i, code).unwrap();
+                inits.push(format!("{}: __a{}", rid(f), i));
+            }
+            return Ok((format!("{{ {}{} {{ {} }} }}", binds, name, inits.join(", ")), Type::Struct(name.to_string())));
+        }
         if self.m.classes.contains_key(name) {
             if self.m.classes[name].decl.is_abstract {
                 return err(format!("`{}` is abstract and cannot be created; create one of its subclasses", name), pos);
@@ -1598,6 +1986,10 @@ impl<'a> Gen<'a> {
         }
         if self.m.interfaces.contains_key(name) {
             return err(format!("`{}` is an interface and cannot be created directly", name), pos);
+        }
+        if let Some((sig, path)) = self.m.extern_fns.get(name) {
+            let (binds, names) = self.args(cx, sig, args, pos, name)?;
+            return Ok((format!("{{ {}{}({}) }}", binds, path, names), sig.ret.clone()));
         }
         let sig = match self.m.functions.get(name) {
             Some(s) => s.clone(),
@@ -1688,12 +2080,33 @@ impl<'a> Gen<'a> {
         if let Some(t) = self.type_receiver(cx, recv) {
             return self.variant_value(cx, &t, name, Some(args), pos);
         }
+        if let Some(ns) = self.library_receiver(cx, recv) {
+            return self.library_call(cx, &ns, name, args, pos);
+        }
         if let ExprKind::Ident(n) = &recv.kind {
             if cx.lookup(n).is_none() && self.m.classes.contains_key(n) {
                 return self.static_call(cx, n, name, args, pos);
             }
+            if cx.lookup(n).is_none() && self.m.structs.contains_key(n) {
+                let m = match self.m.structs[n].methods.get(name) {
+                    Some(m) if m.is_static => m.clone(),
+                    Some(_) => return err(format!("`{}` is not a `static fn`; call it on a `{}` value", name, n), pos),
+                    None => return err(format!("`{}` has no static method `{}`", n, name), pos),
+                };
+                if m.is_private && cx.strukt.as_deref() != Some(n.as_str()) {
+                    return err(format!("method `{}` is private to `{}`", name, n), pos);
+                }
+                let (binds, names) = self.args(cx, &m.sig, args, pos, name)?;
+                return Ok((format!("{{ {}{}::__s_{}({}) }}", binds, n, name, names), m.sig.ret));
+            }
         }
         if matches!(recv.kind, ExprKind::SelfRef) {
+            if let Some(st) = cx.strukt.clone() {
+                if cx.is_static {
+                    return err("`self` is not available in a `static fn`", pos);
+                }
+                return self.struct_method_call(cx, &st, recv, name, args, pos);
+            }
             let class = self.self_class(cx, recv.pos)?;
             let sig = match self.m.find_method(&class, name) {
                 Some((owner, s)) => {
@@ -1717,6 +2130,9 @@ impl<'a> Gen<'a> {
 
         // Mutating array/map methods need a mutable place.
         let recv_ty = self.recv(cx, recv)?.1;
+        if let Type::Struct(st) = &recv_ty {
+            return self.struct_method_call(cx, st, recv, name, args, pos);
+        }
         if let (Type::Map(k, v), "remove") = (&recv_ty, name) {
             let mut n = 0;
             let (pre, place, _) = self.place(cx, recv, &mut n)?;
@@ -1934,6 +2350,17 @@ impl<'a> Gen<'a> {
     }
 }
 
+/// Module name for a `use rust` file: its file name, made into a Rust identifier.
+fn rust_module_name(path: &str) -> String {
+    std::path::Path::new(path)
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("native")
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() { c.to_ascii_lowercase() } else { '_' })
+        .collect()
+}
+
 /// `<T: Clone + 'static, U: ...>` for a Rust generic item (empty when not generic).
 fn generic_params(tparams: &[String]) -> String {
     if tparams.is_empty() {
@@ -2037,6 +2464,57 @@ fn __map_slot<K: Ord + __KlShow, V>(m: &mut BTreeMap<K, V>, k: K) -> &mut V {
     let shown = k.__show();
     match m.get_mut(&k) { Some(v) => v, None => panic!("key not found: {}", shown) }
 }
+fn __clamp<T: PartialOrd>(x: T, lo: T, hi: T) -> T {
+    if x < lo { lo } else if x > hi { hi } else { x }
+}
+
+// Random: xorshift64*, seeded from the clock (fast, not for cryptography).
+thread_local! {
+    static __RNG: std::cell::Cell<u64> = std::cell::Cell::new({
+        let t = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos() as u64).unwrap_or(1);
+        (t ^ 0x9E37_79B9_7F4A_7C15) | 1
+    });
+}
+fn __rand_u64() -> u64 {
+    __RNG.with(|s| {
+        let mut x = s.get();
+        x ^= x >> 12;
+        x ^= x << 25;
+        x ^= x >> 27;
+        s.set(x);
+        x.wrapping_mul(0x2545_F491_4F6C_DD1D)
+    })
+}
+fn __rand_seed(n: i64) {
+    __RNG.with(|s| s.set(((n as u64) ^ 0x9E37_79B9_7F4A_7C15) | 1));
+}
+fn __rand_int(lo: i64, hi: i64) -> i64 {
+    if hi <= lo { panic!("Random.int({}, {}): the second number must be greater than the first", lo, hi) }
+    let span = (hi as i128 - lo as i128) as u128;
+    (lo as i128 + (__rand_u64() as u128 % span) as i128) as i64
+}
+fn __rand_float() -> f64 {
+    (__rand_u64() >> 11) as f64 / (1u64 << 53) as f64
+}
+fn __shuffle<T>(xs: &mut Vec<T>) {
+    for i in (1..xs.len()).rev() {
+        let j = __rand_int(0, i as i64 + 1) as usize;
+        xs.swap(i, j);
+    }
+}
+
+// Time
+static __START: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
+fn __time_now() -> f64 {
+    __START.get_or_init(std::time::Instant::now).elapsed().as_secs_f64()
+}
+fn __time_millis() -> i64 {
+    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis() as i64).unwrap_or(0)
+}
+fn __time_sleep(seconds: f64) {
+    if seconds > 0.0 { std::thread::sleep(std::time::Duration::from_secs_f64(seconds)) }
+}
+
 fn __unset<T>(v: Option<T>, name: &str) -> T {
     match v { Some(x) => x, None => panic!("field `{}` was read before it was set", name) }
 }
@@ -2055,6 +2533,7 @@ fn __input(prompt: &str) -> String {
     s.trim_end_matches(['\r', '\n']).to_string()
 }
 fn __kl_run(f: fn()) {
+    __START.get_or_init(std::time::Instant::now);
     std::panic::set_hook(Box::new(|info| {
         let p = info.payload();
         let msg = if let Some(s) = p.downcast_ref::<&str>() { s.to_string() }

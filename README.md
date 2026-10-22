@@ -56,9 +56,14 @@ Nessie is imaginary
 - **Data**: arrays, sorted maps `{K: V}`, optionals `T?` instead of null, enums with data
   and exhaustive `match`.
 - **Functions**: lambdas, function types, `map`/`filter`/`sort_by`, generics.
+- **Value types**: `struct`s with operator overloading (`pos += vel * dt`), stored inline
+  like Rust structs — built for game math and numeric code.
+- **Standard library**: `Math`, `Random`, `Time`.
 - **Modules**: `import "file.kl"`.
+- **Rust interop**: call your own Rust code and any crates.io library with `use rust`,
+  `use crate` and `extern fn` — the way to graphics, audio and ML libraries.
 - **Fast and safe**: compiles to Rust and then native code; no null, no unchecked
-  indexing, no silent overflow, no `unsafe`.
+  indexing, no silent overflow, no `unsafe` in generated code.
 
 ## Documentation
 
@@ -107,6 +112,9 @@ A VS Code extension with syntax highlighting, snippets, live errors and a Run bu
 | Inheritance | `class B : A` — single base class; `override fn`; `super(...)`, `super.method()`; `abstract class` / `abstract fn`; `x is B`, `x as B` |
 | Interfaces | `interface I : J { fn m() -> str }`, `class C : Base, I, J`; interfaces work as types |
 | Modules | `import "lib/shapes.kl"` |
+| Structs | `struct Vec2 { x: float, y: float }`, `mut fn`, `op +(o: Vec2) -> Vec2` |
+| Library | `Math.sqrt(x)`, `Math.lerp(a, b, t)`, `Random.int(1, 7)`, `Time.now()` |
+| Rust interop | `use rust "native/x.rs"`, `use crate "rand" = "0.8"`, `extern fn f(x: int) -> int`, `extern type T` |
 | Built-ins | `print(a, b, ...)`, `len(x)`, `str(x)`, `int(x)`, `float(x)`, `input(prompt)` |
 | Array methods | `push(v)`, `pop()` → `T?`, `len()`, `contains(v)`, `map(f)`, `filter(f)`, `find(f)`, `sort()`, `sort_by(f)` |
 | Map methods | `m[k]`, `get(k)` → `V?`, `has(k)`, `remove(k)`, `keys()`, `values()`, `len()` |
@@ -147,7 +155,7 @@ through a different reference (for example `a.f(a)` where `f` modifies `a`) stop
 | `src/checker.rs` | class/interface model, inheritance and override rules |
 | `src/codegen.rs` | type checking of bodies, Rust generation, runtime prelude |
 | `src/driver.rs` | invokes `rustc` and runs the program |
-| `examples/` | `hello.kl`, `oop.kl`, `fib.kl`, `inventory.kl`, `pipeline.kl`, `shapes/` (modules) |
+| `examples/` | `hello.kl`, `oop.kl`, `fib.kl`, `inventory.kl`, `pipeline.kl`, `particles.kl`, `shapes/` (modules), `interop/` (Rust) |
 | `tests/examples.rs` | end-to-end tests |
 | `editors/vscode/` | VS Code extension |
 | `docs/` | language guide and reference |

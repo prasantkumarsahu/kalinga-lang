@@ -20,6 +20,7 @@ fn parse_embedded(code: &str, at: Pos) -> Result<Expr> {
 
 #[derive(Default, PartialEq)]
 struct Mods {
+    is_mut: bool,
     is_private: bool,
     is_static: bool,
     is_abstract: bool,
@@ -113,6 +114,53 @@ impl Parser {
                 }
                 Tok::Interface => prog.interfaces.push(self.interface()?),
                 Tok::Enum => prog.enums.push(self.enum_decl()?),
+                Tok::Struct => prog.structs.push(self.struct_decl()?),
+                Tok::Use => {
+                    let pos = self.advance().pos;
+                    let kind = self.ident("`rust` or `crate` after `use`")?.0;
+                    let what = match self.advance().tok {
+                        Tok::Str(s) => s,
+                        other => return err(format!("expected a name in quotes, found {}", other.describe()), pos),
+                    };
+                    match kind.as_str() {
+                        "rust" => prog.rust_files.push((what, pos)),
+                        "crate" => {
+                            self.expect(Tok::Assign, "`=` and a version, e.g. `use crate \"rand\" = \"0.8\"`")?;
+                            let version = match self.advance().tok {
+                                Tok::Str(v) => v,
+                                other => return err(format!("expected a version in quotes, found {}", other.describe()), pos),
+                            };
+                            prog.crates.push((what, version, pos));
+                        }
+                        other => return err(format!("expected `use rust \"file.rs\"` or `use crate \"name\" = \"version\"`, found `use {}`", other), pos),
+                    }
+                    self.end_of_statement()?;
+                }
+                Tok::Extern => {
+                    let pos = self.advance().pos;
+                    if self.check(&Tok::Fn) {
+                        self.advance();
+                        let (name, _) = self.ident("function name")?;
+                        let params = self.params()?;
+                        let ret = self.ret_type()?;
+                        let path = if self.eat(&Tok::Assign) {
+                            match self.advance().tok {
+                                Tok::Str(p) => Some(p),
+                                other => return err(format!("expected a Rust path in quotes, found {}", other.describe()), pos),
+                            }
+                        } else {
+                            None
+                        };
+                        prog.extern_fns.push(ExternFn { name, params, ret, path, pos });
+                    } else if self.peek() == &Tok::Ident("type".into()) {
+                        self.advance();
+                        let (name, npos) = self.ident("type name")?;
+                        prog.extern_types.push((name, npos));
+                    } else {
+                        return err("expected `extern fn` or `extern type`", pos);
+                    }
+                    self.end_of_statement()?;
+                }
                 Tok::Import => {
                     let pos = self.advance().pos;
                     match self.advance().tok {
@@ -123,7 +171,7 @@ impl Parser {
                 }
                 other => {
                     return err(
-                        format!("expected `fn`, `class`, `interface`, `enum` or `import` at top level, found {}", other.describe()),
+                        format!("expected `fn`, `class`, `struct`, `interface`, `enum` or `import` at top level, found {}", other.describe()),
                         self.pos(),
                     )
                 }
@@ -178,6 +226,7 @@ impl Parser {
             is_private: mods.is_private,
             is_static: mods.is_static,
             is_abstract: mods.is_abstract,
+            is_mut: mods.is_mut,
             pos,
         })
     }
@@ -319,6 +368,79 @@ impl Parser {
         }
         self.expect(Tok::RBrace, "`}`")?;
         Ok(InterfaceDecl { name, bases, methods, pos })
+    }
+
+    fn struct_decl(&mut self) -> Result<StructDecl> {
+        let pos = self.expect(Tok::Struct, "`struct`")?;
+        let (name, _) = self.ident("struct name")?;
+        if self.check(&Tok::Colon) {
+            return err("structs cannot extend classes or implement interfaces (use a class for that)", self.pos());
+        }
+        self.expect(Tok::LBrace, "`{` to start struct body")?;
+        let mut s = StructDecl { name, fields: vec![], methods: vec![], ops: vec![], pos };
+        self.skip_newlines();
+        while !self.check(&Tok::RBrace) {
+            let mpos = self.pos();
+            // `op +(other: T) -> T { ... }`
+            if self.peek() == &Tok::Ident("op".into()) {
+                let next = self.tokens.get(self.i + 1).map(|t| t.tok.clone());
+                let op = match next {
+                    Some(Tok::Plus) => Some(BinOp::Add),
+                    Some(Tok::Minus) => Some(BinOp::Sub),
+                    Some(Tok::Star) => Some(BinOp::Mul),
+                    Some(Tok::Slash) => Some(BinOp::Div),
+                    Some(Tok::Percent) => Some(BinOp::Rem),
+                    _ => None,
+                };
+                if let Some(op) = op {
+                    self.advance();
+                    self.advance();
+                    let params = self.params()?;
+                    let ret = self.ret_type()?;
+                    let body = self.block()?;
+                    s.ops.push(OpDecl { op, params, ret, body, pos: mpos });
+                    self.skip_newlines();
+                    continue;
+                }
+            }
+            // `mut fn` (a method that changes `self`)
+            let mut is_mut = false;
+            if self.peek() == &Tok::Ident("mut".into()) && self.tokens.get(self.i + 1).is_some_and(|t| t.tok == Tok::Fn) {
+                self.advance();
+                is_mut = true;
+            }
+            let mut mods = self.modifiers()?;
+            mods.is_mut = is_mut;
+            match self.peek().clone() {
+                Tok::Ident(fname) if !is_mut => {
+                    if mods.is_static || mods.is_abstract || mods.is_override {
+                        return err("fields can only be marked `private`", mpos);
+                    }
+                    let fpos = self.advance().pos;
+                    self.expect(Tok::Colon, "`:` and a type after field name")?;
+                    let ty = self.ty()?;
+                    let default = if self.eat(&Tok::Assign) { Some(self.expr()?) } else { None };
+                    s.fields.push(FieldDecl { name: fname, ty, default, is_private: mods.is_private, pos: fpos });
+                    self.end_of_statement()?;
+                }
+                Tok::Fn => {
+                    if mods.is_abstract || mods.is_override {
+                        return err("struct methods cannot be `abstract` or `override` (structs have no inheritance)", mpos);
+                    }
+                    if mods.is_mut && mods.is_static {
+                        return err("a `static fn` has no `self`, so it cannot be `mut`", mpos);
+                    }
+                    s.methods.push(self.function(mods)?);
+                    self.skip_newlines();
+                }
+                Tok::Init => return err("structs have no `init`: `Name(a, b)` sets the fields in order; use a `static fn` for other constructors", mpos),
+                other => {
+                    return err(format!("expected field, `fn`, `mut fn` or `op` in struct body, found {}", other.describe()), self.pos())
+                }
+            }
+        }
+        self.expect(Tok::RBrace, "`}`")?;
+        Ok(s)
     }
 
     fn enum_decl(&mut self) -> Result<EnumDecl> {

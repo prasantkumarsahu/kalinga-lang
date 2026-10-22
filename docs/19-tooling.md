@@ -1,4 +1,4 @@
-# 16. Tooling
+# 19. Tooling
 
 ## The kalinga command
 
@@ -43,6 +43,10 @@ the error message includes the path of the generated `.rs` file so it can be ins
 
 `rustc` must be on your PATH for `run` and `build`. `check` and `emit` work without it.
 
+Programs with `use crate` are built with `cargo` in a project under
+`kalinga-build/cargo/<name>`; compiled crates are kept in `kalinga-build/cargo-target`
+and shared by all programs, so only the first build that uses a crate is slow.
+
 ## VS Code extension
 
 The extension lives in [`editors/vscode`](../editors/vscode/README.md).
@@ -85,6 +89,9 @@ Type the prefix and press Tab:
 | `lam`, `lamb` | short lambda, block lambda |
 | `aclass`, `gclass`, `sfn` | abstract class, generic class, static method |
 | `ifas` | `if let d = x as Class { }` |
+| `struct`, `mfn`, `op` | struct, `mut fn`, operator |
+| `userust`, `usecrate`, `extern` | Rust interop declarations |
+| `gameloop` | a frame loop with delta time |
 | `import` | `import "file.kl"` |
 
 ### Installing
@@ -96,7 +103,7 @@ cargo install --path .
 ```bash
 cd editors/vscode
 npx @vscode/vsce package
-code --install-extension kalinga-lang-0.2.0.vsix
+code --install-extension kalinga-lang-0.4.0.vsix
 ```
 
 ### Settings
@@ -119,4 +126,4 @@ complete example in these docs.
 
 ---
 
-Previous: [15. Safety and Errors](15-safety-and-errors.md) · Next: [17. How It Works](17-how-it-works.md)
+Previous: [18. Safety and Errors](18-safety-and-errors.md) · Next: [20. How It Works](20-how-it-works.md)

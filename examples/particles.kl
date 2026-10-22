@@ -1,0 +1,84 @@
+// A tiny particle system: value structs, operators, Math, Random and Time.
+// This is the kind of inner loop a game runs every frame.
+
+struct Vec2 {
+    x: float
+    y: float
+
+    static fn zero() -> Vec2 {
+        return Vec2(0.0, 0.0)
+    }
+
+    static fn from_angle(radians: float, length: float) -> Vec2 {
+        return Vec2(Math.cos(radians) * length, Math.sin(radians) * length)
+    }
+
+    fn length() -> float {
+        return Math.hypot(self.x, self.y)
+    }
+
+    op +(o: Vec2) -> Vec2 {
+        return Vec2(self.x + o.x, self.y + o.y)
+    }
+
+    op *(k: float) -> Vec2 {
+        return Vec2(self.x * k, self.y * k)
+    }
+}
+
+struct Particle {
+    pos: Vec2
+    vel: Vec2
+    life: float
+}
+
+class Emitter {
+    origin: Vec2 = Vec2.zero()
+    gravity: Vec2 = Vec2(0.0, -9.8)
+    particles: [Particle]
+
+    fn burst(count: int) {
+        for i in 0..count {
+            let dir = Vec2.from_angle(Random.float() * Math.TAU, 2.0 + Random.float() * 3.0)
+            self.particles.push(Particle(self.origin, dir, 1.0 + Random.float()))
+        }
+    }
+
+    fn update(dt: float) {
+        var alive: [Particle] = []
+        for p in self.particles {
+            var q = p
+            q.vel += self.gravity * dt
+            q.pos += q.vel * dt
+            q.life -= dt
+            if q.life > 0.0 {
+                alive.push(q)
+            }
+        }
+        self.particles = alive
+    }
+
+    fn highest() -> float {
+        var best = -Math.INF
+        for p in self.particles {
+            best = Math.max(best, p.pos.y)
+        }
+        return best
+    }
+}
+
+fn main() {
+    Random.seed(7)
+    let e = Emitter()
+    e.burst(10000)
+    let start = Time.now()
+    let dt = 1.0 / 60.0
+    for frame in 0..120 {
+        e.update(dt)
+        if frame % 30 == 0 {
+            print("frame {frame}: {len(e.particles)} particles, highest at {int(e.highest() * 100.0)} cm")
+        }
+    }
+    let ms = (Time.now() - start) * 1000.0
+    print("120 frames of 10000 particles took under a second: {ms < 1000.0}")
+}

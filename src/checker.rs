@@ -21,6 +21,10 @@ pub enum Type {
     Class(String),
     Interface(String),
     Enum(String),
+    /// A value-type struct.
+    Struct(String),
+    /// An opaque Rust type declared with `extern type`.
+    Extern(String),
     /// `fn(A, B) -> R`
     Func(Vec<Type>, Box<Type>),
     /// Placeholder for "not known yet" in expected-type hints (lambda results).
@@ -54,7 +58,7 @@ impl fmt::Display for Type {
             Type::Array(t) => write!(f, "[{}]", t),
             Type::Map(k, v) => write!(f, "{{{}: {}}}", k, v),
             Type::Optional(t) => write!(f, "{}?", t),
-            Type::Class(n) | Type::Interface(n) | Type::Enum(n) => write!(f, "{}", n),
+            Type::Class(n) | Type::Interface(n) | Type::Enum(n) | Type::Struct(n) | Type::Extern(n) => write!(f, "{}", n),
             Type::NoneLit => write!(f, "none"),
             Type::Unknown => write!(f, "_"),
             Type::Param(n) => write!(f, "{}", n),
@@ -131,12 +135,49 @@ impl EnumInfo {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct StructMethod {
+    pub sig: Signature,
+    pub is_mut: bool,
+    pub is_static: bool,
+    pub is_private: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct StructOp {
+    pub op: BinOp,
+    /// `None` for unary minus.
+    pub param: Option<Type>,
+    pub ret: Type,
+    /// Index among this struct's operators, used for the Rust method name.
+    pub index: usize,
+}
+
+#[derive(Debug, Clone)]
+pub struct StructInfo {
+    pub decl: StructDecl,
+    pub fields: Vec<(String, Type)>,
+    pub private_fields: HashSet<String>,
+    pub methods: HashMap<String, StructMethod>,
+    pub ops: Vec<StructOp>,
+}
+
+impl StructInfo {
+    /// Arguments `Name(...)` needs: fields without a default must be given, trailing
+    /// fields with defaults may be left out.
+    pub fn required_args(&self) -> usize {
+        self.decl.fields.iter().rposition(|f| f.default.is_none()).map(|i| i + 1).unwrap_or(0)
+    }
+}
+
 /// Names of user-defined types, used to resolve `TypeExpr::Named`.
 #[derive(Debug, Default)]
 pub struct TypeNames {
     pub classes: HashSet<String>,
     pub ifaces: HashSet<String>,
     pub enums: HashSet<String>,
+    pub structs: HashSet<String>,
+    pub externs: HashSet<String>,
     /// Generic classes and their number of type parameters.
     pub generic: HashMap<String, usize>,
 }
@@ -149,18 +190,24 @@ pub struct Model {
     pub interfaces: HashMap<String, InterfaceInfo>,
     pub interface_order: Vec<String>,
     pub functions: HashMap<String, Signature>,
+    /// `extern fn`s: signature and the Rust path to call.
+    pub extern_fns: HashMap<String, (Signature, String)>,
     /// Type parameters of generic functions.
     pub fn_tparams: HashMap<String, Vec<String>>,
     pub enums: HashMap<String, EnumInfo>,
     pub enum_order: Vec<String>,
     /// Enums whose payloads can all be printed and compared.
     pub plain_enums: HashSet<String>,
+    pub structs: HashMap<String, StructInfo>,
+    pub struct_order: Vec<String>,
+    /// Structs whose fields can all be printed and compared.
+    pub plain_structs: HashSet<String>,
     pub names: TypeNames,
 }
 
 pub const BUILTINS: &[&str] = &["print", "len", "str", "int", "float", "input"];
 const RESERVED_TYPES: &[&str] = &[
-    "Rc", "RefCell", "String", "Vec", "BTreeMap", "Option", "Some", "None", "Box", "Self", "std", "main",
+    "Rc", "RefCell", "String", "Vec", "BTreeMap", "Math", "Random", "Time", "Option", "Some", "None", "Box", "Self", "std", "main",
     "int", "float", "bool", "str", "void",
 ];
 
@@ -174,10 +221,14 @@ impl Model {
             interfaces: HashMap::new(),
             interface_order: vec![],
             functions: HashMap::new(),
+            extern_fns: HashMap::new(),
             fn_tparams: HashMap::new(),
             enums: HashMap::new(),
             enum_order: vec![],
             plain_enums: HashSet::new(),
+            structs: HashMap::new(),
+            struct_order: vec![],
+            plain_structs: HashSet::new(),
             names: TypeNames::default(),
         };
 
@@ -195,6 +246,18 @@ impl Model {
                 return err(format!("`{}` is defined more than once", c.name), c.pos);
             }
         }
+        for (name, pos) in &prog.extern_types {
+            check_type_name(name, *pos)?;
+            if !type_names.insert(name) {
+                return err(format!("`{}` is defined more than once", name), *pos);
+            }
+        }
+        for st in &prog.structs {
+            check_type_name(&st.name, st.pos)?;
+            if !type_names.insert(&st.name) {
+                return err(format!("`{}` is defined more than once", st.name), st.pos);
+            }
+        }
         for e in &prog.enums {
             check_type_name(&e.name, e.pos)?;
             if !type_names.insert(&e.name) {
@@ -205,6 +268,8 @@ impl Model {
             classes: prog.classes.iter().map(|c| c.name.clone()).collect(),
             ifaces: prog.interfaces.iter().map(|i| i.name.clone()).collect(),
             enums: prog.enums.iter().map(|e| e.name.clone()).collect(),
+            structs: prog.structs.iter().map(|s| s.name.clone()).collect(),
+            externs: prog.extern_types.iter().map(|(n, _)| n.clone()).collect(),
             generic: prog.classes.iter().filter(|c| !c.tparams.is_empty()).map(|c| (c.name.clone(), c.tparams.len())).collect(),
         };
         let check_tparams = |tps: &[String], pos: Pos| -> Result<()> {
@@ -244,28 +309,95 @@ impl Model {
             m.enums.insert(e.name.clone(), EnumInfo { variants });
             m.enum_order.push(e.name.clone());
         }
+        // Structs.
+        for st in &prog.structs {
+            let mut fields: Vec<(String, Type)> = Vec::new();
+            for f in &st.fields {
+                if fields.iter().any(|(n, _)| n == &f.name) {
+                    return err(format!("field `{}` declared twice", f.name), f.pos);
+                }
+                let ty = resolve(&f.ty).map_err(|e| at_pos(e, f.pos))?;
+                if ty == Type::Void {
+                    return err("fields cannot have type void", f.pos);
+                }
+                fields.push((f.name.clone(), ty));
+            }
+            let mut methods = HashMap::new();
+            for meth in &st.methods {
+                if methods.contains_key(&meth.name) || fields.iter().any(|(n, _)| n == &meth.name) {
+                    return err(format!("`{}` is defined twice in `{}`", meth.name, st.name), meth.pos);
+                }
+                if !meth.tparams.is_empty() {
+                    return err("struct methods cannot be generic (yet)", meth.pos);
+                }
+                let sig = signature(&meth.params, &meth.ret, &resolve)?;
+                methods.insert(
+                    meth.name.clone(),
+                    StructMethod { sig, is_mut: meth.is_mut, is_static: meth.is_static, is_private: meth.is_private },
+                );
+            }
+            let mut ops: Vec<StructOp> = Vec::new();
+            for (index, o) in st.ops.iter().enumerate() {
+                let sig = signature(&o.params, &o.ret, &resolve)?;
+                let param = match (sig.params.len(), o.op) {
+                    (0, BinOp::Sub) => None,
+                    (1, _) => Some(sig.params[0].1.clone()),
+                    _ => {
+                        return err(
+                            format!("`op {}` takes one parameter (the right-hand side); only `op -()` may take none", o.op.rust()),
+                            o.pos,
+                        )
+                    }
+                };
+                if sig.ret == Type::Void {
+                    return err("an operator must return a value", o.pos);
+                }
+                if ops.iter().any(|x| x.op == o.op && x.param == param) {
+                    return err(format!("`op {}` with this parameter type is defined twice", o.op.rust()), o.pos);
+                }
+                ops.push(StructOp { op: o.op, param, ret: sig.ret, index });
+            }
+            let private_fields = st.fields.iter().filter(|f| f.is_private).map(|f| f.name.clone()).collect();
+            m.structs.insert(st.name.clone(), StructInfo { decl: st.clone(), fields, private_fields, methods, ops });
+            m.struct_order.push(st.name.clone());
+        }
         for e in &prog.enums {
-            if m.enum_contains(&e.name, &e.name, &mut HashSet::new()) {
+            if m.value_contains(&e.name, &e.name, &mut HashSet::new()) {
                 return err(
                     format!("enum `{}` contains itself; put the recursive part in an array (`[{}]`) or use a class", e.name, e.name),
                     e.pos,
                 );
             }
         }
-        // An enum is "plain" (printable, comparable) when all payloads are; iterate to a fixpoint.
+        for st in &prog.structs {
+            if m.value_contains(&st.name, &st.name, &mut HashSet::new()) {
+                return err(
+                    format!("struct `{}` contains itself; put the recursive part in an array (`[{}]`) or use a class", st.name, st.name),
+                    st.pos,
+                );
+            }
+        }
+        // Enums and structs are "plain" (printable, comparable) when all their parts are;
+        // iterate to a fixpoint since they can contain each other.
         m.plain_enums = m.enums.keys().cloned().collect();
+        m.plain_structs = m.structs.keys().cloned().collect();
         loop {
-            let before = m.plain_enums.len();
-            let bad: Vec<String> = m
+            let before = m.plain_enums.len() + m.plain_structs.len();
+            let bad_enums: Vec<String> = m
                 .plain_enums
                 .iter()
                 .filter(|n| m.enums[*n].variants.iter().any(|(_, fs)| fs.iter().any(|(_, t)| !m.is_plain(t))))
                 .cloned()
                 .collect();
-            for b in bad {
+            let bad_structs: Vec<String> =
+                m.plain_structs.iter().filter(|n| m.structs[*n].fields.iter().any(|(_, t)| !m.is_plain(t))).cloned().collect();
+            for b in bad_enums {
                 m.plain_enums.remove(&b);
             }
-            if m.plain_enums.len() == before {
+            for b in bad_structs {
+                m.plain_structs.remove(&b);
+            }
+            if m.plain_enums.len() + m.plain_structs.len() == before {
                 break;
             }
         }
@@ -338,6 +470,16 @@ impl Model {
             m.functions.insert(f.name.clone(), signature(&f.params, &f.ret, &resolve_fn)?);
             m.fn_tparams.insert(f.name.clone(), f.tparams.clone());
         }
+        for x in &prog.extern_fns {
+            if BUILTINS.contains(&x.name.as_str()) || type_names.contains(x.name.as_str()) {
+                return err(format!("`{}` is already a built-in function or a type", x.name), x.pos);
+            }
+            if m.functions.contains_key(&x.name) || m.extern_fns.contains_key(&x.name) {
+                return err(format!("function `{}` is defined more than once", x.name), x.pos);
+            }
+            let sig = signature(&x.params, &x.ret, &resolve)?;
+            m.extern_fns.insert(x.name.clone(), (sig, x.path.clone().unwrap_or_else(|| x.name.clone())));
+        }
         match m.functions.get("main") {
             None if require_main => return err("program has no `fn main()`", Pos { line: 1, col: 1, file: 0 }),
             Some(sig) if !sig.params.is_empty() || sig.ret != Type::Void => {
@@ -397,7 +539,7 @@ impl Model {
                 if ty == Type::Void {
                     return err("fields cannot have type void", f.pos);
                 }
-                if (ty.is_object() || matches!(ty, Type::Enum(_) | Type::Func(..))) && f.default.is_none() {
+                if (ty.is_object() || matches!(ty, Type::Enum(_) | Type::Func(..) | Type::Struct(_) | Type::Extern(_))) && f.default.is_none() {
                     return err(
                         format!("field `{}` of type `{}` needs a default value (or make it optional: `{}?`)", f.name, ty, ty),
                         f.pos,
@@ -789,29 +931,38 @@ impl Model {
             Type::Array(i) | Type::Optional(i) => self.is_plain(i),
             Type::Map(k, v) => self.is_plain(k) && self.is_plain(v),
             Type::Enum(e) => self.plain_enums.contains(e),
+            Type::Struct(st) => self.plain_structs.contains(st),
             _ => false,
         }
     }
 
-    /// Does `t` (an enum) hold `target` by value (not behind an array or map)?
-    fn enum_contains(&self, current: &str, target: &str, seen: &mut HashSet<String>) -> bool {
+    /// Does the enum or struct `current` hold `target` by value (not behind an array,
+    /// map or object)? Such a type would be infinitely large.
+    fn value_contains(&self, current: &str, target: &str, seen: &mut HashSet<String>) -> bool {
         if !seen.insert(current.to_string()) {
             return false;
         }
         fn direct(t: &Type, out: &mut Vec<String>) {
             match t {
-                Type::Enum(e) => out.push(e.clone()),
+                Type::Enum(e) | Type::Struct(e) => out.push(e.clone()),
                 Type::Optional(i) => direct(i, out),
                 _ => {}
             }
         }
         let mut inner = vec![];
-        for (_, fs) in &self.enums[current].variants {
-            for (_, t) in fs {
+        if let Some(en) = self.enums.get(current) {
+            for (_, fs) in &en.variants {
+                for (_, t) in fs {
+                    direct(t, &mut inner);
+                }
+            }
+        }
+        if let Some(st) = self.structs.get(current) {
+            for (_, t) in &st.fields {
                 direct(t, &mut inner);
             }
         }
-        inner.iter().any(|e| e == target || self.enum_contains(e, target, seen))
+        inner.iter().any(|e| e == target || self.value_contains(e, target, seen))
     }
 
     /// Can a value of type `from` be used where `to` is expected?
@@ -988,6 +1139,10 @@ fn resolve_type(t: &TypeExpr, names: &TypeNames, tparams: &[String]) -> Result<T
                 Type::Interface(n.clone())
             } else if names.enums.contains(n) {
                 Type::Enum(n.clone())
+            } else if names.structs.contains(n) {
+                Type::Struct(n.clone())
+            } else if names.externs.contains(n) {
+                Type::Extern(n.clone())
             } else {
                 return err(format!("unknown type `{}`", n), *pos);
             }

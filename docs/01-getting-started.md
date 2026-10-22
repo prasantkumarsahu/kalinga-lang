@@ -105,7 +105,7 @@ editors.
 ## Editor support
 
 Install the VS Code extension for highlighting, snippets, live errors and a ▶ Run button.
-See [Tooling](16-tooling.md).
+See [Tooling](19-tooling.md).
 
 ---
 

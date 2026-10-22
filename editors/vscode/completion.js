@@ -11,6 +11,64 @@ const KEYWORDS = [
 ];
 const PRIMITIVES = ["int", "float", "bool", "str", "void"];
 
+const f = (name, params, ret, doc) => ({
+  name,
+  params: params.map(([n, t]) => ({ name: n, type: t })),
+  ret,
+  doc,
+  owner: null,
+});
+
+/** Built-in library objects: `Math.sqrt(x)`, `Random.int(lo, hi)`, `Time.now()`. */
+const LIBRARY = {
+  Math: {
+    values: { PI: "float", TAU: "float", E: "float", INF: "float" },
+    fns: [
+      f("sqrt", [["x", "float"]], "float", "Square root."),
+      f("pow", [["x", "float"], ["y", "float"]], "float", "`x` to the power `y`."),
+      f("abs", [["x", "int or float"]], "int or float", "Absolute value (same type as `x`)."),
+      f("sign", [["x", "int or float"]], "int or float", "-1, 0 or 1 (same type as `x`)."),
+      f("min", [["a", "T"], ["b", "T"]], "T", "Smaller of two ints or two floats."),
+      f("max", [["a", "T"], ["b", "T"]], "T", "Larger of two ints or two floats."),
+      f("clamp", [["x", "T"], ["lo", "T"], ["hi", "T"]], "T", "`x` limited to `lo..hi`."),
+      f("lerp", [["a", "float"], ["b", "float"], ["t", "float"]], "float", "Linear interpolation: `a + (b - a) * t`."),
+      f("floor", [["x", "float"]], "float", "Round down."),
+      f("ceil", [["x", "float"]], "float", "Round up."),
+      f("round", [["x", "float"]], "float", "Round to nearest (halves away from zero)."),
+      f("sin", [["x", "float"]], "float", "Sine (radians)."),
+      f("cos", [["x", "float"]], "float", "Cosine (radians)."),
+      f("tan", [["x", "float"]], "float", "Tangent (radians)."),
+      f("asin", [["x", "float"]], "float", "Arc sine."),
+      f("acos", [["x", "float"]], "float", "Arc cosine."),
+      f("atan", [["x", "float"]], "float", "Arc tangent."),
+      f("atan2", [["y", "float"], ["x", "float"]], "float", "Angle of the point (x, y)."),
+      f("hypot", [["x", "float"], ["y", "float"]], "float", "Length of the vector (x, y)."),
+      f("exp", [["x", "float"]], "float", "e to the power `x`."),
+      f("ln", [["x", "float"]], "float", "Natural logarithm."),
+      f("log10", [["x", "float"]], "float", "Base-10 logarithm."),
+    ],
+  },
+  Random: {
+    values: {},
+    fns: [
+      f("int", [["lo", "int"], ["hi", "int"]], "int", "A random int in `lo..hi` (`hi` excluded)."),
+      f("float", [], "float", "A random float in `0.0..1.0`."),
+      f("chance", [["p", "float"]], "bool", "`true` with probability `p`."),
+      f("pick", [["items", "[T]"]], "T?", "A random element, or `none` if empty."),
+      f("shuffle", [["items", "[T]"]], "void", "Shuffles an array in place (needs `var`)."),
+      f("seed", [["n", "int"]], "void", "Makes the following random numbers repeatable."),
+    ],
+  },
+  Time: {
+    values: {},
+    fns: [
+      f("now", [], "float", "Seconds since the program started (for frame timing)."),
+      f("millis", [], "int", "Milliseconds since 1970 (wall clock)."),
+      f("sleep", [["seconds", "float"]], "void", "Pauses the program."),
+    ],
+  },
+};
+
 const BUILTINS = {
   print: { params: ["values..."], ret: "void", doc: "Prints the values separated by spaces, then a newline." },
   len: { params: ["x: [T], {K: V} or str"], ret: "int", doc: "Number of elements in an array or map, or characters in a string." },
@@ -255,7 +313,9 @@ function analyze(text, dir) {
   const model = {
     text, code, hidden, depth, dir: dir || "",
     imports: [], classes: new Map(), interfaces: new Map(), enums: new Map(), functions: new Map(), bodies: [],
+    externTypes: new Set(),
   };
+  for (const m of code.matchAll(/\bextern\s+type\s+([A-Za-z_]\w*)/g)) model.externTypes.add(m[1]);
 
   for (const m of code.matchAll(/^[ \t]*import[ \t]+"([^"\n]*)"/gm)) model.imports.push(m[1]);
   // The import path itself is masked (string contents); read it from the original text.
@@ -274,8 +334,10 @@ function analyze(text, dir) {
   };
 
   // Classes
-  for (const m of code.matchAll(/\bclass\s+([A-Za-z_]\w*)/g)) {
+  for (const m of code.matchAll(/\b(class|struct)\s+([A-Za-z_]\w*)/g)) {
     if (depth[m.index] !== 0) continue;
+    const isStruct = m[1] === "struct";
+    m[1] = m[2];
     let i = skipSpaces(code, m.index + m[0].length);
     let tparams = [];
     if (code[i] === "<") {
@@ -294,7 +356,7 @@ function analyze(text, dir) {
     const open = i;
     const end = matchBrace(code, open);
     const cls = {
-      name: m[1], tparams, bases,
+      name: m[1], tparams, bases, struct: isStruct,
       abstract: modifiersBefore(code, m.index).has("abstract"),
       fields: [], methods: [], init: null,
       doc: docAbove(text, m.index), start: open, end,
@@ -313,6 +375,7 @@ function analyze(text, dir) {
       const method = {
         name: h.name, params: h.params, ret: h.ret, owner: cls.name, doc: docAbove(text, at),
         override: mods.has("override"), private: mods.has("private"), static: mods.has("static"), abstract: mods.has("abstract"),
+        mut: mods.has("mut"),
       };
       cls.methods.push(method);
       if (h.bodyOpen >= 0) {
@@ -370,8 +433,8 @@ function analyze(text, dir) {
 
   // Top-level functions
   for (const { at, h, mods } of fnsAt(0, code.length, 0)) {
-    if (mods.size) continue;
-    const fn = { name: h.name, tparams: h.tparams, params: h.params, ret: h.ret, doc: docAbove(text, at) };
+    if ([...mods].some((x) => x !== "extern")) continue;
+    const fn = { name: h.name, tparams: h.tparams, params: h.params, ret: h.ret, doc: docAbove(text, at), extern: mods.has("extern") };
     model.functions.set(fn.name, fn);
     if (h.bodyOpen >= 0) model.bodies.push({ start: h.bodyOpen, end: matchBrace(code, h.bodyOpen), params: h.params, cls: null, owner: null, kind: "fn" });
   }
@@ -395,6 +458,7 @@ function withImports(model, load) {
     for (const kind of ["classes", "interfaces", "enums", "functions"]) {
       for (const [k, v] of other[kind]) if (!model[kind].has(k)) model[kind].set(k, v);
     }
+    for (const t of other.externTypes) model.externTypes.add(t);
     for (const p of other.imports) queue.push([p, res.dir]);
   }
   return model;
@@ -524,6 +588,7 @@ function stripIndexes(seg) {
 /** Methods (with signatures) available on a value of `type`. */
 function methodsOf(model, type) {
   if (!type) return [];
+  if (type.startsWith("lib:")) return LIBRARY[type.slice(4)].fns;
   if (type === "str") return STR_METHODS;
   if (isArray(type)) return arrayMethods(elemOf(type));
   if (isMap(type)) return mapMethods(...mapKV(type));
@@ -548,6 +613,7 @@ function indexType(type) {
 function memberType(model, type, seg) {
   const call = /^([A-Za-z_]\w*)\s*\(/.exec(seg);
   const name = call ? call[1] : seg;
+  if (type.startsWith("lib:") && !call) return LIBRARY[type.slice(4)].values[name] || null;
   if (call) {
     const m = methodsOf(model, type).find((x) => x.name === name);
     return m ? m.ret : null;
@@ -611,6 +677,7 @@ function atomType(model, scope, seg) {
   }
   if (/^[A-Za-z_]\w*$/.test(seg)) {
     const v = scope.locals.get(seg);
+    if (!v && LIBRARY[seg]) return "lib:" + seg;
     return v ? v.type : null;
   }
   return null;
@@ -809,8 +876,13 @@ function memberItems(model, type, scope, viaSuper) {
   return methodsOf(model, type).map((m) => methodItem(m));
 }
 
-/** `Enum.` → variants, `Class.` → static methods. */
+/** `Enum.` → variants, `Class.` / `Struct.` → static methods, `Math.` → library. */
 function typeMemberItems(model, name, scope) {
+  if (LIBRARY[name] && !model.classes.has(name)) {
+    const lib = LIBRARY[name];
+    const values = Object.entries(lib.values).map(([v, t]) => ({ label: v, kind: "constant", detail: `${name}.${v}: ${t}`, insertText: v, sortText: "0" + v }));
+    return values.concat(lib.fns.map((m) => ({ ...methodItem(m), detail: `${name}.${m.name}${sigText(m.params, m.ret)}` })));
+  }
   if (model.enums.has(name)) {
     return model.enums.get(name).variants.map((v) => ({
       label: v.name,
@@ -836,7 +908,7 @@ function typeItems(model, exclude) {
     items.push({
       label: c.name,
       kind: "class",
-      detail: `class ${c.name}${generic ? "<" + c.tparams.join(", ") + ">" : ""}`,
+      detail: `${c.struct ? "struct" : "class"} ${c.name}${generic ? "<" + c.tparams.join(", ") + ">" : ""}`,
       documentation: c.doc,
       insertText: generic ? `${c.name}<${c.tparams.map((t, i) => `\${${i + 1}:${t}}`).join(", ")}>` : c.name,
       snippet: generic,
@@ -848,6 +920,9 @@ function typeItems(model, exclude) {
   }
   for (const e of model.enums.values()) {
     items.push({ label: e.name, kind: "enum", detail: "enum " + e.name, documentation: e.doc, insertText: e.name, sortText: "1" + e.name });
+  }
+  for (const t of model.externTypes) {
+    items.push({ label: t, kind: "class", detail: "extern type " + t, insertText: t, sortText: "1" + t });
   }
   return items;
 }
@@ -928,9 +1003,18 @@ function complete(text, offset, options = {}) {
   const body = innermostBody(model, offset);
   const items = [];
 
-  // Class body, between members.
+  // Class or struct body, between members.
   if (cls && !body && depth === model.depth[cls.start] + 1) {
     const kw = (label, detail, insertText) => ({ label, kind: "keyword", detail, insertText, snippet: true, sortText: "0" + label });
+    if (cls.struct) {
+      return [
+        kw("fn", "method (reads self)", "fn ${1:name}(${2}) -> ${3:float} {\n\t$0\n}"),
+        kw("mut fn", "method that changes self", "mut fn ${1:name}(${2}) {\n\t$0\n}"),
+        kw("static fn", "function on the struct type", `static fn \${1:name}(\${2}) -> ${cls.name} {\n\t$0\n}`),
+        kw("op +", "operator", `op +(other: ${cls.name}) -> ${cls.name} {\n\treturn $0\n}`),
+        kw("private", "only usable inside this struct", "private "),
+      ];
+    }
     items.push(
       kw("fn", "method", "fn ${1:name}(${2}) -> ${3:void} {\n\t$0\n}"),
       kw("init", "constructor", "init(${1}) {\n\t$0\n}"),
@@ -960,8 +1044,21 @@ function complete(text, offset, options = {}) {
 
   // Top level.
   if (depth === 0) {
-    for (const k of ["fn", "class", "abstract class", "interface", "enum", "import"]) {
-      items.push({ label: k, kind: "keyword", insertText: k === "import" ? 'import "${1:file.kl}"' : k, snippet: k === "import", sortText: "0" + k });
+    const top = {
+      fn: "fn",
+      class: "class",
+      "abstract class": "abstract class",
+      struct: "struct",
+      interface: "interface",
+      enum: "enum",
+      import: 'import "${1:file.kl}"',
+      "use rust": 'use rust "${1:native/file.rs}"',
+      "use crate": 'use crate "${1:name}" = "${2:1}"',
+      "extern fn": "extern fn ${1:name}(${2}) -> ${3:int}",
+      "extern type": "extern type ${1:Name}",
+    };
+    for (const [k, ins] of Object.entries(top)) {
+      items.push({ label: k, kind: "keyword", insertText: ins, snippet: ins.includes("$"), sortText: "0" + k });
     }
     return items;
   }
@@ -1010,11 +1107,14 @@ function complete(text, offset, options = {}) {
       continue;
     }
     const init = findInit(model, c.name);
-    const params = init ? init.params : [];
+    const params = c.struct ? c.fields.map((x) => ({ name: x.name, type: x.type })) : init ? init.params : [];
     items.push({ label: c.name, kind: "constructor", detail: `${c.name}${sigText(params, "")}`, documentation: c.doc, insertText: callSnippet(c.name, params), snippet: true, sortText: "3" + c.name });
   }
   for (const e of model.enums.values()) {
     items.push({ label: e.name, kind: "enum", detail: "enum " + e.name, documentation: e.doc, insertText: e.name, sortText: "3" + e.name });
+  }
+  for (const lib of Object.keys(LIBRARY)) {
+    items.push({ label: lib, kind: "module", detail: `built-in ${lib} library`, insertText: lib, sortText: "4" + lib });
   }
   for (const [name, b] of Object.entries(BUILTINS)) {
     const params = b.params.map((p) => ({ name: p.split(":")[0].replace("...", "") || "x" }));
@@ -1074,7 +1174,10 @@ function signatureHelp(text, offset, options = {}) {
   if (/\.\s*$/.test(head)) {
     const recv = receiverBefore(code, head.replace(/\s*$/, "").length - 1);
     if (/^[A-Z]\w*$/.test(recv) && !scope.locals.has(recv)) {
-      if (model.enums.has(recv)) {
+      if (LIBRARY[recv] && !model.classes.has(recv)) {
+        const fn = LIBRARY[recv].fns.find((x) => x.name === name);
+        if (fn) target = { ...fn, name: `${recv}.${fn.name}` };
+      } else if (model.enums.has(recv)) {
         const v = model.enums.get(recv).variants.find((x) => x.name === name);
         if (v) target = { name: `${recv}.${v.name}`, params: v.params, ret: "", doc: "" };
       } else if (model.classes.has(recv)) {
@@ -1094,8 +1197,10 @@ function signatureHelp(text, offset, options = {}) {
     const r = /^\s*->\s*(.+)$/.exec(t.slice(close));
     target = { name, params: ps.map((p) => ({ name: p })), ret: r ? r[1] : "void", doc: "" };
   } else if (model.classes.has(name)) {
+    const c = model.classes.get(name);
     const init = findInit(model, name);
-    target = { name, params: init ? init.params : [], ret: "", doc: model.classes.get(name).doc };
+    const params = c.struct ? c.fields.map((x) => ({ name: x.name, type: x.type })) : init ? init.params : [];
+    target = { name, params, ret: "", doc: c.doc };
   } else if (model.functions.has(name)) {
     target = model.functions.get(name);
   } else if (BUILTINS[name]) {

@@ -1,0 +1,18 @@
+use crate "fastrand" = "2"
+use rust "native/rng.rs"
+
+extern fn rng_between(lo: int, hi: int) -> int
+extern fn coin() -> bool = "fastrand::bool"
+
+fn main() {
+    var counts = [0, 0, 0]
+    for i in 0..3000 {
+        counts[rng_between(0, 3)] += 1
+    }
+    var ok = true
+    for c in counts {
+        if c < 800 { ok = false }
+    }
+    let flip = coin()
+    print("fastrand works:", ok, flip == true || flip == false)
+}

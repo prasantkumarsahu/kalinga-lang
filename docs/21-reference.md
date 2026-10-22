@@ -1,4 +1,4 @@
-# 18. Language Reference
+# 21. Language Reference
 
 A compact summary of the whole language. For explanations and examples, see the guide
 chapters linked from the [docs index](README.md).
@@ -6,7 +6,8 @@ chapters linked from the [docs index](README.md).
 ## Source files
 
 - Extension `.kl`, encoded as UTF-8.
-- A file contains `import`, `fn`, `class`, `interface` and `enum` declarations, in any order.
+- A file contains `import`, `use`, `extern`, `fn`, `class`, `struct`, `interface` and `enum`
+  declarations, in any order.
 - Exactly one `fn main()` (across all imported files) with no parameters and no return type.
 
 ## Lexical structure
@@ -27,10 +28,13 @@ A newline does **not** end a statement when it follows an operator, `,`, `.`, `:
 ## Keywords
 
 ```text
-fn  class  interface  enum  import  init  override  private  static  abstract
+fn  class  struct  interface  enum  import  use  extern  init  override  private  static  abstract
 let  var  if  else  while  for  in  match  return  break  continue
 true  false  none  self  super  as  is
 ```
+
+Contextual words (only special in one place): `mut` before `fn` and `op` before an
+operator inside a struct; `rust` and `crate` after `use`; `type` after `extern`.
 
 Built-in type names: `int`, `float`, `bool`, `str`, `void`.
 
@@ -52,6 +56,8 @@ functions, plus `Rc`, `RefCell`, `String`, `Vec`, `Option`, `Some`, `None`, `Box
 | `fn(A, B) -> R` | function value | none — must be given |
 | `Name<T, ...>` | instance of a generic class | none — must be given |
 | `T` | type parameter inside generic code | — (stored as empty until set) |
+| struct `Name` | value type, copied on assignment | none — must be given |
+| `extern type Name` | opaque Rust type | none — must be given |
 | `Name` | class or interface (reference semantics) | none — must be given |
 | `void` | no value; return types only | — |
 
@@ -123,6 +129,18 @@ import "PATH"
     abstract fn NAME(PARAM, ...) [-> TYPE]           abstract classes only
 }
 
+struct NAME {
+    [private] FIELD: TYPE [= EXPR]
+    [private] [static] fn NAME(PARAM, ...) [-> TYPE] { ... }
+    [private] mut fn NAME(PARAM, ...) [-> TYPE] { ... }     may change `self`
+    op OPERATOR(PARAM) -> TYPE { ... }               + - * / %; `op -()` is unary minus
+}
+
+use rust "FILE.rs"
+use crate "NAME" = "VERSION"
+extern type NAME
+extern fn NAME(PARAM, ...) [-> TYPE] [= "rust::path"]
+
 interface NAME [: INTERFACE, ...] {
     fn NAME(PARAM, ...) [-> TYPE]
 }
@@ -147,6 +165,8 @@ of `init`, required when the base has an `init`), `super.method(...)`.
 | `int(x) -> int` | from `float` (truncates), `bool`, `str` (runtime error if invalid) |
 | `float(x) -> float` | from `int`, `str` |
 | `input([prompt: str]) -> str` | one line from stdin, without the line ending |
+
+`Math`, `Random` and `Time` functions are listed in [Standard Library](15-standard-library.md).
 
 ## Built-in methods
 
@@ -182,8 +202,13 @@ of `init`, required when the base has an `init`), `super.method(...)`.
 ## Grammar (EBNF)
 
 ```text
-program     = { import | function | class | interface | enum } ;
+program     = { import | use | extern | function | class | struct | interface | enum } ;
 import      = "import" STRING ;
+use         = "use" ( "rust" STRING | "crate" STRING "=" STRING ) ;
+extern      = "extern" ( "type" IDENT | "fn" IDENT params [ "->" type ] [ "=" STRING ] ) ;
+struct      = "struct" IDENT "{" { { modifier } IDENT ":" type [ "=" expr ]
+            | [ "mut" ] { modifier } "fn" IDENT params [ "->" type ] block
+            | "op" ( "+" | "-" | "*" | "/" | "%" ) params "->" type block } "}" ;
 function    = "fn" IDENT [ tparams ] params [ "->" type ] block ;
 tparams     = "<" IDENT { "," IDENT } ">" ;
 params      = "(" [ param { "," param } [ "," ] ] ")" ;
@@ -232,11 +257,12 @@ args        = "(" [ expr { "," expr } [ "," ] ] ")" ;
 
 ## Not yet supported
 
-Bounds on type parameters (`T: Show`), generic interfaces and enums, inheritance with
-generic classes, closures that change captured variables, global variables, module
-namespaces (`import ... as x`), access control for top-level declarations, operator
-overloading, string indexing, tuples, exceptions (`try`/`catch`), concurrency.
+Bounds on type parameters (`T: Show`), generic interfaces, enums and structs, inheritance
+with generic classes, operators on classes or with the struct on the right (`2.0 * v`),
+closures that change captured variables, global variables, module namespaces
+(`import ... as x`), crate features, string indexing, tuples, exceptions (`try`/`catch`),
+concurrency.
 
 ---
 
-Previous: [17. How It Works](17-how-it-works.md) · Back to the [docs index](README.md)
+Previous: [20. How It Works](20-how-it-works.md) · Back to the [docs index](README.md)

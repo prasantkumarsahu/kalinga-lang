@@ -1,4 +1,4 @@
-# 14. Modules
+# 16. Modules
 
 A program can be split across several files with `import`.
 
@@ -100,4 +100,4 @@ The result is still one self-contained executable.
 
 ---
 
-Previous: [13. Generics](13-generics.md) · Next: [15. Safety and Errors](15-safety-and-errors.md)
+Previous: [15. Standard Library](15-standard-library.md) · Next: [17. Rust Interop](17-rust-interop.md)

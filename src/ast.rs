@@ -36,6 +36,8 @@ pub struct FnDecl {
     pub is_static: bool,
     /// `abstract fn` has no body.
     pub is_abstract: bool,
+    /// `mut fn` in a struct: the method may change `self`.
+    pub is_mut: bool,
     pub pos: Pos,
 }
 
@@ -86,6 +88,39 @@ pub struct InterfaceDecl {
     pub pos: Pos,
 }
 
+/// `op +(other: Vec2) -> Vec2 { ... }` inside a struct.
+#[derive(Debug, Clone)]
+pub struct OpDecl {
+    /// `+`, `-`, `*`, `/` or `%`.
+    pub op: BinOp,
+    /// Empty for unary minus.
+    pub params: Vec<Param>,
+    pub ret: TypeExpr,
+    pub body: Vec<Stmt>,
+    pub pos: Pos,
+}
+
+/// `struct Vec2 { x: float, y: float }`: a value type, copied on assignment.
+#[derive(Debug, Clone)]
+pub struct StructDecl {
+    pub name: String,
+    pub fields: Vec<FieldDecl>,
+    pub methods: Vec<FnDecl>,
+    pub ops: Vec<OpDecl>,
+    pub pos: Pos,
+}
+
+/// A Rust function Kalinga can call.
+#[derive(Debug, Clone)]
+pub struct ExternFn {
+    pub name: String,
+    pub params: Vec<Param>,
+    pub ret: TypeExpr,
+    /// Rust path to call; defaults to `name` (found in a `use rust` file).
+    pub path: Option<String>,
+    pub pos: Pos,
+}
+
 #[derive(Debug, Clone)]
 pub struct VariantDecl {
     pub name: String,
@@ -104,10 +139,20 @@ pub struct EnumDecl {
 pub struct Program {
     /// `import "path"` declarations: (path as written, position).
     pub imports: Vec<(String, Pos)>,
+    /// `use rust "file.rs"`: Rust source files compiled into the program. After loading,
+    /// the paths are absolute.
+    pub rust_files: Vec<(String, Pos)>,
+    /// `use crate "name" = "version"`: crates.io dependencies.
+    pub crates: Vec<(String, String, Pos)>,
+    /// `extern type Name`: opaque Rust types.
+    pub extern_types: Vec<(String, Pos)>,
+    /// `extern fn name(...) -> T [= "rust::path"]`
+    pub extern_fns: Vec<ExternFn>,
     pub functions: Vec<FnDecl>,
     pub classes: Vec<ClassDecl>,
     pub interfaces: Vec<InterfaceDecl>,
     pub enums: Vec<EnumDecl>,
+    pub structs: Vec<StructDecl>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

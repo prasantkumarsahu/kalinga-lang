@@ -1,0 +1,26 @@
+// Calling Rust from Kalinga: functions, an opaque Rust type, and a Rust std function.
+use rust "native/stats.rs"
+
+extern fn mean(xs: [float]) -> float
+extern fn std_dev(xs: [float]) -> float
+
+extern type Matrix
+extern fn matrix_new(rows: int, cols: int, fill: float) -> Matrix
+extern fn matrix_set(m: Matrix, r: int, c: int, v: float) -> Matrix
+extern fn matrix_mul(a: Matrix, b: Matrix) -> Matrix
+extern fn matrix_rows(m: Matrix) -> [[float]]
+
+extern fn cbrt(x: float) -> float = "f64::cbrt"
+
+fn main() {
+    let scores = [2.0, 4.0, 4.0, 4.0, 5.0, 5.0, 7.0, 9.0]
+    print("mean {mean(scores)}, std dev {std_dev(scores)}")
+
+    var a = matrix_new(2, 2, 0.0)
+    a = matrix_set(a, 0, 0, 1.0)
+    a = matrix_set(a, 0, 1, 2.0)
+    a = matrix_set(a, 1, 0, 3.0)
+    a = matrix_set(a, 1, 1, 4.0)
+    print(matrix_rows(matrix_mul(a, a)))
+    print(cbrt(64.0))
+}

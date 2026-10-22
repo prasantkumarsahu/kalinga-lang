@@ -1,4 +1,4 @@
-# 17. How It Works
+# 20. How It Works
 
 Kalinga is a **source-to-source compiler**: it translates Kalinga into Rust and lets
 `rustc` produce optimized machine code. Early C++ compilers worked the same way, turning
@@ -52,11 +52,13 @@ reported as an *internal compiler error*.
 | `fn(A) -> B` | `Rc<dyn Fn(A) -> B>` |
 | `T` (type parameter) | a Rust generic `T: Clone + 'static` |
 | `Stack<int>` | `Rc<RefCell<Stack<i64>>>` |
+| `struct Vec2` | a plain Rust `struct Vec2` (`#[derive(Clone)]`), stored inline |
+| `extern type T` | the Rust type `T` from a `use rust` file |
 
 - `Rc` is a reference-counted pointer: an object is freed automatically when the last
   reference to it goes away. No garbage collector, no manual `free`.
 - `RefCell` enforces "one writer at a time" at runtime. This is what turns the re-entrancy
-  mistake from [chapter 10](15-safety-and-errors.md#re-entrant-objects) into a clear error
+  mistake from [chapter 10](18-safety-and-errors.md#re-entrant-objects) into a clear error
   instead of undefined behaviour.
 
 ## Mapping classes
@@ -150,6 +152,9 @@ The rules behind it:
 | `match e { V(x) => ... }` | `match e { E::V(x) => ... }` |
 | `fn(x) => x + k` | `{ let k = k.clone(); Rc::new(move \|x\| x + k) }` |
 | `x as Dog` | a generated `__as_Dog()` hook on the object's trait |
+| `a + b` (struct) | `a.__op_0(b)`, the struct's `op +` method |
+| `use rust "f.rs"` | `#[path = "..."] mod __rs_f; use __rs_f::*;` |
+| `Math.sqrt(x)` / `Random.int(a, b)` | `x.sqrt()` / a small xorshift generator in the runtime |
 
 Method-call arguments are evaluated into temporaries before the object is borrowed, so
 `a.f(a.x)` is safe.
@@ -165,6 +170,8 @@ by default and `Some(...)` in `X` and its subclasses.
 
 - The output is native code compiled by `rustc -O` (LLVM), the same optimizer that
   compiles Rust itself.
+- Structs are plain Rust structs: an array of a million `Vec2`s is one block of memory,
+  exactly as in Rust.
 - `int` and `float` are machine numbers, not boxed objects.
 - Fields are stored inline in structs, and leaf classes use static dispatch.
 - There is no garbage collector and no interpreter loop.
@@ -195,4 +202,4 @@ The costs to be aware of:
 
 ---
 
-Previous: [16. Tooling](16-tooling.md) · Next: [18. Language Reference](18-reference.md)
+Previous: [19. Tooling](19-tooling.md) · Next: [21. Language Reference](21-reference.md)

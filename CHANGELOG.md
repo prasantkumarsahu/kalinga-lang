@@ -1,5 +1,39 @@
 # Changelog
 
+## 0.3.0 — foundations for games and AI
+
+### Language
+- **Structs**: value types (`struct Vec2 { x: float, y: float }`) that are copied on
+  assignment and stored inline in arrays, with methods, `mut fn` for methods that change
+  `self`, `static fn` and `private`. A million struct values cost the same time and memory
+  as in hand-written Rust.
+- **Operator overloading** on structs: `op +(o: Vec2) -> Vec2`, several overloads per
+  operator by right-hand type, unary `op -()`, and `+=` and friends.
+- **Standard library**: `Math` (sqrt, pow, trig, floor/ceil/round, min/max/clamp, lerp,
+  PI/TAU/E/INF), `Random` (int, float, chance, pick, shuffle, seed) and `Time` (now,
+  millis, sleep).
+- **Rust interop**: `use rust "file.rs"` compiles a Rust file into the program,
+  `extern fn` / `extern type` declare Rust functions and opaque types, `= "rust::path"`
+  binds a Rust function directly, and `use crate "name" = "version"` uses crates.io
+  libraries (built with cargo; compiled crates are shared between programs).
+
+### Performance
+- Method calls and field reads borrow their receiver instead of copying a reference
+  (object-heavy code: about 1.33x → 1.16x hand-written Rust).
+- Objects store a self-pointer only when their class needs it (1M objects: 73 MB → 58 MB).
+
+### Tooling
+- `kalinga -v` / `--version`.
+- `kalinga check` accepts files without `fn main()` (files that are only imported).
+- VS Code extension 0.4.0: completion and signature help for structs, `Math`/`Random`/`Time`,
+  `extern` declarations; new snippets (`struct`, `mfn`, `op`, `userust`, `usecrate`,
+  `extern`, `gameloop`).
+
+### Docs
+- New chapters: Structs and Operators, Standard Library, Rust Interop (chapters now 1–21).
+- New examples: `particles.kl` (a 10,000-particle simulation) and `interop/` (Rust stats
+  and an opaque matrix type).
+
 ## 0.2.0
 
 ### Language

@@ -351,6 +351,10 @@ fn main() {
 sum of list: 6
 ```
 
+For small pieces of data that are copied around a lot — vectors, colours, particles — a
+[struct](14-structs-and-operators.md) is usually a better fit than a class: it is a value,
+stored inline, and supports operators.
+
 ## Rules at a glance
 
 - Class names start with an uppercase letter.

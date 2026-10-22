@@ -203,6 +203,9 @@ const ITEM_KINDS = {
   interface: vscode.CompletionItemKind.Interface,
   type: vscode.CompletionItemKind.TypeParameter,
   enum: vscode.CompletionItemKind.Enum,
+  struct: vscode.CompletionItemKind.Struct,
+  constant: vscode.CompletionItemKind.Constant,
+  module: vscode.CompletionItemKind.Module,
   enumMember: vscode.CompletionItemKind.EnumMember,
 };
 

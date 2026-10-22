@@ -1,0 +1,25 @@
+use rust "native/fastmath.rs"
+
+struct Vec2 {
+    x: float
+    y: float
+}
+
+extern type Histogram
+extern fn histogram_new() -> Histogram
+extern fn histogram_add(h: Histogram, value: float, width: float) -> Histogram
+extern fn histogram_render(h: Histogram, width: float) -> str
+extern fn sum_squares(xs: [float]) -> float
+extern fn first_word(s: str) -> str?
+extern fn length(v: Vec2) -> float
+extern fn cube_root(x: float) -> float = "f64::cbrt"
+
+fn main() {
+    var h = histogram_new()
+    for v in [1.0, 2.5, 2.7, 4.1, 4.2, 4.9, 9.0] {
+        h = histogram_add(h, v, 2.0)
+    }
+    print(histogram_render(h, 2.0))
+    print(sum_squares([1.0, 2.0, 3.0]), first_word("  hello world"), first_word(""))
+    print(length(Vec2(3.0, 4.0)), cube_root(27.0))
+}

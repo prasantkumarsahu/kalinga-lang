@@ -14,6 +14,8 @@ Language support for Kalinga `.kl` files, a simple object-oriented language that
   - in a `match`, the enum's variants as arm patterns
   - inside a class body, `override fn` stubs (abstract methods first), `private`, `static fn`
   - declarations from `import`ed files
+  - structs (fields, methods, `static fn`), `extern fn` / `extern type` declarations, and the
+    built-in `Math`, `Random` and `Time` libraries
   - documentation from `//` comments written above a declaration
 - Signature help: parameter hints for functions, generic functions, constructors, methods,
   static methods, enum variants and function-typed variables
@@ -21,7 +23,8 @@ Language support for Kalinga `.kl` files, a simple object-oriented language that
   errors inside imported files are shown on the `import` line
 - Snippets: `main`, `fn`, `class`, `classx` (subclass), `aclass` (abstract), `gclass` (generic),
   `interface`, `enum`, `match`, `init`, `meth`, `sfn` (static), `override`, `lam` / `lamb` (lambdas),
-  `import`, `if`, `ife`, `iflet`, `ifas` (downcast), `while`, `for`, `forr`, `pr`
+  `import`, `if`, `ife`, `iflet`, `ifas` (downcast), `while`, `for`, `forr`, `pr`,
+  `struct`, `mfn` (`mut fn`), `op` (operator), `userust`, `usecrate`, `extern`, `gameloop`
 - Commands:
   - **Kalinga: Run File**: the ▶ button in the editor title, or `Ctrl+F5`
   - **Kalinga: Build Executable**
@@ -48,7 +51,7 @@ Language support for Kalinga `.kl` files, a simple object-oriented language that
      ```
 
      ```bash
-     code --install-extension kalinga-lang-0.3.0.vsix
+     code --install-extension kalinga-lang-0.4.0.vsix
      ```
 
    - **Or try it without installing**: open `editors/vscode` in VS Code and press `F5`

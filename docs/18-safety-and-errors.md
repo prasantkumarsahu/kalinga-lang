@@ -1,4 +1,4 @@
-# 15. Safety and Errors
+# 18. Safety and Errors
 
 Kalinga is designed so that mistakes are caught as early as possible — ideally by the
 compiler, otherwise by a clear runtime error — and never turn into silent memory
@@ -80,6 +80,7 @@ runtime error: index out of bounds: the len is 3 but the index is 5
 | `attempt to divide by zero` | `n / 0` with integers |
 | `cannot convert "abc" to int` | `int("abc")` |
 | `RefCell already borrowed` | see *Re-entrant objects* below |
+| `Random.int(5, 5): the second number must be greater than the first` | an empty range |
 | `key not found: plums` | `m["plums"]` when the map has no such key (use `m.get(k)`) |
 | `field `value` was read before it was set` | a generic class's `T` field read before `init` set it |
 
@@ -135,4 +136,4 @@ programs that build and drop many such cycles will use more memory than necessar
 
 ---
 
-Previous: [14. Modules](14-modules.md) · Next: [16. Tooling](16-tooling.md)
+Previous: [17. Rust Interop](17-rust-interop.md) · Next: [19. Tooling](19-tooling.md)

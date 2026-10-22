@@ -48,16 +48,19 @@ Read these in order the first time. Each chapter builds on the previous one.
 | 11 | [Interfaces](11-interfaces.md) | Contracts that many classes implement; interface inheritance |
 | 12 | [Lambdas](12-lambdas.md) | Function values, captures, `map`/`filter`/`sort_by` |
 | 13 | [Generics](13-generics.md) | `fn first<T>`, `class Stack<T>` |
-| 14 | [Modules](14-modules.md) | Splitting a program across files with `import` |
-| 15 | [Safety and Errors](15-safety-and-errors.md) | Compile errors, runtime errors and what Kalinga guarantees |
+| 14 | [Structs and Operators](14-structs-and-operators.md) | Value types, `mut fn`, `op +` — fast game math |
+| 15 | [Standard Library](15-standard-library.md) | `Math`, `Random`, `Time` |
+| 16 | [Modules](16-modules.md) | Splitting a program across files with `import` |
+| 17 | [Rust Interop](17-rust-interop.md) | `use rust`, `use crate`, `extern fn`, `extern type` |
+| 18 | [Safety and Errors](18-safety-and-errors.md) | Compile errors, runtime errors and what Kalinga guarantees |
 
 ## Reference
 
 | Document | Contents |
 |---|---|
-| [Tooling](16-tooling.md) | `kalinga` commands and the VS Code extension |
-| [How It Works](17-how-it-works.md) | How Kalinga code becomes Rust, and why it is fast |
-| [Language Reference](18-reference.md) | Keywords, types, operator precedence, built-ins, grammar |
+| [Tooling](19-tooling.md) | `kalinga` commands and the VS Code extension |
+| [How It Works](20-how-it-works.md) | How Kalinga code becomes Rust, and why it is fast |
+| [Language Reference](21-reference.md) | Keywords, types, operator precedence, built-ins, grammar |
 
 ## Conventions in these docs
 
@@ -65,4 +68,5 @@ Read these in order the first time. Each chapter builds on the previous one.
   compiled by the test suite (`cargo test`), so they always match the current compiler.
 - Blocks marked `kalinga error` must be rejected by the compiler; the test suite checks that too.
 - Blocks marked `text` show program output or compiler messages.
-- Examples that `import` other files are checked by the test suite's import test instead.
+- Examples that need other files (`import`, `use rust`, `use crate`) are checked by the test
+  suite's import and interop tests instead.

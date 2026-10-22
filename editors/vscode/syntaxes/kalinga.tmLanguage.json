@@ -87,7 +87,7 @@
     "declarations": {
       "patterns": [
         {
-          "match": "\b(class|interface|enum)\\s+([A-Za-z_][A-Za-z0-9_]*)",
+          "match": "\\b(class|struct|interface|enum)\\s+([A-Za-z_][A-Za-z0-9_]*)",
           "captures": {
             "1": {
               "name": "storage.type.class.kalinga"
@@ -149,15 +149,15 @@
         },
         {
           "name": "keyword.control.import.kalinga",
-          "match": "\bimport\b"
+          "match": "\\b(import|use)\\b"
         },
         {
           "name": "storage.type.kalinga",
-          "match": "\b(fn|class|interface|enum|let|var)\b"
+          "match": "\\b(fn|class|struct|interface|enum|let|var|extern)\\b"
         },
         {
           "name": "storage.modifier.kalinga",
-          "match": "\b(override|private|static|abstract)\b"
+          "match": "\\b(override|private|static|abstract)\\b|\\bmut(?=\\s+fn\\b)|\\bop(?=\\s*[-+*/%]\\s*\\()|\\b(rust|crate)(?=\\s+\\\")|\\btype(?=\\s+[A-Z])"
         },
         {
           "name": "keyword.operator.type.kalinga",
@@ -166,6 +166,10 @@
         {
           "name": "variable.language.self.kalinga",
           "match": "\b(self|super)\b"
+        },
+        {
+          "name": "support.class.library.kalinga",
+          "match": "\\b(Math|Random|Time)\\b(?=\\s*\\.)"
         }
       ]
     },

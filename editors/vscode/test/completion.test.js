@@ -297,3 +297,61 @@ test("signature help for v0.2 calls", () => {
   assert.strictEqual(sig("    apply(fn(x) => x, |").activeParameter, 1);
   assert.strictEqual(sig("    let g = fn(a: int, b: str) => a\n    g(1, |").label, "g(int, str) -> int");
 });
+
+// ---------------------------------------------------------------- v0.3 syntax
+
+const V3 = `
+use rust "native/stats.rs"
+
+extern type Matrix
+extern fn matrix_new(rows: int, cols: int) -> Matrix
+extern fn mean(xs: [float]) -> float
+
+struct Vec2 {
+    x: float
+    y: float
+    private hidden: int = 0
+
+    static fn zero() -> Vec2 { return Vec2(0.0, 0.0) }
+    fn length() -> float { return Math.hypot(self.x, self.y) }
+    mut fn scale(k: float) { self.x *= k }
+    op +(o: Vec2) -> Vec2 { return Vec2(self.x + o.x, self.y + o.y) }
+}
+`;
+
+function at3(body) {
+  const src = V3 + "\nfn main() {\n" + body + "\n}\n";
+  return complete(src.replace("|", ""), src.indexOf("|"));
+}
+
+test("struct members, statics and constructor", () => {
+  const members = labels(at3("    let v = Vec2(1.0, 2.0)\n    v.|"));
+  assert.ok(members.includes("x") && members.includes("length") && members.includes("scale"));
+  assert.ok(!members.includes("hidden"), "private field hidden");
+  assert.deepStrictEqual(labels(at3("    let z = Vec2.|")), ["zero"]);
+  const ctor = at3("    |").find((i) => i.label === "Vec2");
+  assert.strictEqual(ctor.insertText, "Vec2(${1:x}, ${2:y}, ${3:hidden})");
+});
+
+test("Math, Random and Time", () => {
+  const math = labels(at3("    let r = Math.|"));
+  for (const n of ["PI", "sqrt", "lerp", "clamp", "atan2"]) assert.ok(math.includes(n), n);
+  assert.ok(labels(at3("    Random.|")).includes("shuffle"));
+  assert.ok(labels(at3("    Time.|")).includes("now"));
+  const src = V3 + "\nfn main() {\n    Math.clamp(1, |\n}\n";
+  assert.strictEqual(signatureHelp(src.replace("|", ""), src.indexOf("|")).label, "Math.clamp(x: T, lo: T, hi: T) -> T");
+});
+
+test("extern functions and types", () => {
+  const all = labels(at3("    |"));
+  assert.ok(all.includes("mean") && all.includes("matrix_new"));
+  assert.ok(labels(at3("    let m: |")).includes("Matrix"));
+});
+
+test("struct body and top-level keywords", () => {
+  const body = V3.replace("    static fn zero()", "    |\n    static fn zero()");
+  const items = labels(complete(body.replace("|", ""), body.indexOf("|")));
+  assert.ok(items.includes("mut fn") && items.includes("op +"));
+  const top = labels(complete(V3 + "\n", V3.length + 1));
+  for (const k of ["struct", "use rust", "use crate", "extern fn", "extern type"]) assert.ok(top.includes(k), k);
+});
