@@ -2,7 +2,7 @@
   "name": "kalinga-lang",
   "displayName": "Kalinga Language",
   "description": "Syntax highlighting, code completion, signature help, snippets, live error checking and run commands for the Kalinga language (.kl)",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "publisher": "kalinga",
   "license": "MIT",
   "engines": {

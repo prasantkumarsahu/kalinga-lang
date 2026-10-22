@@ -6,15 +6,15 @@
 "use strict";
 
 const KEYWORDS = [
-  "let", "var", "if", "else", "while", "for", "in", "return", "break", "continue",
-  "true", "false", "none",
+  "let", "var", "if", "else", "while", "for", "in", "match", "return", "break", "continue",
+  "true", "false", "none", "fn", "as", "is",
 ];
 const PRIMITIVES = ["int", "float", "bool", "str", "void"];
 
 const BUILTINS = {
   print: { params: ["values..."], ret: "void", doc: "Prints the values separated by spaces, then a newline." },
-  len: { params: ["x: [T] or str"], ret: "int", doc: "Number of elements in an array, or characters in a string." },
-  str: { params: ["x"], ret: "str", doc: "Text form of an int, float, bool, str, array or optional." },
+  len: { params: ["x: [T], {K: V} or str"], ret: "int", doc: "Number of elements in an array or map, or characters in a string." },
+  str: { params: ["x"], ret: "str", doc: "Text form of a printable value." },
   int: { params: ["x"], ret: "int", doc: "Converts a float (drops the fraction), bool or str to int." },
   float: { params: ["x"], ret: "float", doc: "Converts an int or str to float." },
   input: { params: ["prompt: str"], ret: "str", doc: "Prints the prompt and reads one line from the keyboard." },
@@ -29,17 +29,38 @@ const STR_METHODS = [
 ];
 
 function arrayMethods(elem) {
+  const p = (name, type) => ({ name, type });
   return [
-    { name: "push", params: [{ name: "x", type: elem }], ret: "void", doc: "Adds `x` at the end (needs a `var` array)." },
+    { name: "push", params: [p("x", elem)], ret: "void", doc: "Adds `x` at the end (needs a `var` array)." },
     { name: "pop", params: [], ret: elem + "?", doc: "Removes and returns the last element, or `none` if empty." },
     { name: "len", params: [], ret: "int", doc: "Number of elements." },
-    { name: "contains", params: [{ name: "x", type: elem }], ret: "bool", doc: "Whether `x` is in the array." },
+    { name: "contains", params: [p("x", elem)], ret: "bool", doc: "Whether `x` is in the array." },
+    { name: "map", params: [p("f", `fn(${elem}) -> U`)], ret: "[U]", doc: "A new array with `f` applied to each element." },
+    { name: "filter", params: [p("f", `fn(${elem}) -> bool`)], ret: `[${elem}]`, doc: "The elements for which `f` returns true." },
+    { name: "find", params: [p("f", `fn(${elem}) -> bool`)], ret: elem + "?", doc: "The first element for which `f` returns true." },
+    { name: "sort", params: [], ret: "void", doc: "Sorts in place (int, float, str, bool; needs `var`)." },
+    { name: "sort_by", params: [p("f", `fn(${elem}, ${elem}) -> bool`)], ret: "void", doc: "Sorts in place; `f(a, b)` is true when `a` comes first." },
+  ];
+}
+
+function mapMethods(k, v) {
+  const p = (name, type) => ({ name, type });
+  return [
+    { name: "get", params: [p("key", k)], ret: v + "?", doc: "The value for `key`, or `none`." },
+    { name: "has", params: [p("key", k)], ret: "bool", doc: "Whether `key` is present." },
+    { name: "remove", params: [p("key", k)], ret: v + "?", doc: "Removes `key` and returns its value (needs `var`)." },
+    { name: "keys", params: [], ret: `[${k}]`, doc: "The keys, sorted." },
+    { name: "values", params: [], ret: `[${v}]`, doc: "The values, in key order." },
+    { name: "len", params: [], ret: "int", doc: "Number of entries." },
   ];
 }
 
 // ---------------------------------------------------------------- text helpers
 
-/** Blanks out comments and string contents (keeping quotes) so offsets stay valid. */
+/**
+ * Blanks out comments and string contents (keeping quotes) so offsets stay valid.
+ * `{...}` interpolations inside strings stay visible, since they are code.
+ */
 function mask(text) {
   const out = text.split("");
   const hidden = new Uint8Array(text.length);
@@ -59,8 +80,30 @@ function mask(text) {
     } else if (c === '"') {
       i++;
       while (i < text.length && text[i] !== '"' && text[i] !== "\n") {
-        if (text[i] === "\\" && i + 1 < text.length && text[i + 1] !== "\n") blank(i++);
-        blank(i++);
+        if (text[i] === "\\" && i + 1 < text.length && text[i + 1] !== "\n") {
+          blank(i++);
+          blank(i++);
+        } else if (text[i] === "{" && text[i + 1] === "{") {
+          blank(i++);
+          blank(i++);
+        } else if (text[i] === "{") {
+          // Interpolation: keep the braces out of brace counting, keep the code.
+          blank(i++);
+          let d = 0;
+          while (i < text.length && text[i] !== "\n" && !(text[i] === "}" && d === 0)) {
+            if (text[i] === "{") d++;
+            else if (text[i] === "}") d--;
+            else if (text[i] === '"') {
+              // A string inside the interpolation.
+              i++;
+              while (i < text.length && text[i] !== '"' && text[i] !== "\n") i++;
+            }
+            i++;
+          }
+          if (text[i] === "}") blank(i++);
+        } else {
+          blank(i++);
+        }
       }
       i++;
     } else {
@@ -83,14 +126,60 @@ function braceDepths(code) {
   return depth;
 }
 
-/** Index just past the `}` matching the `{` at `open`, or the end of text if unclosed. */
-function matchBrace(code, open) {
+/** Index just past the bracket matching the one at `open`, or the end of text. */
+function matchClose(code, open) {
+  const pairs = { "{": "}", "(": ")", "[": "]", "<": ">" };
+  const o = code[open];
+  const c = pairs[o];
   let d = 0;
   for (let i = open; i < code.length; i++) {
-    if (code[i] === "{") d++;
-    else if (code[i] === "}" && --d === 0) return i + 1;
+    if (code[i] === o) d++;
+    else if (code[i] === c && --d === 0) return i + 1;
   }
   return code.length;
+}
+
+const matchBrace = (code, open) => matchClose(code, open);
+
+function skipSpaces(code, i) {
+  while (i < code.length && (code[i] === " " || code[i] === "\t")) i++;
+  return i;
+}
+
+/** End index of a type written at `i` (`int`, `[T]`, `{K: V}`, `fn(A) -> B`, `Stack<int>?`). */
+function readType(code, i) {
+  i = skipSpaces(code, i);
+  if (code.startsWith("fn", i) && code[skipSpaces(code, i + 2)] === "(") {
+    i = matchClose(code, skipSpaces(code, i + 2));
+    const j = skipSpaces(code, i);
+    if (code.startsWith("->", j)) i = readType(code, j + 2);
+    return i;
+  }
+  if (code[i] === "[" || code[i] === "{") i = matchClose(code, i);
+  else {
+    while (i < code.length && /\w/.test(code[i])) i++;
+    if (code[i] === "<") i = matchClose(code, i);
+  }
+  if (code[i] === "?") i++;
+  return i;
+}
+
+/** Splits at top-level occurrences of `sep` (outside (), [], {}, <>). */
+function splitTop(src, sep) {
+  const parts = [];
+  let d = 0;
+  let cur = "";
+  for (let i = 0; i < src.length; i++) {
+    const ch = src[i];
+    if ("([{<".includes(ch)) d++;
+    else if (")]}".includes(ch) || (ch === ">" && src[i - 1] !== "-")) d--;
+    if (ch === sep && d === 0) {
+      parts.push(cur);
+      cur = "";
+    } else cur += ch;
+  }
+  parts.push(cur);
+  return parts;
 }
 
 /** `// comment` lines directly above `index`, joined. */
@@ -107,111 +196,211 @@ function docAbove(text, index) {
   return doc.join("\n");
 }
 
+function cleanType(t) {
+  return t ? t.replace(/\s+/g, " ").replace(/\s*([<>\[\]{}(),:?])\s*/g, "$1").replace(/->/g, " -> ").replace(/,/g, ", ").replace(/:/g, ": ").trim() : "void";
+}
+
 function parseParams(src) {
-  return src
-    .split(",")
+  return splitTop(src, ",")
     .map((p) => p.trim())
     .filter(Boolean)
     .map((p) => {
-      const m = /^([A-Za-z_]\w*)\s*:\s*(.+)$/.exec(p);
-      return m ? { name: m[1], type: m[2].trim() } : { name: p, type: "?" };
+      const m = /^([A-Za-z_]\w*)\s*(?::\s*([\s\S]+))?$/.exec(p);
+      return m ? { name: m[1], type: m[2] ? cleanType(m[2]) : null } : { name: p, type: null };
     });
 }
 
-function cleanType(t) {
-  return t ? t.replace(/\s+/g, "") : "void";
+/** Parses `fn name<T>(params) -> ret` starting at the `fn` keyword index. */
+function parseFnHeader(code, at) {
+  let i = skipSpaces(code, at + 2);
+  const nm = /^[A-Za-z_]\w*/.exec(code.slice(i));
+  if (!nm) return null;
+  const name = nm[0];
+  i = skipSpaces(code, i + name.length);
+  let tparams = [];
+  if (code[i] === "<") {
+    const end = matchClose(code, i);
+    tparams = code.slice(i + 1, end - 1).split(",").map((s) => s.trim()).filter(Boolean);
+    i = skipSpaces(code, end);
+  }
+  if (code[i] !== "(") return null;
+  const close = matchClose(code, i);
+  const params = parseParams(code.slice(i + 1, close - 1));
+  i = skipSpaces(code, close);
+  let ret = "void";
+  if (code.startsWith("->", i)) {
+    const start = skipSpaces(code, i + 2);
+    const end = readType(code, start);
+    ret = cleanType(code.slice(start, end));
+    i = skipSpaces(code, end);
+  }
+  return { name, tparams, params, ret, bodyOpen: code[i] === "{" ? i : -1 };
+}
+
+/** Modifier words (`private`, `static`, ...) written just before `index` on the same line. */
+function modifiersBefore(code, index) {
+  const line = code.slice(code.lastIndexOf("\n", index - 1) + 1, index);
+  return new Set(line.trim().split(/\s+/).filter(Boolean));
 }
 
 // ---------------------------------------------------------------- model
 
 /**
- * Finds classes, interfaces, functions and every function-like body in the file.
+ * Finds classes, interfaces, enums, functions, imports and function-like bodies.
  * Tolerates incomplete code: unclosed bodies simply run to the end of the text.
  */
-function analyze(text) {
+function analyze(text, dir) {
   const { code, hidden } = mask(text);
   const depth = braceDepths(code);
-  const model = { text, code, hidden, depth, classes: new Map(), interfaces: new Map(), functions: new Map(), bodies: [] };
+  const model = {
+    text, code, hidden, depth, dir: dir || "",
+    imports: [], classes: new Map(), interfaces: new Map(), enums: new Map(), functions: new Map(), bodies: [],
+  };
 
-  const headerFn = /\b(override\s+)?fn\s+([A-Za-z_]\w*)\s*\(([^)]*)\)\s*(?:->\s*([^{\n]+?))?\s*\{/g;
+  for (const m of code.matchAll(/^[ \t]*import[ \t]+"([^"\n]*)"/gm)) model.imports.push(m[1]);
+  // The import path itself is masked (string contents); read it from the original text.
+  model.imports = [...text.matchAll(/^[ \t]*import[ \t]+"([^"\n]+)"/gm)].map((m) => m[1]);
+
+  const fnsAt = (start, end, wantDepth) => {
+    const out = [];
+    const re = /\bfn\b/g;
+    re.lastIndex = start;
+    for (let m; (m = re.exec(code)) && m.index < end; ) {
+      if (depth[m.index] !== wantDepth) continue;
+      const h = parseFnHeader(code, m.index);
+      if (h) out.push({ at: m.index, h, mods: modifiersBefore(code, m.index) });
+    }
+    return out;
+  };
 
   // Classes
-  const classRe = /\bclass\s+([A-Za-z_]\w*)\s*(?::\s*([\w\s,]*?))?\s*\{/g;
-  for (let m; (m = classRe.exec(code)); ) {
+  for (const m of code.matchAll(/\bclass\s+([A-Za-z_]\w*)/g)) {
     if (depth[m.index] !== 0) continue;
-    const open = m.index + m[0].length - 1;
+    let i = skipSpaces(code, m.index + m[0].length);
+    let tparams = [];
+    if (code[i] === "<") {
+      const end = matchClose(code, i);
+      tparams = code.slice(i + 1, end - 1).split(",").map((s) => s.trim()).filter(Boolean);
+      i = skipSpaces(code, end);
+    }
+    let bases = [];
+    if (code[i] === ":") {
+      const open = code.indexOf("{", i);
+      bases = code.slice(i + 1, open < 0 ? code.length : open).split(",").map((s) => s.trim()).filter(Boolean);
+      i = open < 0 ? code.length : open;
+    }
+    while (i < code.length && code[i] !== "{" && code[i] !== "\n") i++;
+    if (code[i] !== "{") continue;
+    const open = i;
     const end = matchBrace(code, open);
     const cls = {
-      name: m[1],
-      bases: (m[2] || "").split(",").map((s) => s.trim()).filter(Boolean),
-      fields: [],
-      methods: [],
-      init: null,
-      doc: docAbove(text, m.index),
-      start: open,
-      end,
+      name: m[1], tparams, bases,
+      abstract: modifiersBefore(code, m.index).has("abstract"),
+      fields: [], methods: [], init: null,
+      doc: docAbove(text, m.index), start: open, end,
     };
     const inner = depth[open] + 1;
-    const body = code.slice(open + 1, end);
-    const fieldRe = /^[ \t]*([a-z_]\w*)[ \t]*:[ \t]*([^=\n]+?)[ \t]*(?:=[^\n]*)?$/gm;
-    for (let f; (f = fieldRe.exec(body)); ) {
-      const at = open + 1 + f.index + f[0].indexOf(f[1]);
+    const fieldRe = /^[ \t]*((?:private[ \t]+)?)([a-z_]\w*)[ \t]*:/gm;
+    fieldRe.lastIndex = open + 1;
+    for (let f; (f = fieldRe.exec(code)) && f.index < end; ) {
+      const at = f.index + f[0].indexOf(f[2]);
       if (depth[at] !== inner) continue;
-      cls.fields.push({ name: f[1], type: cleanType(f[2]), doc: docAbove(text, at) });
+      const tStart = f.index + f[0].length;
+      const type = cleanType(code.slice(tStart, readType(code, tStart)));
+      cls.fields.push({ name: f[2], type, private: !!f[1], doc: docAbove(text, at), owner: cls.name });
     }
-    headerFn.lastIndex = 0;
-    for (let f; (f = headerFn.exec(body)); ) {
-      const at = open + 1 + f.index;
-      if (depth[at] !== inner) continue;
+    for (const { at, h, mods } of fnsAt(open + 1, end, inner)) {
       const method = {
-        name: f[2],
-        params: parseParams(f[3]),
-        ret: cleanType(f[4]),
-        override: !!f[1],
-        doc: docAbove(text, at),
-        owner: cls.name,
+        name: h.name, params: h.params, ret: h.ret, owner: cls.name, doc: docAbove(text, at),
+        override: mods.has("override"), private: mods.has("private"), static: mods.has("static"), abstract: mods.has("abstract"),
       };
       cls.methods.push(method);
-      const bodyOpen = at + f[0].length - 1;
-      model.bodies.push({ start: bodyOpen, end: matchBrace(code, bodyOpen), params: method.params, cls: cls.name, kind: "method" });
+      if (h.bodyOpen >= 0) {
+        model.bodies.push({ start: h.bodyOpen, end: matchBrace(code, h.bodyOpen), params: h.params, cls: method.static ? null : cls.name, owner: cls.name, kind: "method" });
+      }
     }
-    const initRe = /\binit\s*\(([^)]*)\)\s*\{/g;
-    for (let f; (f = initRe.exec(body)); ) {
-      const at = open + 1 + f.index;
-      if (depth[at] !== inner) continue;
-      cls.init = { params: parseParams(f[1]), doc: docAbove(text, at) };
-      const bodyOpen = at + f[0].length - 1;
-      model.bodies.push({ start: bodyOpen, end: matchBrace(code, bodyOpen), params: cls.init.params, cls: cls.name, kind: "init" });
+    const initRe = /\binit\s*\(/g;
+    initRe.lastIndex = open + 1;
+    for (let f; (f = initRe.exec(code)) && f.index < end; ) {
+      if (depth[f.index] !== inner) continue;
+      const paren = f.index + f[0].length - 1;
+      const close = matchClose(code, paren);
+      cls.init = { params: parseParams(code.slice(paren + 1, close - 1)), doc: docAbove(text, f.index) };
+      const bodyOpen = code.indexOf("{", close);
+      if (bodyOpen >= 0) model.bodies.push({ start: bodyOpen, end: matchBrace(code, bodyOpen), params: cls.init.params, cls: cls.name, owner: cls.name, kind: "init" });
     }
     model.classes.set(cls.name, cls);
   }
 
   // Interfaces
-  const ifaceRe = /\binterface\s+([A-Za-z_]\w*)\s*\{/g;
-  for (let m; (m = ifaceRe.exec(code)); ) {
+  for (const m of code.matchAll(/\binterface\s+([A-Za-z_]\w*)\s*(?::\s*([\w\s,]*?))?\s*\{/g)) {
     if (depth[m.index] !== 0) continue;
     const open = m.index + m[0].length - 1;
     const end = matchBrace(code, open);
-    const iface = { name: m[1], methods: [], doc: docAbove(text, m.index), start: open, end };
-    const sigRe = /\bfn\s+([A-Za-z_]\w*)\s*\(([^)]*)\)[ \t]*(?:->[ \t]*([^\n}]+))?/g;
-    const body = code.slice(open + 1, end);
-    for (let f; (f = sigRe.exec(body)); ) {
-      iface.methods.push({ name: f[1], params: parseParams(f[2]), ret: cleanType(f[3]), doc: docAbove(text, open + 1 + f.index), owner: iface.name });
+    const iface = {
+      name: m[1], supers: (m[2] || "").split(",").map((s) => s.trim()).filter(Boolean),
+      methods: [], doc: docAbove(text, m.index), start: open, end,
+    };
+    for (const { at, h } of fnsAt(open + 1, end, depth[open] + 1)) {
+      iface.methods.push({ name: h.name, params: h.params, ret: h.ret, doc: docAbove(text, at), owner: iface.name });
     }
     model.interfaces.set(iface.name, iface);
   }
 
+  // Enums
+  for (const m of code.matchAll(/\benum\s+([A-Za-z_]\w*)\s*\{/g)) {
+    if (depth[m.index] !== 0) continue;
+    const open = m.index + m[0].length - 1;
+    const end = matchBrace(code, open);
+    const en = { name: m[1], variants: [], doc: docAbove(text, m.index), start: open, end };
+    const body = code.slice(open + 1, end - 1);
+    const vre = /\b([A-Z]\w*)\s*(\()?/g;
+    for (let v; (v = vre.exec(body)); ) {
+      let params = [];
+      if (v[2]) {
+        const p = open + 1 + v.index + v[0].length - 1;
+        const close = matchClose(code, p);
+        params = parseParams(code.slice(p + 1, close - 1));
+        vre.lastIndex = close - (open + 1);
+      }
+      en.variants.push({ name: v[1], params });
+    }
+    model.enums.set(en.name, en);
+  }
+
   // Top-level functions
-  headerFn.lastIndex = 0;
-  for (let m; (m = headerFn.exec(code)); ) {
-    if (depth[m.index] !== 0 || m[1]) continue;
-    const fn = { name: m[2], params: parseParams(m[3]), ret: cleanType(m[4]), doc: docAbove(text, m.index) };
+  for (const { at, h, mods } of fnsAt(0, code.length, 0)) {
+    if (mods.size) continue;
+    const fn = { name: h.name, tparams: h.tparams, params: h.params, ret: h.ret, doc: docAbove(text, at) };
     model.functions.set(fn.name, fn);
-    const bodyOpen = m.index + m[0].length - 1;
-    model.bodies.push({ start: bodyOpen, end: matchBrace(code, bodyOpen), params: fn.params, cls: null, kind: "fn" });
+    if (h.bodyOpen >= 0) model.bodies.push({ start: h.bodyOpen, end: matchBrace(code, h.bodyOpen), params: h.params, cls: null, owner: null, kind: "fn" });
   }
   return model;
 }
+
+/**
+ * Adds declarations from imported files (transitively). `load(path, dir)` returns
+ * `{ text, dir }` for an import written in a file located in `dir`, or null.
+ */
+function withImports(model, load) {
+  if (!load) return model;
+  const seen = new Set();
+  const queue = model.imports.map((p) => [p, model.dir]);
+  while (queue.length) {
+    const [path, dir] = queue.shift();
+    const res = load(path, dir);
+    if (!res || seen.has(res.key || res.dir + "/" + path)) continue;
+    seen.add(res.key || res.dir + "/" + path);
+    const other = analyze(res.text, res.dir);
+    for (const kind of ["classes", "interfaces", "enums", "functions"]) {
+      for (const [k, v] of other[kind]) if (!model[kind].has(k)) model[kind].set(k, v);
+    }
+    for (const p of other.imports) queue.push([p, res.dir]);
+  }
+  return model;
+}
+
+// ---------------------------------------------------------------- class helpers
 
 /** Class chain from `name` up to the root (classes only). */
 function lineage(model, name) {
@@ -231,17 +420,36 @@ function parentOf(model, name) {
   return cls ? cls.bases.find((b) => model.classes.has(b)) : undefined;
 }
 
-function classFields(model, name) {
-  return lineage(model, name).flatMap((c) => c.fields.map((f) => ({ ...f, owner: c.name })));
+function visibleTo(member, viewer) {
+  return !member.private || member.owner === viewer;
 }
 
-/** Most-derived version of each method visible on a class. */
+function classFields(model, name) {
+  return lineage(model, name).flatMap((c) => c.fields);
+}
+
+/** Most-derived version of each instance method visible on a class. */
 function classMethods(model, name) {
   const seen = new Map();
   for (const c of lineage(model, name)) {
-    for (const m of c.methods) if (!seen.has(m.name)) seen.set(m.name, m);
+    for (const m of c.methods) if (!m.static && !seen.has(m.name)) seen.set(m.name, m);
   }
   return [...seen.values()];
+}
+
+function staticMethods(model, name) {
+  const seen = new Map();
+  for (const c of lineage(model, name)) {
+    for (const m of c.methods) if (m.static && !seen.has(m.name)) seen.set(m.name, m);
+  }
+  return [...seen.values()];
+}
+
+function interfaceMethods(model, name, seen = new Set()) {
+  const iface = model.interfaces.get(name);
+  if (!iface || seen.has(name)) return [];
+  seen.add(name);
+  return iface.methods.concat(...iface.supers.map((s) => interfaceMethods(model, s, seen)));
 }
 
 function findInit(model, name) {
@@ -253,7 +461,31 @@ function findInit(model, name) {
 
 const isArray = (t) => !!t && t.startsWith("[") && t.endsWith("]");
 const elemOf = (t) => (isArray(t) ? t.slice(1, -1) : null);
+const isMap = (t) => !!t && t.startsWith("{") && t.endsWith("}");
 const unwrapOptional = (t) => (t && t.endsWith("?") ? t.slice(0, -1) : t);
+
+function mapKV(t) {
+  const [k, ...rest] = splitTop(t.slice(1, -1), ":");
+  return [k.trim(), rest.join(":").trim()];
+}
+
+/** `Stack<int>` → ["Stack", ["int"]] */
+function splitGeneric(t) {
+  const m = /^([A-Za-z_]\w*)<(.*)>$/.exec(t || "");
+  return m ? [m[1], splitTop(m[2], ",").map((s) => s.trim())] : [t, []];
+}
+
+/** Replaces a generic class's type parameters in `type` with the receiver's arguments. */
+function substitute(model, receiverType, type) {
+  const [name, args] = splitGeneric(receiverType);
+  const cls = model.classes.get(name);
+  if (!cls || !cls.tparams.length || !args.length || !type) return type;
+  let out = type;
+  cls.tparams.forEach((p, i) => {
+    out = out.replace(new RegExp(`\\b${p}\\b`, "g"), args[i] || p);
+  });
+  return out;
+}
 
 /** Splits `a.b(c, d).e[0]` into top-level segments `a`, `b(c, d)`, `e[0]`. */
 function splitChain(chain) {
@@ -289,29 +521,41 @@ function stripIndexes(seg) {
   return [seg, n];
 }
 
+/** Methods (with signatures) available on a value of `type`. */
+function methodsOf(model, type) {
+  if (!type) return [];
+  if (type === "str") return STR_METHODS;
+  if (isArray(type)) return arrayMethods(elemOf(type));
+  if (isMap(type)) return mapMethods(...mapKV(type));
+  if (model.interfaces.has(type)) return interfaceMethods(model, type);
+  const [name] = splitGeneric(type);
+  if (model.classes.has(name)) {
+    return classMethods(model, name).map((m) => ({
+      ...m,
+      params: m.params.map((p) => ({ ...p, type: substitute(model, type, p.type) })),
+      ret: substitute(model, type, m.ret),
+    }));
+  }
+  return [];
+}
+
+function indexType(type) {
+  if (isArray(type)) return elemOf(type);
+  if (isMap(type)) return mapKV(type)[1];
+  return null;
+}
+
 function memberType(model, type, seg) {
   const call = /^([A-Za-z_]\w*)\s*\(/.exec(seg);
   const name = call ? call[1] : seg;
-  const base = type;
-  if (base === "str") {
-    const m = STR_METHODS.find((x) => x.name === name);
-    return m && call ? m.ret : null;
+  if (call) {
+    const m = methodsOf(model, type).find((x) => x.name === name);
+    return m ? m.ret : null;
   }
-  if (isArray(base)) {
-    const m = arrayMethods(elemOf(base)).find((x) => x.name === name);
-    return m && call ? m.ret : null;
-  }
-  if (model.interfaces.has(base)) {
-    const m = model.interfaces.get(base).methods.find((x) => x.name === name);
-    return m && call ? m.ret : null;
-  }
-  if (model.classes.has(base)) {
-    if (call) {
-      const m = classMethods(model, base).find((x) => x.name === name);
-      return m ? m.ret : null;
-    }
-    const f = classFields(model, base).find((x) => x.name === name);
-    return f ? f.type : null;
+  const [cname] = splitGeneric(type);
+  if (model.classes.has(cname)) {
+    const f = classFields(model, cname).find((x) => x.name === name);
+    return f ? substitute(model, type, f.type) : null;
   }
   return null;
 }
@@ -323,29 +567,44 @@ function chainType(model, scope, chain) {
   for (let i = 0; i < segs.length; i++) {
     const [seg, indexes] = stripIndexes(segs[i]);
     if (i === 0) type = atomType(model, scope, seg);
-    else type = type ? memberType(model, type, seg) : null;
-    for (let k = 0; k < indexes && type; k++) type = elemOf(type);
+    else type = type ? memberType(model, unwrapOptional(type) === type ? type : null, seg) : null;
+    for (let k = 0; k < indexes && type; k++) type = indexType(type);
     if (!type) return null;
   }
   return type;
 }
 
 function atomType(model, scope, seg) {
-  if (seg === "self") return scope.cls;
+  if (seg === "self") {
+    const cls = scope.cls && model.classes.get(scope.cls);
+    return cls && cls.tparams.length ? `${cls.name}<${cls.tparams.join(", ")}>` : scope.cls;
+  }
   if (seg === "super") return scope.cls ? parentOf(model, scope.cls) || null : null;
   if (/^"/.test(seg)) return "str";
   if (/^-?\d+\.\d+$/.test(seg)) return "float";
   if (/^-?\d+$/.test(seg)) return "int";
   if (seg === "true" || seg === "false") return "bool";
   if (/^\[/.test(seg)) {
-    const first = seg.slice(1, -1).split(",")[0].trim();
+    const first = splitTop(seg.slice(1, -1), ",")[0].trim();
     const t = first ? exprType(model, scope, first) : null;
     return t ? `[${t}]` : null;
   }
-  const call = /^([A-Za-z_]\w*)\s*\(/.exec(seg);
+  if (/^\{/.test(seg)) {
+    const entry = splitTop(seg.slice(1, -1), ",")[0];
+    const [k, v] = entry ? splitTop(entry, ":") : [];
+    const kt = k && exprType(model, scope, k);
+    const vt = v && exprType(model, scope, v);
+    return kt && vt ? `{${kt}: ${vt}}` : null;
+  }
+  const call = /^([A-Za-z_]\w*)\s*(<[^(]*>)?\s*\(/.exec(seg);
   if (call) {
     const n = call[1];
-    if (model.classes.has(n)) return n;
+    const local = scope.locals.get(n);
+    if (local && local.type && local.type.startsWith("fn(")) {
+      const r = /\)\s*->\s*(.+)$/.exec(local.type);
+      return r ? r[1] : "void";
+    }
+    if (model.classes.has(n)) return call[2] ? n + call[2].replace(/\s+/g, "") : n;
     if (model.functions.has(n)) return model.functions.get(n).ret;
     if (BUILTINS[n]) return BUILTINS[n].ret;
     return null;
@@ -357,13 +616,38 @@ function atomType(model, scope, seg) {
   return null;
 }
 
-/** Type of the leading operand of an initializer expression (enough for completion). */
+/** `fn(a: int, b) => a` → `fn(int, _) -> int` (best effort). */
+function lambdaType(model, scope, expr) {
+  const close = matchClose(expr, expr.indexOf("("));
+  const params = parseParams(expr.slice(expr.indexOf("(") + 1, close - 1));
+  const rest = expr.slice(close).trim();
+  let ret = "void";
+  const arrow = /^->\s*/.exec(rest);
+  if (arrow) {
+    const end = readType(rest, arrow[0].length);
+    ret = cleanType(rest.slice(arrow[0].length, end));
+  } else if (rest.startsWith("=>")) {
+    const inner = { ...scope, locals: new Map(scope.locals) };
+    for (const p of params) inner.locals.set(p.name, { name: p.name, type: p.type, kind: "param" });
+    ret = exprType(model, inner, rest.slice(2)) || "_";
+  }
+  return `fn(${params.map((p) => p.type || "_").join(", ")})${ret === "void" ? "" : " -> " + ret}`;
+}
+
+/** Type of an initializer expression (best effort, enough for completion). */
 function exprType(model, scope, expr) {
   expr = expr.trim();
   if (!expr) return null;
+  const cast = /\s(as|is)\s+([A-Z]\w*)\s*$/.exec(expr);
+  if (cast) return cast[1] === "is" ? "bool" : cast[2] + "?";
+  if (/^fn\s*\(/.test(expr)) return lambdaType(model, scope, expr);
+  if (/^[A-Z]\w*\.[A-Z]\w*/.test(expr)) {
+    const en = /^([A-Z]\w*)\./.exec(expr)[1];
+    if (model.enums.has(en)) return en;
+  }
   // `a + b`: the left operand decides the type for arithmetic and joins.
   const m = /^((?:[^\s+\-*\/%<>=!&|]|\([^)]*\)|\[[^\]]*\])+)\s*([-+*\/%<>=!&|]{1,2})/.exec(expr);
-  if (m && !expr.startsWith("[") && !expr.startsWith("-")) {
+  if (m && !/^[\[{"-]/.test(expr)) {
     const op = m[2];
     if (["==", "!=", "<", "<=", ">", ">=", "&&", "||"].includes(op)) return "bool";
     return chainType(model, scope, m[1]);
@@ -382,8 +666,8 @@ function innermostBody(model, offset) {
   return best;
 }
 
-function enclosingClass(model, offset) {
-  for (const c of model.classes.values()) if (c.start < offset && offset <= c.end) return c;
+function enclosing(map, offset) {
+  for (const c of map.values()) if (c.start !== undefined && c.start < offset && offset <= c.end) return c;
   return null;
 }
 
@@ -393,43 +677,81 @@ function visible(depth, at, d, offset) {
   return true;
 }
 
+function findVariant(model, name) {
+  for (const en of model.enums.values()) {
+    const v = en.variants.find((x) => x.name === name);
+    if (v) return { en, v };
+  }
+  return null;
+}
+
 /** Variables and parameters visible at `offset`, with best-effort types. */
 function scopeAt(model, offset) {
   const body = innermostBody(model, offset);
   const cls = body ? body.cls : null;
-  const scope = { cls, body, locals: new Map() };
+  const scope = { cls, owner: body ? body.owner : null, body, locals: new Map() };
   if (!body) return scope;
   for (const p of body.params) scope.locals.set(p.name, { name: p.name, type: p.type, kind: "param" });
 
   const { code, depth } = model;
-  const region = code.slice(body.start, offset);
+  const start = body.start;
+  const region = code.slice(start, offset);
   const decls = [];
-  const letRe = /\b(let|var)\s+([A-Za-z_]\w*)\s*(?::\s*([^=\n]+?))?\s*=([^\n]*)/g;
-  for (let m; (m = letRe.exec(region)); ) {
-    const at = body.start + m.index;
-    decls.push({ at, d: depth[at], name: m[2], annot: m[3], expr: m[4], kind: m[1] });
+  for (const m of region.matchAll(/\b(let|var)\s+([A-Za-z_]\w*)\s*(:)?/g)) {
+    const at = start + m.index;
+    let i = at + m[0].length;
+    let annot = null;
+    if (m[3]) {
+      const end = readType(code, i);
+      annot = cleanType(code.slice(i, end));
+      i = end;
+    }
+    i = skipSpaces(code, i);
+    const eol = code.indexOf("\n", i);
+    const expr = code[i] === "=" ? code.slice(i + 1, eol < 0 ? code.length : eol) : "";
+    decls.push({ at, d: depth[at], name: m[2], annot, expr, kind: m[1] });
   }
-  const forRe = /\bfor\s+([A-Za-z_]\w*)\s+in\s+([^{\n]*)\{/g;
-  for (let m; (m = forRe.exec(region)); ) {
-    const at = body.start + m.index + m[0].length;
+  for (const m of region.matchAll(/\bfor\s+([A-Za-z_]\w*)\s+in\s+([^{\n]*)\{/g)) {
+    const at = start + m.index + m[0].length;
     decls.push({ at, d: depth[at], name: m[1], forIn: m[2], kind: "for" });
   }
-  const ifLetRe = /\bif\s+let\s+([A-Za-z_]\w*)\s*=\s*([^{\n]*)\{/g;
-  for (let m; (m = ifLetRe.exec(region)); ) {
-    const at = body.start + m.index + m[0].length;
+  for (const m of region.matchAll(/\bif\s+let\s+([A-Za-z_]\w*)\s*=\s*([^{\n]*)\{/g)) {
+    const at = start + m.index + m[0].length;
     decls.push({ at, d: depth[at], name: m[1], unwrap: m[2], kind: "let" });
+  }
+  // match arm bindings: `Circle(r) =>`
+  for (const m of region.matchAll(/(?:\b[A-Z]\w*\.)?\b([A-Z]\w*)\s*\(([^()]*)\)\s*=>/g)) {
+    const found = findVariant(model, m[1]);
+    if (!found) continue;
+    const at = start + m.index + m[0].length;
+    m[2].split(",").map((s) => s.trim()).forEach((b, i) => {
+      if (b && b !== "_") decls.push({ at, d: depth[at], name: b, type: found.v.params[i] ? found.v.params[i].type : null, kind: "let" });
+    });
+  }
+  // lambda parameters: `fn(x: int) =>` / `xs.map(fn(x) => ...)`
+  for (const m of region.matchAll(/\bfn\s*\(([^()]*)\)/g)) {
+    const at = start + m.index + m[0].length;
+    const before = code.slice(Math.max(0, start + m.index - 200), start + m.index);
+    const recv = /([\w.\]\[)("]+)\.(map|filter|find|sort_by)\(\s*$/.exec(before);
+    for (const p of parseParams(m[1])) {
+      decls.push({ at, d: depth[at], name: p.name, type: p.type, elemOf: p.type ? null : recv && recv[1], kind: "param" });
+    }
   }
   decls.sort((a, b) => a.at - b.at);
   for (const v of decls) {
     if (!visible(depth, v.at, v.d, offset)) continue;
-    let type = null;
-    if (v.annot) type = cleanType(v.annot);
+    let type = v.type || null;
+    if (v.elemOf) {
+      const t = chainType(model, scope, v.elemOf);
+      type = t ? elemOf(t) : null;
+    }
+    if (v.annot) type = v.annot;
     else if (v.expr !== undefined) type = exprType(model, scope, v.expr);
     else if (v.forIn !== undefined) {
       if (v.forIn.includes("..")) type = "int";
       else {
         const t = exprType(model, scope, v.forIn);
-        type = t === "str" ? "str" : elemOf(t);
+        type = t === "str" ? "str" : isMap(t) ? mapKV(t)[0] : elemOf(t);
       }
     } else if (v.unwrap !== undefined) type = unwrapOptional(exprType(model, scope, v.unwrap));
     scope.locals.set(v.name, { name: v.name, type, kind: v.kind });
@@ -462,24 +784,46 @@ function methodItem(m, sort = "1") {
   };
 }
 
-function memberItems(model, type, viaSuper) {
+function memberItems(model, type, scope, viaSuper) {
   if (!type) return [];
-  const t = type;
-  if (t === "str") return STR_METHODS.map((m) => methodItem(m));
-  if (isArray(t)) return arrayMethods(elemOf(t)).map((m) => methodItem(m));
-  if (model.interfaces.has(t)) return model.interfaces.get(t).methods.map((m) => methodItem(m));
-  if (model.classes.has(t)) {
-    const items = viaSuper
+  const [cname] = splitGeneric(type);
+  if (model.classes.has(cname)) {
+    const viewer = scope.owner || scope.cls;
+    const fields = viaSuper
       ? []
-      : classFields(model, t).map((f) => ({
-          label: f.name,
-          kind: "field",
-          detail: `${f.owner}.${f.name}: ${f.type}`,
-          documentation: f.doc || "",
-          insertText: f.name,
-          sortText: "0" + f.name,
-        }));
-    return items.concat(classMethods(model, t).map((m) => methodItem(m)));
+      : classFields(model, cname)
+          .filter((f) => visibleTo(f, viewer))
+          .map((f) => ({
+            label: f.name,
+            kind: "field",
+            detail: `${f.owner}.${f.name}: ${substitute(model, type, f.type)}`,
+            documentation: f.doc || "",
+            insertText: f.name,
+            sortText: "0" + f.name,
+          }));
+    const methods = methodsOf(model, type)
+      .filter((m) => visibleTo(m, viewer) && !(viaSuper && m.abstract))
+      .map((m) => methodItem(m));
+    return fields.concat(methods);
+  }
+  return methodsOf(model, type).map((m) => methodItem(m));
+}
+
+/** `Enum.` → variants, `Class.` → static methods. */
+function typeMemberItems(model, name, scope) {
+  if (model.enums.has(name)) {
+    return model.enums.get(name).variants.map((v) => ({
+      label: v.name,
+      kind: "enumMember",
+      detail: `${name}.${v.name}${v.params.length ? sigText(v.params, "") : ""}`,
+      insertText: v.params.length ? callSnippet(v.name, v.params) : v.name,
+      snippet: v.params.length > 0,
+      sortText: "0" + v.name,
+    }));
+  }
+  if (model.classes.has(name)) {
+    const viewer = scope.owner || scope.cls;
+    return staticMethods(model, name).filter((m) => visibleTo(m, viewer)).map((m) => methodItem(m));
   }
   return [];
 }
@@ -487,10 +831,23 @@ function memberItems(model, type, viaSuper) {
 function typeItems(model, exclude) {
   const items = PRIMITIVES.map((p) => ({ label: p, kind: "type", detail: "built-in type", insertText: p, sortText: "0" + p }));
   for (const c of model.classes.values()) {
-    if (c.name !== exclude) items.push({ label: c.name, kind: "class", detail: "class " + c.name, documentation: c.doc, insertText: c.name, sortText: "1" + c.name });
+    if (c.name === exclude) continue;
+    const generic = c.tparams.length > 0;
+    items.push({
+      label: c.name,
+      kind: "class",
+      detail: `class ${c.name}${generic ? "<" + c.tparams.join(", ") + ">" : ""}`,
+      documentation: c.doc,
+      insertText: generic ? `${c.name}<${c.tparams.map((t, i) => `\${${i + 1}:${t}}`).join(", ")}>` : c.name,
+      snippet: generic,
+      sortText: "1" + c.name,
+    });
   }
   for (const i of model.interfaces.values()) {
     if (i.name !== exclude) items.push({ label: i.name, kind: "interface", detail: "interface " + i.name, documentation: i.doc, insertText: i.name, sortText: "1" + i.name });
+  }
+  for (const e of model.enums.values()) {
+    items.push({ label: e.name, kind: "enum", detail: "enum " + e.name, documentation: e.doc, insertText: e.name, sortText: "1" + e.name });
   }
   return items;
 }
@@ -511,17 +868,29 @@ function receiverBefore(code, dot) {
     else if ("([".includes(ch)) {
       if (d === 0) break;
       d--;
-    } else if (d === 0 && !/[\w."]/.test(ch)) break;
+    } else if (d === 0 && !/[\w."<>]/.test(ch)) break;
   }
   return code.slice(i + 1, dot).trim();
+}
+
+/** Innermost `match <expr> {` block containing `offset`: { open, scrutinee }. */
+function enclosingMatch(model, offset) {
+  const { code } = model;
+  let best = null;
+  for (const m of code.matchAll(/\bmatch\b([^{\n]*)\{/g)) {
+    const open = m.index + m[0].length - 1;
+    if (open < offset && offset <= matchBrace(code, open) && (!best || open > best.open)) best = { open, scrutinee: m[1] };
+  }
+  return best;
 }
 
 /**
  * Completion items at `offset` (0-based index into `text`).
  * Each item: { label, kind, detail, documentation, insertText, snippet, sortText }.
+ * `options.load(path, dir)` lets declarations from imported files take part.
  */
-function complete(text, offset) {
-  const model = analyze(text);
+function complete(text, offset, options = {}) {
+  const model = withImports(analyze(text, options.dir), options.load);
   const { code, hidden } = model;
   if (offset > 0 && hidden[offset - 1]) return []; // inside a comment or string
   const prefix = linePrefix(code, offset);
@@ -533,48 +902,56 @@ function complete(text, offset) {
     const recv = receiverBefore(code, dot);
     if (!recv) return [];
     const scope = scopeAt(model, offset);
-    return memberItems(model, chainType(model, scope, recv), recv === "super");
+    if (/^[A-Z]\w*$/.test(recv) && !scope.locals.has(recv)) return typeMemberItems(model, recv, scope);
+    return memberItems(model, chainType(model, scope, recv), scope, recv === "super");
   }
 
-  // Base list: `class Dog : An|`
-  const header = /\bclass\s+(\w+)\s*:\s*[\w\s,]*$/.exec(prefix);
-  if (header) return typeItems(model, header[1]).filter((i) => i.kind === "class" || i.kind === "interface");
+  // Base list: `class Dog : An|` / `interface Pet : Na|`
+  const header = /\b(class|interface)\s+(\w+)(?:<[^>]*>)?\s*:\s*[\w\s,]*$/.exec(prefix);
+  if (header) {
+    const kinds = header[1] === "class" ? ["class", "interface"] : ["interface"];
+    return typeItems(model, header[2]).filter((i) => kinds.includes(i.kind));
+  }
 
-  // Type position: after `name:`, `->`, or `[` in a type
-  if (/(?:\b[A-Za-z_]\w*\s*:|->)\s*\[?\s*\w*$/.test(prefix) && !/\bfor\b|\bif\b/.test(prefix)) {
+  // Type position: after `name:`, `->`, `<`, `[`, `{K:` in a type
+  if (/(?:\b[A-Za-z_]\w*\s*:|->|\bfn\s*\([^)]*|<|,\s*)\s*[\[{]?\s*\w*$/.test(prefix) && /(:|->|<|\bfn\s*\()/.test(prefix) && !/\b(for|if|match|print)\b|=/.test(prefix)) {
     return typeItems(model, null);
   }
 
   const depth = model.depth[offset];
-  for (const i of model.interfaces.values()) {
-    if (i.start < offset && offset <= i.end) {
-      return [{ label: "fn", kind: "keyword", detail: "method signature", insertText: "fn ${1:name}(${2}) -> ${3:str}", snippet: true, sortText: "0fn" }];
-    }
+  const iface = enclosing(model.interfaces, offset);
+  if (iface) {
+    return [{ label: "fn", kind: "keyword", detail: "method signature", insertText: "fn ${1:name}(${2}) -> ${3:str}", snippet: true, sortText: "0fn" }];
   }
-  const cls = enclosingClass(model, offset);
+  if (enclosing(model.enums, offset)) return [];
+  const cls = enclosing(model.classes, offset);
   const body = innermostBody(model, offset);
   const items = [];
 
   // Class body, between members.
   if (cls && !body && depth === model.depth[cls.start] + 1) {
+    const kw = (label, detail, insertText) => ({ label, kind: "keyword", detail, insertText, snippet: true, sortText: "0" + label });
     items.push(
-      { label: "fn", kind: "keyword", detail: "method", insertText: "fn ${1:name}(${2}) -> ${3:void} {\n\t$0\n}", snippet: true, sortText: "0fn" },
-      { label: "init", kind: "keyword", detail: "constructor", insertText: "init(${1}) {\n\t$0\n}", snippet: true, sortText: "0init" }
+      kw("fn", "method", "fn ${1:name}(${2}) -> ${3:void} {\n\t$0\n}"),
+      kw("init", "constructor", "init(${1}) {\n\t$0\n}"),
+      kw("private", "only usable inside this class", "private "),
+      kw("static fn", "method called on the class", "static fn ${1:name}(${2}) -> ${3:void} {\n\t$0\n}")
     );
+    if (cls.abstract) items.push(kw("abstract fn", "method subclasses must implement", "abstract fn ${1:name}(${2}) -> ${3:void}"));
     const parent = parentOf(model, cls.name);
     if (parent) {
       const own = new Set(cls.methods.map((m) => m.name));
       for (const m of classMethods(model, parent)) {
-        if (own.has(m.name)) continue;
+        if (own.has(m.name) || m.private) continue;
         const ret = m.ret && m.ret !== "void" ? ` -> ${m.ret}` : "";
         items.push({
           label: `override fn ${m.name}`,
           kind: "method",
-          detail: `override ${m.owner}.${m.name}${sigText(m.params, m.ret)}`,
+          detail: `${m.abstract ? "implement abstract" : "override"} ${m.owner}.${m.name}${sigText(m.params, m.ret)}`,
           documentation: m.doc || "",
           insertText: `override fn ${m.name}(${m.params.map((p) => `${p.name}: ${p.type}`).join(", ")})${ret} {\n\t$0\n}`,
           snippet: true,
-          sortText: "1" + m.name,
+          sortText: (m.abstract ? "0" : "1") + m.name,
         });
       }
     }
@@ -583,12 +960,36 @@ function complete(text, offset) {
 
   // Top level.
   if (depth === 0) {
-    for (const k of ["fn", "class", "interface"]) items.push({ label: k, kind: "keyword", insertText: k, sortText: "0" + k });
+    for (const k of ["fn", "class", "abstract class", "interface", "enum", "import"]) {
+      items.push({ label: k, kind: "keyword", insertText: k === "import" ? 'import "${1:file.kl}"' : k, snippet: k === "import", sortText: "0" + k });
+    }
     return items;
   }
 
   // Inside a function or method body.
   const scope = scopeAt(model, offset);
+
+  // Arm position inside `match x { ... }`: offer the patterns.
+  const mt = enclosingMatch(model, offset);
+  if (mt && depth === model.depth[mt.open] + 1 && /^\s*\w*$/.test(prefix)) {
+    const st = exprType(model, scope, mt.scrutinee);
+    const en = st && model.enums.get(st);
+    if (en) {
+      for (const v of en.variants) {
+        items.push({
+          label: v.name,
+          kind: "enumMember",
+          detail: `${en.name}.${v.name}${v.params.length ? sigText(v.params, "") : ""}`,
+          insertText: (v.params.length ? callSnippet(v.name, v.params) : v.name) + " => ",
+          snippet: v.params.length > 0,
+          sortText: "0" + v.name,
+        });
+      }
+    }
+    items.push({ label: "_", kind: "keyword", detail: "matches anything else", insertText: "_ => ", sortText: "1_" });
+    return items;
+  }
+
   for (const v of scope.locals.values()) {
     items.push({ label: v.name, kind: "variable", detail: v.type ? `${v.name}: ${v.type}` : v.name, insertText: v.name, sortText: "0" + v.name });
   }
@@ -600,12 +1001,20 @@ function complete(text, offset) {
   }
   for (const f of model.functions.values()) {
     if (f.name === "main") continue;
-    items.push({ label: f.name, kind: "function", detail: `fn ${f.name}${sigText(f.params, f.ret)}`, documentation: f.doc, insertText: callSnippet(f.name, f.params), snippet: true, sortText: "2" + f.name });
+    const tp = f.tparams && f.tparams.length ? `<${f.tparams.join(", ")}>` : "";
+    items.push({ label: f.name, kind: "function", detail: `fn ${f.name}${tp}${sigText(f.params, f.ret)}`, documentation: f.doc, insertText: callSnippet(f.name, f.params), snippet: true, sortText: "2" + f.name });
   }
   for (const c of model.classes.values()) {
+    if (c.abstract) {
+      items.push({ label: c.name, kind: "class", detail: `abstract class ${c.name}`, documentation: c.doc, insertText: c.name, sortText: "3" + c.name });
+      continue;
+    }
     const init = findInit(model, c.name);
     const params = init ? init.params : [];
     items.push({ label: c.name, kind: "constructor", detail: `${c.name}${sigText(params, "")}`, documentation: c.doc, insertText: callSnippet(c.name, params), snippet: true, sortText: "3" + c.name });
+  }
+  for (const e of model.enums.values()) {
+    items.push({ label: e.name, kind: "enum", detail: "enum " + e.name, documentation: e.doc, insertText: e.name, sortText: "3" + e.name });
   }
   for (const [name, b] of Object.entries(BUILTINS)) {
     const params = b.params.map((p) => ({ name: p.split(":")[0].replace("...", "") || "x" }));
@@ -629,8 +1038,8 @@ function complete(text, offset) {
  * Signature of the call surrounding `offset`, or null.
  * Returns { label, params: [string], activeParameter, documentation }.
  */
-function signatureHelp(text, offset) {
-  const model = analyze(text);
+function signatureHelp(text, offset, options = {}) {
+  const model = withImports(analyze(text, options.dir), options.load);
   const { code, hidden } = model;
   if (offset > 0 && hidden[offset - 1]) return null;
 
@@ -653,7 +1062,8 @@ function signatureHelp(text, offset) {
   }
   if (open < 0) return null;
 
-  const before = code.slice(0, open).replace(/\s+$/, "");
+  let before = code.slice(0, open).replace(/\s+$/, "");
+  if (before.endsWith(">")) before = before.slice(0, before.lastIndexOf("<")).replace(/\s+$/, ""); // `first<int>(`
   const nameMatch = /([A-Za-z_]\w*)$/.exec(before);
   if (!nameMatch) return null;
   const name = nameMatch[1];
@@ -663,12 +1073,26 @@ function signatureHelp(text, offset) {
   let target = null; // { name, params, ret, doc }
   if (/\.\s*$/.test(head)) {
     const recv = receiverBefore(code, head.replace(/\s*$/, "").length - 1);
-    const type = chainType(model, scope, recv);
-    target = memberItemsRaw(model, type).find((m) => m.name === name) || null;
+    if (/^[A-Z]\w*$/.test(recv) && !scope.locals.has(recv)) {
+      if (model.enums.has(recv)) {
+        const v = model.enums.get(recv).variants.find((x) => x.name === name);
+        if (v) target = { name: `${recv}.${v.name}`, params: v.params, ret: "", doc: "" };
+      } else if (model.classes.has(recv)) {
+        target = staticMethods(model, recv).find((m) => m.name === name) || null;
+      }
+    } else {
+      target = methodsOf(model, chainType(model, scope, recv)).find((m) => m.name === name) || null;
+    }
   } else if (name === "super" && scope.cls) {
     const parent = parentOf(model, scope.cls);
     const init = parent && findInit(model, parent);
     if (init) target = { name: "super", params: init.params, ret: "void", doc: init.doc };
+  } else if (scope.locals.has(name) && (scope.locals.get(name).type || "").startsWith("fn(")) {
+    const t = scope.locals.get(name).type;
+    const close = matchClose(t, 2);
+    const ps = splitTop(t.slice(3, close - 1), ",").map((s) => s.trim()).filter(Boolean);
+    const r = /^\s*->\s*(.+)$/.exec(t.slice(close));
+    target = { name, params: ps.map((p) => ({ name: p })), ret: r ? r[1] : "void", doc: "" };
   } else if (model.classes.has(name)) {
     const init = findInit(model, name);
     target = { name, params: init ? init.params : [], ret: "", doc: model.classes.get(name).doc };
@@ -688,15 +1112,6 @@ function signatureHelp(text, offset) {
     activeParameter: Math.min(commas, Math.max(0, params.length - 1)),
     documentation: target.doc || "",
   };
-}
-
-function memberItemsRaw(model, type) {
-  if (!type) return [];
-  if (type === "str") return STR_METHODS;
-  if (isArray(type)) return arrayMethods(elemOf(type));
-  if (model.interfaces.has(type)) return model.interfaces.get(type).methods;
-  if (model.classes.has(type)) return classMethods(model, type);
-  return [];
 }
 
 module.exports = { analyze, complete, signatureHelp, scopeAt, chainType };

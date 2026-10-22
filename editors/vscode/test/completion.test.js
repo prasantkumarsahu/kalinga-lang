@@ -175,7 +175,125 @@ test("signature help for functions, constructors, methods and builtins", () => {
   assert.strictEqual(s.activeParameter, 1);
 
   s = sig("    print(len(|");
-  assert.strictEqual(s.label, "len(x: [T] or str) -> int");
+  assert.strictEqual(s.label, "len(x: [T], {K: V} or str) -> int");
 
   assert.strictEqual(sig("    let x = 1 + |"), null);
+});
+
+// ---------------------------------------------------------------- v0.2 syntax
+
+const V2 = `
+enum Shape {
+    Circle(r: float)
+    Rect(w: float, h: float)
+    Empty
+}
+
+interface Named {
+    fn name() -> str
+}
+interface Pet : Named {
+    fn sound() -> str
+}
+
+abstract class Animal : Pet {
+    private secret: int = 1
+    nick: str
+    tags: {str: int}
+    on_pet: fn(str) -> str = fn(who) => who
+
+    fn name() -> str { return self.nick }
+    abstract fn sound() -> str
+    private fn hidden() -> int { return self.secret }
+    static fn create(nick: str) -> Animal { return Dog(nick) }
+}
+
+class Dog : Animal {
+    override fn sound() -> str { return "woof" }
+}
+
+class Stack<T> {
+    items: [T]
+    fn push(x: T) { self.items.push(x) }
+    fn peek() -> T? { return none }
+}
+
+fn apply(f: fn(int) -> int, x: int) -> int { return f(x) }
+fn first<T>(xs: [T]) -> T? { return none }
+`;
+
+function at2(body, extra = "") {
+  const src = V2 + extra + "\nfn main() {\n" + body + "\n}\n";
+  const offset = src.indexOf("|");
+  return complete(src.replace("|", ""), offset);
+}
+
+test("enum variants after `Enum.` and static methods after `Class.`", () => {
+  const v = at2("    let s = Shape.|");
+  assert.deepStrictEqual(labels(v), ["Circle", "Empty", "Rect"]);
+  assert.strictEqual(v.find((i) => i.label === "Rect").insertText, "Rect(${1:w}, ${2:h})");
+  assert.deepStrictEqual(labels(at2("    let a = Animal.|")), ["create"]);
+});
+
+test("private members are hidden outside their class", () => {
+  const outside = labels(at2('    let d = Dog("x")\n    d.|'));
+  assert.ok(!outside.includes("secret") && !outside.includes("hidden"));
+  assert.ok(outside.includes("nick") && outside.includes("sound") && outside.includes("on_pet"));
+  const src = V2.replace("fn name() -> str { return self.nick }", "fn name() -> str { return self.| }") + "\nfn main() {}\n";
+  const inside = labels(complete(src.replace("|", ""), src.indexOf("|")));
+  assert.ok(inside.includes("secret") && inside.includes("hidden"));
+});
+
+test("maps, generics, interface inheritance and interpolation", () => {
+  assert.ok(labels(at2('    let d = Dog("x")\n    d.tags.|')).includes("keys"));
+  assert.ok(labels(at2('    let m = {"a": [1]}\n    m.|')).includes("values"));
+  const st = at2("    let s: Stack<str> = Stack()\n    s.peek|");
+  assert.ok(labels(st).includes("peek"));
+  assert.strictEqual(st.find((i) => i.label === "push").detail, "Stack.push(x: str)");
+  assert.ok(labels(at2('    let p: Pet = Dog("x")\n    p.|')).includes("name"));
+  assert.ok(labels(at2('    let n = "Asha"\n    print("hi {n.|}")')).includes("upper"));
+});
+
+test("match arms offer variants and bind payloads", () => {
+  const arms = at2("    let s = Shape.Empty\n    match s {\n        |\n    }");
+  assert.deepStrictEqual(labels(arms), ["Circle", "Empty", "Rect", "_"]);
+  const bound = labels(at2("    let s = Shape.Empty\n    match s {\n        Circle(r) => print(r.|)\n    }"));
+  assert.deepStrictEqual(bound, []); // float has no members, but no crash
+  const scope = labels(at2("    let s = Shape.Empty\n    match s {\n        Rect(w, h) => {\n            |\n        }\n    }"));
+  assert.ok(scope.includes("w") && scope.includes("h"));
+});
+
+test("lambda parameters get element types from map/filter", () => {
+  assert.ok(labels(at2('    let xs = ["a"]\n    let ys = xs.map(fn(s) => s.|)')).includes("upper"));
+  assert.ok(labels(at2("    let f = fn(n: int) => n\n    |")).includes("f"));
+});
+
+test("class body offers abstract implementations first, plus modifiers", () => {
+  const items = complete(V2 + "\nclass Cat : Animal {\n    |\n}\n".replace("|", ""), (V2 + "\nclass Cat : Animal {\n    ").length);
+  const l = labels(items);
+  assert.ok(l.includes("override fn sound") && l.includes("private") && l.includes("static fn"));
+  assert.ok(!l.includes("override fn hidden"), "private methods cannot be overridden");
+  assert.strictEqual(items.find((i) => i.label === "override fn sound").sortText, "0sound");
+});
+
+test("imported declarations are offered", () => {
+  const lib = "class Tool {\n    size: int\n}\nfn helper(n: int) -> int { return n }\n";
+  const src = 'import "lib.kl"\nfn main() {\n    let t = Tool()\n    t.|\n}\n';
+  const load = (p) => (p === "lib.kl" ? { text: lib, dir: "", key: "lib" } : null);
+  const items = complete(src.replace("|", ""), src.indexOf("|"), { load });
+  assert.deepStrictEqual(labels(items), ["size"]);
+  const general = complete(src.replace("t.|", "|"), src.indexOf("t.|"), { load });
+  assert.ok(labels(general).includes("helper"));
+});
+
+test("signature help for v0.2 calls", () => {
+  const sig = (body) => {
+    const src = V2 + "\nfn main() {\n" + body + "\n}\n";
+    return signatureHelp(src.replace("|", ""), src.indexOf("|"));
+  };
+  assert.strictEqual(sig("    Shape.Rect(1.0, |").label, "Shape.Rect(w: float, h: float)");
+  assert.strictEqual(sig("    Animal.create(|").label, "create(nick: str) -> Animal");
+  assert.strictEqual(sig("    first<int>(|").label, "first(xs: [T]) -> T?");
+  assert.strictEqual(sig("    apply(fn(x) => x, |").activeParameter, 1);
+  assert.strictEqual(sig("    let g = fn(a: int, b: str) => a\n    g(1, |").label, "g(int, str) -> int");
 });

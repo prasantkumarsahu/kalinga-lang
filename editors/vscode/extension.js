@@ -1,6 +1,7 @@
 // Kalinga VS Code extension: live diagnostics via `kalinga check`, plus run/build/emit commands.
 const vscode = require("vscode");
 const { execFile } = require("child_process");
+const fs = require("fs");
 const path = require("path");
 const completion = require("./completion");
 
@@ -36,15 +37,41 @@ function reportMissingCompiler(err) {
   return false;
 }
 
+const samePath = (a, b) => path.resolve(a).toLowerCase() === path.resolve(b).toLowerCase();
+
+/** Line index of the `import "..."` that brings in `file`, or of the first import, or 0. */
+function importLine(document, file) {
+  const lines = document.getText().split(/\r?\n/);
+  const base = path.basename(file);
+  const i = lines.findIndex((l) => /^\s*import\s+"/.test(l) && l.includes(base));
+  if (i >= 0) return i;
+  const any = lines.findIndex((l) => /^\s*import\s+"/.test(l));
+  return any >= 0 ? any : 0;
+}
+
 /**
  * Parses `<file>:<line>:<col>: error: <message>` (file may itself contain colons on Windows).
+ * Errors inside imported files are shown on the matching `import` line.
  * @returns {vscode.Diagnostic[]}
  */
 function parseErrors(stderr, document) {
   const out = [];
   for (const line of stderr.split(/\r?\n/)) {
-    const m = /:(\d+):(\d+): error: (.*)$/.exec(line);
-    if (!m) continue;
+    const full = /^(.*):(\d+):(\d+): error: (.*)$/.exec(line);
+    if (!full) continue;
+    if (!document.isUntitled && !samePath(full[1], document.fileName)) {
+      const lineNo = importLine(document, full[1]);
+      const text = document.lineAt(lineNo).text;
+      const d = new vscode.Diagnostic(
+        new vscode.Range(lineNo, 0, lineNo, text.length),
+        `in ${path.basename(full[1])}:${full[2]}:${full[3]}: ${full[4]}`,
+        vscode.DiagnosticSeverity.Error
+      );
+      d.source = "kalinga";
+      out.push(d);
+      continue;
+    }
+    const m = [full[0], full[2], full[3], full[4]];
     const lineNo = Math.max(0, Math.min(parseInt(m[1], 10) - 1, document.lineCount - 1));
     const col = Math.max(0, parseInt(m[2], 10) - 1);
     const pos = new vscode.Position(lineNo, col);
@@ -58,10 +85,29 @@ function parseErrors(stderr, document) {
   return out;
 }
 
+/** Reads imported files for completion (`import` paths are relative to the importing file). */
+function importLoader(document) {
+  if (document.isUntitled) return {};
+  return {
+    dir: path.dirname(document.fileName),
+    load(importPath, dir) {
+      const full = path.resolve(dir || path.dirname(document.fileName), importPath);
+      const open = vscode.workspace.textDocuments.find((d) => !d.isUntitled && samePath(d.fileName, full));
+      try {
+        const text = open ? open.getText() : fs.readFileSync(full, "utf8");
+        return { text, dir: path.dirname(full), key: full.toLowerCase() };
+      } catch {
+        return null;
+      }
+    },
+  };
+}
+
 function check(document) {
   if (document.languageId !== LANG) return;
   const version = document.version;
-  const label = path.basename(document.fileName) || "untitled.kl";
+  // The full path lets the compiler resolve `import`s next to this file.
+  const label = document.isUntitled ? "untitled.kl" : document.fileName;
   const child = execFile(compilerPath(), ["check", label, "--stdin"], { timeout: 10000 }, (err, _stdout, stderr) => {
     if (err && reportMissingCompiler(err)) return;
     // Ignore results for text that has changed since the check started.
@@ -156,11 +202,13 @@ const ITEM_KINDS = {
   class: vscode.CompletionItemKind.Class,
   interface: vscode.CompletionItemKind.Interface,
   type: vscode.CompletionItemKind.TypeParameter,
+  enum: vscode.CompletionItemKind.Enum,
+  enumMember: vscode.CompletionItemKind.EnumMember,
 };
 
 const completionProvider = {
   provideCompletionItems(document, position) {
-    const items = completion.complete(document.getText(), document.offsetAt(position));
+    const items = completion.complete(document.getText(), document.offsetAt(position), importLoader(document));
     return items.map((it) => {
       const item = new vscode.CompletionItem(it.label, ITEM_KINDS[it.kind] || vscode.CompletionItemKind.Text);
       item.insertText = it.snippet ? new vscode.SnippetString(it.insertText) : it.insertText;
@@ -175,7 +223,7 @@ const completionProvider = {
 
 const signatureProvider = {
   provideSignatureHelp(document, position) {
-    const sig = completion.signatureHelp(document.getText(), document.offsetAt(position));
+    const sig = completion.signatureHelp(document.getText(), document.offsetAt(position), importLoader(document));
     if (!sig) return null;
     const info = new vscode.SignatureInformation(sig.label, sig.documentation ? new vscode.MarkdownString(sig.documentation) : undefined);
     info.parameters = sig.params.map((p) => new vscode.ParameterInformation(p));

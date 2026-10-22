@@ -4,14 +4,24 @@ Language support for Kalinga `.kl` files, a simple object-oriented language that
 
 - Syntax highlighting: keywords, classes, interfaces, types, functions, strings and numbers
 - Code completion:
-  - members after `.`, including inherited fields and methods, string and array methods
-  - variables, parameters, functions, classes (with constructor arguments) and built-ins
-  - types after `:` and `->`, base classes and interfaces after `class Name :`
-  - `override fn ...` for every inherited method, inside a class body
+  - members after `.`: fields and methods (including inherited ones and super-interfaces),
+    string, array and map methods, generic classes with their type arguments filled in
+  - `private` members only inside their own class
+  - enum variants after `Enum.`, static methods after `Class.`
+  - variables (including lambda parameters and `match` bindings), functions, classes with
+    constructor arguments, enums and built-ins; inside `{...}` string interpolation too
+  - types after `:`, `->` and `<`; bases after `class Name :` / `interface Name :`
+  - in a `match`, the enum's variants as arm patterns
+  - inside a class body, `override fn` stubs (abstract methods first), `private`, `static fn`
+  - declarations from `import`ed files
   - documentation from `//` comments written above a declaration
-- Signature help: parameter hints while typing a call's arguments
-- Live error checking while you type, using the compiler's own checker (`kalinga check`)
-- Snippets: `main`, `fn`, `class`, `classx` (subclass), `interface`, `init`, `meth`, `override`, `if`, `ife`, `iflet`, `while`, `for`, `forr`, `pr`
+- Signature help: parameter hints for functions, generic functions, constructors, methods,
+  static methods, enum variants and function-typed variables
+- Live error checking while you type, using the compiler's own checker (`kalinga check`);
+  errors inside imported files are shown on the `import` line
+- Snippets: `main`, `fn`, `class`, `classx` (subclass), `aclass` (abstract), `gclass` (generic),
+  `interface`, `enum`, `match`, `init`, `meth`, `sfn` (static), `override`, `lam` / `lamb` (lambdas),
+  `import`, `if`, `ife`, `iflet`, `ifas` (downcast), `while`, `for`, `forr`, `pr`
 - Commands:
   - **Kalinga: Run File**: the ▶ button in the editor title, or `Ctrl+F5`
   - **Kalinga: Build Executable**
@@ -38,7 +48,7 @@ Language support for Kalinga `.kl` files, a simple object-oriented language that
      ```
 
      ```bash
-     code --install-extension kalinga-lang-0.2.0.vsix
+     code --install-extension kalinga-lang-0.3.0.vsix
      ```
 
    - **Or try it without installing**: open `editors/vscode` in VS Code and press `F5`
