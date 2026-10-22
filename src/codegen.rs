@@ -5,7 +5,7 @@
 //! dynamically; leaf classes use the concrete struct for static dispatch.
 
 use std::cell::RefCell;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fmt::Write as _;
 
 use crate::ast::*;
@@ -13,7 +13,7 @@ use crate::checker::{class_trait, has_params, is_map_key, subst, subst_sig, unif
 use crate::error::{err, Pos, Result};
 
 pub fn generate(prog: &Program, model: &Model) -> Result<String> {
-    let g = Gen { m: model };
+    let g = Gen { m: model, self_values: RefCell::new(HashSet::new()), cast_targets: RefCell::new(HashSet::new()) };
     g.program(prog)
 }
 
@@ -110,6 +110,10 @@ impl Ctx {
 
 struct Gen<'a> {
     m: &'a Model,
+    /// Classes whose methods use `self` as a value (recorded while generating bodies).
+    self_values: RefCell<HashSet<String>>,
+    /// Classes used as the target of `as` / `is`.
+    cast_targets: RefCell<HashSet<String>>,
 }
 
 fn clone_if(code: String, ty: &Type) -> String {
@@ -206,6 +210,27 @@ impl<'a> Gen<'a> {
     // ------------------------------------------------------------ program
 
     fn program(&self, prog: &Program) -> Result<String> {
+        // Bodies come first: generating them records which classes need a self-pointer
+        // (`self` as a value, `as`/`is` targets), which decides how classes are emitted.
+        let (method_bodies, init_bodies, field_defaults) = self.class_bodies()?;
+        let mut functions = String::new();
+        for f in &prog.functions {
+            let sig = self.m.functions[&f.name].clone();
+            let mut cx = Ctx::new(None, sig.ret.clone(), false);
+            cx.tparams = f.tparams.clone();
+            let body = self.body_in(&mut cx, &sig, &f.body, f.pos, &f.name, 1)?;
+            writeln!(
+                functions,
+                "\nfn {}{}({}){} {{\n{}}}",
+                fn_id(&f.name),
+                generic_params(&f.tparams),
+                self.params_decl(&sig),
+                self.ret_suffix(&sig.ret),
+                body
+            )
+            .unwrap();
+        }
+
         let mut out = String::new();
         out.push_str(PRELUDE);
 
@@ -218,7 +243,7 @@ impl<'a> Gen<'a> {
             for (mname, sig) in &info.methods {
                 writeln!(out, "    fn {}(&mut self{}){};", rid(mname), self.comma_params(sig), self.ret_suffix(&sig.ret)).unwrap();
             }
-            for target in self.m.class_order.iter().filter(|c| self.m.all_interfaces(c).contains(iname)) {
+            for target in self.m.class_order.iter().filter(|c| self.m.all_interfaces(c).contains(iname) && self.is_cast_target(c)) {
                 writeln!(out, "    fn __as_{}(&self) -> Option<{}> {{ None }}", target, self.rty(&Type::Class(target.clone()))).unwrap();
             }
             out.push_str("}\n");
@@ -227,8 +252,20 @@ impl<'a> Gen<'a> {
         for ename in &self.m.enum_order {
             self.enum_decl(&mut out, ename);
         }
+        for cname in &self.m.class_order {
+            self.class(&mut out, cname, &method_bodies, &init_bodies, &field_defaults);
+        }
+        out.push_str(&functions);
+        writeln!(out, "\nfn main() {{\n    __kl_run({});\n}}", fn_id("main")).unwrap();
+        Ok(out)
+    }
 
-        // Bodies are generated once per defining class and pasted into every subclass.
+    /// Method, init and field-default code for every class. Bodies are generated once per
+    /// defining class and pasted into every subclass.
+    #[allow(clippy::type_complexity)]
+    fn class_bodies(
+        &self,
+    ) -> Result<(HashMap<(String, String), String>, HashMap<String, String>, HashMap<(String, String), String>)> {
         let mut method_bodies: HashMap<(String, String), String> = HashMap::new();
         let mut init_bodies: HashMap<String, String> = HashMap::new();
         let mut field_defaults: HashMap<(String, String), String> = HashMap::new();
@@ -267,30 +304,18 @@ impl<'a> Gen<'a> {
                 init_bodies.insert(cname.clone(), body);
             }
         }
+        Ok((method_bodies, init_bodies, field_defaults))
+    }
 
-        for cname in &self.m.class_order {
-            self.class(&mut out, cname, &method_bodies, &init_bodies, &field_defaults);
-        }
+    fn is_cast_target(&self, class: &str) -> bool {
+        self.cast_targets.borrow().contains(class)
+    }
 
-        for f in &prog.functions {
-            let sig = self.m.functions[&f.name].clone();
-            let mut cx = Ctx::new(None, sig.ret.clone(), false);
-            cx.tparams = f.tparams.clone();
-            let body = self.body_in(&mut cx, &sig, &f.body, f.pos, &f.name, 1)?;
-            writeln!(
-                out,
-                "\nfn {}{}({}){} {{\n{}}}",
-                fn_id(&f.name),
-                generic_params(&f.tparams),
-                self.params_decl(&sig),
-                self.ret_suffix(&sig.ret),
-                body
-            )
-            .unwrap();
-        }
-
-        writeln!(out, "\nfn main() {{\n    __kl_run({});\n}}", fn_id("main")).unwrap();
-        Ok(out)
+    /// Objects of `class` store a weak pointer to themselves only when something needs it:
+    /// a method (here or inherited) that uses `self` as a value, or `as`/`is` to this class
+    /// or one of its bases.
+    fn needs_self_ptr(&self, class: &str) -> bool {
+        self.m.ancestors(class).iter().any(|a| self.self_values.borrow().contains(a) || self.is_cast_target(a))
     }
 
     fn enum_decl(&self, out: &mut String, name: &str) {
@@ -413,8 +438,11 @@ impl<'a> Gen<'a> {
 
         writeln!(out, "\n// ===== class {} =====", cname).unwrap();
         // struct
+        let self_ptr = self.needs_self_ptr(cname);
         writeln!(out, "struct {} {{", self_ty).unwrap();
-        writeln!(out, "    __self: std::rc::Weak<RefCell<{}>>,", self_ty).unwrap();
+        if self_ptr {
+            writeln!(out, "    __self: std::rc::Weak<RefCell<{}>>,", self_ty).unwrap();
+        }
         for (f, t, _) in &fields {
             let rt = if matches!(t, Type::Param(_)) { format!("Option<{}>", self.rty(t)) } else { self.rty(t) };
             writeln!(out, "    {}: {},", rid(f), rt).unwrap();
@@ -440,7 +468,7 @@ impl<'a> Gen<'a> {
             writeln!(out, "    fn __set_{}(&mut self, v: {});", f, self.rty(t)).unwrap();
         }
         if info.parent.is_none() {
-            for target in self.hierarchy(cname) {
+            for target in self.hierarchy(cname).iter().filter(|t| self.is_cast_target(t)) {
                 writeln!(out, "    fn __as_{}(&self) -> Option<{}> {{ None }}", target, self.rty(&Type::Class(target.clone()))).unwrap();
             }
         }
@@ -452,9 +480,15 @@ impl<'a> Gen<'a> {
         let ctor = m.find_init(cname);
         let ctor_params = ctor.as_ref().map(|(_, s)| self.params_decl(s)).unwrap_or_default();
         writeln!(out, "    fn __new({}) -> Rc<RefCell<{}>> {{", ctor_params, self_ty).unwrap();
-        out.push_str("        Rc::new_cyclic(|__w| {\n");
+        if self_ptr {
+            out.push_str("        Rc::new_cyclic(|__w| {\n");
+        } else {
+            out.push_str("        Rc::new({\n");
+        }
         writeln!(out, "            let mut __o = {} {{", cname).unwrap();
-        out.push_str("                __self: __w.clone(),\n");
+        if self_ptr {
+            out.push_str("                __self: __w.clone(),\n");
+        }
         for (f, _, owner) in &fields {
             writeln!(out, "                {}: {},", rid(f), field_defaults[&(owner.clone(), f.clone())]).unwrap();
         }
@@ -544,7 +578,7 @@ impl<'a> Gen<'a> {
                 writeln!(out, "    fn __set_{}(&mut self, v: {}) {{ self.{} = v; }}", f, self.rty(t), rid(f)).unwrap();
             }
             if m.classes[a].parent.is_none() {
-                for target in &ancestors {
+                for target in ancestors.iter().filter(|t| self.is_cast_target(t)) {
                     self.downcast_hook(out, target);
                 }
             }
@@ -555,7 +589,7 @@ impl<'a> Gen<'a> {
             for (mname, sig) in &m.interfaces[&iname].methods {
                 forward(out, mname, sig);
             }
-            for target in ancestors.iter().filter(|t| m.all_interfaces(t).contains(&iname)) {
+            for target in ancestors.iter().filter(|t| m.all_interfaces(t).contains(&iname) && self.is_cast_target(t)) {
                 self.downcast_hook(out, target);
             }
             out.push_str("}\n");
@@ -1194,6 +1228,7 @@ impl<'a> Gen<'a> {
                     return err("`self` cannot be used as a value inside `init` (the object is not finished yet)", e.pos);
                 }
                 let ty = self.class_type(&class);
+                self.self_values.borrow_mut().insert(class);
                 Ok((format!("(self.__self.upgrade().unwrap() as {})", self.rty(&ty)), ty))
             }
             ExprKind::Downcast { value, class, test_only } => self.downcast(cx, value, class, *test_only, e.pos),
@@ -1451,10 +1486,12 @@ impl<'a> Gen<'a> {
         let call = match &ty {
             Type::Class(c) if c == target => format!("Some({})", code),
             Type::Class(c) if self.m.is_subclass(target, c) => {
+                self.cast_targets.borrow_mut().insert(target.to_string());
                 let root = self.m.ancestors(c).last().unwrap().clone();
                 format!("{{ let __x = {}; let __t = {}::__as_{}(&*__x.borrow()); __t }}", code, class_trait(&root), target)
             }
             Type::Interface(i) if self.m.all_interfaces(target).contains(i) => {
+                self.cast_targets.borrow_mut().insert(target.to_string());
                 format!("{{ let __x = {}; let __t = {}::__as_{}(&*__x.borrow()); __t }}", code, i, target)
             }
             Type::Class(_) | Type::Interface(_) => {
