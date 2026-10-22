@@ -14,9 +14,6 @@
     "Linters"
   ],
   "main": "./extension.js",
-  "activationEvents": [
-    "onLanguage:kalinga"
-  ],
   "contributes": {
     "languages": [
       {
