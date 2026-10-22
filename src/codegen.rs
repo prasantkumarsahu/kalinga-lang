@@ -54,12 +54,14 @@ struct Ctx {
     class: Option<String>,
     ret: Type,
     in_init: bool,
+    /// Inside a `static fn`: no `self`.
+    is_static: bool,
     loops: usize,
 }
 
 impl Ctx {
     fn new(class: Option<String>, ret: Type, in_init: bool) -> Ctx {
-        Ctx { scopes: vec![HashMap::new()], class, ret, in_init, loops: 0 }
+        Ctx { scopes: vec![HashMap::new()], class, ret, in_init, is_static: false, loops: 0 }
     }
 
     fn lookup(&self, name: &str) -> Option<&Var> {
@@ -141,7 +143,7 @@ impl<'a> Gen<'a> {
                 format!("({}).map(|__v| {})", code, self.coerce("__v".into(), a, b, pos)?)
             }
             (f, Type::Optional(inner)) => format!("Some({})", self.coerce(code, f, inner, pos)?),
-            (Type::Class(_), Type::Class(_)) | (Type::Class(_), Type::Interface(_)) => {
+            (Type::Class(_), Type::Class(_)) | (Type::Class(_), Type::Interface(_)) | (Type::Interface(_), Type::Interface(_)) => {
                 format!("({} as {})", code, self.rty(to))
             }
             (Type::Map(_, a), Type::Map(_, b)) => format!(
@@ -167,7 +169,9 @@ impl<'a> Gen<'a> {
         for iname in &self.m.interface_order {
             let info = &self.m.interfaces[iname];
             writeln!(out, "\n// interface {}", iname).unwrap();
-            writeln!(out, "trait {} {{", iname).unwrap();
+            let supers = &info.supers;
+            let bound = if supers.is_empty() { String::new() } else { format!(": {}", supers.join(" + ")) };
+            writeln!(out, "trait {}{} {{", iname, bound).unwrap();
             for (mname, sig) in &info.methods {
                 writeln!(out, "    fn {}(&mut self{}){};", rid(mname), self.comma_params(sig), self.ret_suffix(&sig.ret)).unwrap();
             }
@@ -196,9 +200,16 @@ impl<'a> Gen<'a> {
                 field_defaults.insert((cname.clone(), f.name.clone()), code);
             }
             for meth in &info.decl.methods {
-                let sig = info.methods[&meth.name].clone();
-                let body = self.body(Some(cname.clone()), &sig, &meth.body, false, meth.pos, &meth.name, 2)?;
-                method_bodies.insert((cname.clone(), meth.name.clone()), body);
+                if meth.is_abstract {
+                    method_bodies.insert((cname.clone(), meth.name.clone()), "        unreachable!(\"abstract method\")\n".into());
+                    continue;
+                }
+                let sig = if meth.is_static { info.statics[&meth.name].clone() } else { info.methods[&meth.name].clone() };
+                let mut cx = Ctx::new(Some(cname.clone()), sig.ret.clone(), false);
+                cx.is_static = meth.is_static;
+                let body = self.body_in(&mut cx, &sig, &meth.body, meth.pos, &meth.name, 2)?;
+                let key = if meth.is_static { format!("static {}", meth.name) } else { meth.name.clone() };
+                method_bodies.insert((cname.clone(), key), body);
             }
             if let Some(init) = &info.decl.init {
                 let sig = info.init.clone().unwrap();
@@ -392,6 +403,19 @@ impl<'a> Gen<'a> {
                 .unwrap();
             }
         }
+        let mut statics: Vec<(&String, &Signature)> = info.statics.iter().collect();
+        statics.sort_by(|a, b| a.0.cmp(b.0));
+        for (mname, sig) in statics {
+            writeln!(
+                out,
+                "    fn __s_{}({}){} {{\n{}    }}",
+                mname,
+                self.params_decl(sig),
+                self.ret_suffix(&sig.ret),
+                method_bodies[&(cname.to_string(), format!("static {}", mname))]
+            )
+            .unwrap();
+        }
         // Virtual methods resolve to the most-derived body.
         for (mname, owner, sig) in m.method_table(cname) {
             writeln!(
@@ -458,13 +482,17 @@ impl<'a> Gen<'a> {
         depth: usize,
     ) -> Result<String> {
         let mut cx = Ctx::new(class, sig.ret.clone(), in_init);
+        self.body_in(&mut cx, sig, stmts, pos, name, depth)
+    }
+
+    fn body_in(&self, cx: &mut Ctx, sig: &Signature, stmts: &[Stmt], pos: Pos, name: &str, depth: usize) -> Result<String> {
         for (p, t) in &sig.params {
             cx.declare(p, t.clone(), false, pos)?;
         }
         if sig.ret != Type::Void && !always_returns(stmts) {
             return err(format!("`{}` must return a `{}` on every path", name, sig.ret), pos);
         }
-        self.block_inner(&mut cx, stmts, depth)
+        self.block_inner(cx, stmts, depth)
     }
 
     // ------------------------------------------------------------ statements
@@ -728,7 +756,7 @@ impl<'a> Gen<'a> {
                 let (rcode, rt) = self.recv(cx, recv)?;
                 if let Type::Class(c) = &rt {
                     if self.m.has_subclasses(c) {
-                        let ft = self.field_type(c, f, target.pos)?;
+                        let ft = self.field_type(cx, c, f, target.pos)?;
                         let v = self.assign_value(cx, op, &ft, value)?;
                         let new = match op {
                             AssignOp::Set => "__v".to_string(),
@@ -802,13 +830,13 @@ impl<'a> Gen<'a> {
                 }
                 if matches!(recv.kind, ExprKind::SelfRef) {
                     let class = self.self_class(cx, recv.pos)?;
-                    let t = self.field_type(&class, f, e.pos)?;
+                    let t = self.field_type(cx, &class, f, e.pos)?;
                     return Ok((String::new(), format!("self.{}", rid(f)), t));
                 }
                 let (rcode, rt) = self.recv(cx, recv)?;
                 match &rt {
                     Type::Class(c) if !self.m.has_subclasses(c) => {
-                        let t = self.field_type(c, f, e.pos)?;
+                        let t = self.field_type(cx, c, f, e.pos)?;
                         Ok((String::new(), format!("{}.borrow_mut().{}", rcode, rid(f)), t))
                     }
                     Type::Class(_) => err("cannot modify part of a field through a base-class reference; add a method to the class instead", e.pos),
@@ -845,14 +873,44 @@ impl<'a> Gen<'a> {
     }
 
     fn self_class(&self, cx: &Ctx, pos: Pos) -> Result<String> {
+        if cx.is_static {
+            return err("`self` is not available in a `static fn`", pos);
+        }
         cx.class.clone().ok_or_else(|| crate::error::CompileError::new("`self` is only available inside class methods", pos))
     }
 
-    fn field_type(&self, class: &str, field: &str, pos: Pos) -> Result<Type> {
+    fn field_type(&self, cx: &Ctx, class: &str, field: &str, pos: Pos) -> Result<Type> {
         match self.m.all_fields(class).into_iter().find(|(n, _, _)| n == field) {
-            Some((_, t, _)) => Ok(t),
+            Some((_, t, owner)) => {
+                if self.m.classes[&owner].private_fields.contains(field) && cx.class.as_deref() != Some(owner.as_str()) {
+                    return err(format!("field `{}` is private to `{}`", field, owner), pos);
+                }
+                Ok(t)
+            }
             None => err(format!("`{}` has no field `{}`", class, field), pos),
         }
+    }
+
+    fn check_method_access(&self, cx: &Ctx, owner: &str, method: &str, pos: Pos) -> Result<()> {
+        let info = &self.m.classes[owner];
+        if info.private_methods.contains(method) && cx.class.as_deref() != Some(owner) {
+            return err(format!("method `{}` is private to `{}`", method, owner), pos);
+        }
+        Ok(())
+    }
+
+    /// `Class.method(args)` for a `static fn`.
+    fn static_call(&self, cx: &mut Ctx, class: &str, name: &str, args: &[Expr], pos: Pos) -> Result<(String, Type)> {
+        let (owner, sig) = match self.m.find_static(class, name) {
+            Some(x) => x,
+            None if self.m.find_method(class, name).is_some() => {
+                return err(format!("`{}` is not a `static fn`; call it on a `{}` object", name, class), pos)
+            }
+            None => return err(format!("`{}` has no static method `{}`", class, name), pos),
+        };
+        self.check_method_access(cx, &owner, name, pos)?;
+        let (binds, names) = self.args(cx, &sig, args, pos, name)?;
+        Ok((format!("{{ {}{}::__s_{}({}) }}", binds, owner, name, names), sig.ret))
     }
 
     /// Receiver for a method call or field access, borrowed when it is a plain variable.
@@ -977,13 +1035,13 @@ impl<'a> Gen<'a> {
                 }
                 if matches!(recv.kind, ExprKind::SelfRef) {
                     let class = self.self_class(cx, recv.pos)?;
-                    let t = self.field_type(&class, f, e.pos)?;
+                    let t = self.field_type(cx, &class, f, e.pos)?;
                     return Ok((clone_if(format!("self.{}", rid(f)), &t), t));
                 }
                 let (rcode, rt) = self.recv(cx, recv)?;
                 match &rt {
                     Type::Class(c) => {
-                        let t = self.field_type(c, f, e.pos)?;
+                        let t = self.field_type(cx, c, f, e.pos)?;
                         let read = if self.m.has_subclasses(c) {
                             format!("{}.borrow().__get_{}()", rcode, f)
                         } else {
@@ -1017,6 +1075,10 @@ impl<'a> Gen<'a> {
                     Some(x) => x,
                     None => return err(format!("no base class of `{}` has a method `{}`", class, name), e.pos),
                 };
+                self.check_method_access(cx, &owner, name, e.pos)?;
+                if self.m.classes[&owner].abstract_methods.contains(name) {
+                    return err(format!("`{}.{}` is abstract and has no body to call", owner, name), e.pos);
+                }
                 let (binds, names) = self.args(cx, &sig, args, e.pos, name)?;
                 Ok((format!("{{ {}self.__{}__{}({}) }}", binds, owner, name, names), sig.ret))
             }
@@ -1071,6 +1133,9 @@ impl<'a> Gen<'a> {
             return self.builtin(cx, name, args, pos);
         }
         if self.m.classes.contains_key(name) {
+            if self.m.classes[name].decl.is_abstract {
+                return err(format!("`{}` is abstract and cannot be created; create one of its subclasses", name), pos);
+            }
             let sig = self.m.find_init(name).map(|(_, s)| s).unwrap_or(Signature { params: vec![], ret: Type::Void });
             let mut codes = vec![];
             if args.len() != sig.params.len() {
@@ -1177,10 +1242,21 @@ impl<'a> Gen<'a> {
         if let Some(t) = self.type_receiver(cx, recv) {
             return self.variant_value(cx, &t, name, Some(args), pos);
         }
+        if let ExprKind::Ident(n) = &recv.kind {
+            if cx.lookup(n).is_none() && self.m.classes.contains_key(n) {
+                return self.static_call(cx, n, name, args, pos);
+            }
+        }
         if matches!(recv.kind, ExprKind::SelfRef) {
             let class = self.self_class(cx, recv.pos)?;
             let sig = match self.m.find_method(&class, name) {
-                Some((_, s)) => s,
+                Some((owner, s)) => {
+                    self.check_method_access(cx, &owner, name, pos)?;
+                    s
+                }
+                None if self.m.find_static(&class, name).is_some() => {
+                    return err(format!("`{}` is a `static fn`; call it as `{}.{}(...)`", name, class, name), pos)
+                }
                 None => return err(format!("`{}` has no method `{}`", class, name), pos),
             };
             let (binds, names) = self.args(cx, &sig, args, pos, name)?;
@@ -1223,7 +1299,13 @@ impl<'a> Gen<'a> {
             Type::Array(_) | Type::Str | Type::Map(..) => self.value_method(cx, &rcode, &rt, name, args, pos),
             Type::Class(c) => {
                 let sig = match self.m.find_method(c, name) {
-                    Some((_, s)) => s,
+                    Some((owner, s)) => {
+                        self.check_method_access(cx, &owner, name, pos)?;
+                        s
+                    }
+                    None if self.m.find_static(c, name).is_some() => {
+                        return err(format!("`{}` is a `static fn`; call it as `{}.{}(...)`", name, c, name), pos)
+                    }
                     None => return err(format!("`{}` has no method `{}`", c, name), pos),
                 };
                 let (binds, names) = self.args(cx, &sig, args, pos, name)?;
@@ -1244,7 +1326,15 @@ impl<'a> Gen<'a> {
                 let (binds, names) = self.args(cx, &sig, args, pos, name)?;
                 let sep = if names.is_empty() { "" } else { ", " };
                 Ok((
-                    format!("{{ let __r = &{}; {}let __t = {}::{}(&mut *__r.borrow_mut(){}{}); __t }}", rcode, binds, i, rid(name), sep, names),
+                    format!(
+                        "{{ let __r = &{}; {}let __t = {}::{}(&mut *__r.borrow_mut(){}{}); __t }}",
+                        rcode,
+                        binds,
+                        self.m.declaring_interface(i, name).unwrap(),
+                        rid(name),
+                        sep,
+                        names
+                    ),
                     sig.ret,
                 ))
             }

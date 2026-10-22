@@ -27,6 +27,10 @@ pub struct FnDecl {
     pub ret: TypeExpr,
     pub body: Vec<Stmt>,
     pub is_override: bool,
+    pub is_private: bool,
+    pub is_static: bool,
+    /// `abstract fn` has no body.
+    pub is_abstract: bool,
     pub pos: Pos,
 }
 
@@ -35,6 +39,7 @@ pub struct FieldDecl {
     pub name: String,
     pub ty: TypeExpr,
     pub default: Option<Expr>,
+    pub is_private: bool,
     pub pos: Pos,
 }
 
@@ -53,6 +58,7 @@ pub struct ClassDecl {
     pub fields: Vec<FieldDecl>,
     pub init: Option<InitDecl>,
     pub methods: Vec<FnDecl>,
+    pub is_abstract: bool,
     pub pos: Pos,
 }
 
@@ -67,6 +73,8 @@ pub struct MethodSig {
 #[derive(Debug, Clone)]
 pub struct InterfaceDecl {
     pub name: String,
+    /// Super-interfaces after `:`.
+    pub bases: Vec<(String, Pos)>,
     pub methods: Vec<MethodSig>,
     pub pos: Pos,
 }

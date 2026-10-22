@@ -18,6 +18,14 @@ fn parse_embedded(code: &str, at: Pos) -> Result<Expr> {
     Ok(e)
 }
 
+#[derive(Default, PartialEq)]
+struct Mods {
+    is_private: bool,
+    is_static: bool,
+    is_abstract: bool,
+    is_override: bool,
+}
+
 struct Parser {
     tokens: Vec<Token>,
     i: usize,
@@ -94,8 +102,15 @@ impl Parser {
         self.skip_newlines();
         while !self.check(&Tok::Eof) {
             match self.peek() {
-                Tok::Fn => prog.functions.push(self.function(false)?),
-                Tok::Class => prog.classes.push(self.class()?),
+                Tok::Fn => prog.functions.push(self.function(Mods::default())?),
+                Tok::Class => prog.classes.push(self.class(false)?),
+                Tok::Abstract => {
+                    self.advance();
+                    if !self.check(&Tok::Class) {
+                        return err("expected `class` after `abstract`", self.pos());
+                    }
+                    prog.classes.push(self.class(true)?);
+                }
                 Tok::Interface => prog.interfaces.push(self.interface()?),
                 Tok::Enum => prog.enums.push(self.enum_decl()?),
                 Tok::Import => {
@@ -138,16 +153,54 @@ impl Parser {
         if self.eat(&Tok::Arrow) { self.ty() } else { Ok(TypeExpr::Void) }
     }
 
-    fn function(&mut self, is_override: bool) -> Result<FnDecl> {
+    fn function(&mut self, mods: Mods) -> Result<FnDecl> {
         let pos = self.expect(Tok::Fn, "`fn`")?;
         let (name, _) = self.ident("function name")?;
         let params = self.params()?;
         let ret = self.ret_type()?;
-        let body = self.block()?;
-        Ok(FnDecl { name, params, ret, body, is_override, pos })
+        let body = if mods.is_abstract {
+            if self.check(&Tok::LBrace) {
+                return err("an `abstract fn` has no body", self.pos());
+            }
+            self.end_of_statement()?;
+            vec![]
+        } else {
+            self.block()?
+        };
+        Ok(FnDecl {
+            name,
+            params,
+            ret,
+            body,
+            is_override: mods.is_override,
+            is_private: mods.is_private,
+            is_static: mods.is_static,
+            is_abstract: mods.is_abstract,
+            pos,
+        })
     }
 
-    fn class(&mut self) -> Result<ClassDecl> {
+    /// `private`, `static`, `abstract`, `override` in any order before a class member.
+    fn modifiers(&mut self) -> Result<Mods> {
+        let mut m = Mods::default();
+        loop {
+            let pos = self.pos();
+            let flag = match self.peek() {
+                Tok::Private => &mut m.is_private,
+                Tok::Static => &mut m.is_static,
+                Tok::Abstract => &mut m.is_abstract,
+                Tok::Override => &mut m.is_override,
+                _ => return Ok(m),
+            };
+            if *flag {
+                return err(format!("{} written twice", self.peek().describe()), pos);
+            }
+            *flag = true;
+            self.advance();
+        }
+    }
+
+    fn class(&mut self, is_abstract: bool) -> Result<ClassDecl> {
         let pos = self.expect(Tok::Class, "`class`")?;
         let (name, _) = self.ident("class name")?;
         let mut bases = Vec::new();
@@ -160,19 +213,27 @@ impl Parser {
             }
         }
         self.expect(Tok::LBrace, "`{` to start class body")?;
-        let mut class = ClassDecl { name, bases, fields: vec![], init: None, methods: vec![], pos };
+        let mut class = ClassDecl { name, bases, fields: vec![], init: None, methods: vec![], is_abstract, pos };
         self.skip_newlines();
         while !self.check(&Tok::RBrace) {
+            let mpos = self.pos();
+            let mods = self.modifiers()?;
             match self.peek().clone() {
                 Tok::Ident(fname) => {
+                    if mods.is_static || mods.is_abstract || mods.is_override {
+                        return err("fields can only be marked `private`", mpos);
+                    }
                     let fpos = self.advance().pos;
                     self.expect(Tok::Colon, "`:` and a type after field name")?;
                     let ty = self.ty()?;
                     let default = if self.eat(&Tok::Assign) { Some(self.expr()?) } else { None };
-                    class.fields.push(FieldDecl { name: fname, ty, default, pos: fpos });
+                    class.fields.push(FieldDecl { name: fname, ty, default, is_private: mods.is_private, pos: fpos });
                     self.end_of_statement()?;
                 }
                 Tok::Init => {
+                    if mods != Mods::default() {
+                        return err("`init` cannot have modifiers", mpos);
+                    }
                     let ipos = self.advance().pos;
                     if class.init.is_some() {
                         return err("a class can only have one `init`", ipos);
@@ -182,13 +243,8 @@ impl Parser {
                     class.init = Some(InitDecl { params, body, pos: ipos });
                     self.skip_newlines();
                 }
-                Tok::Override => {
-                    self.advance();
-                    class.methods.push(self.function(true)?);
-                    self.skip_newlines();
-                }
                 Tok::Fn => {
-                    class.methods.push(self.function(false)?);
+                    class.methods.push(self.function(mods)?);
                     self.skip_newlines();
                 }
                 other => {
@@ -206,6 +262,15 @@ impl Parser {
     fn interface(&mut self) -> Result<InterfaceDecl> {
         let pos = self.expect(Tok::Interface, "`interface`")?;
         let (name, _) = self.ident("interface name")?;
+        let mut bases = Vec::new();
+        if self.eat(&Tok::Colon) {
+            loop {
+                bases.push(self.ident("interface name")?);
+                if !self.eat(&Tok::Comma) {
+                    break;
+                }
+            }
+        }
         self.expect(Tok::LBrace, "`{` to start interface body")?;
         self.skip_newlines();
         let mut methods = Vec::new();
@@ -218,7 +283,7 @@ impl Parser {
             self.end_of_statement()?;
         }
         self.expect(Tok::RBrace, "`}`")?;
-        Ok(InterfaceDecl { name, methods, pos })
+        Ok(InterfaceDecl { name, bases, methods, pos })
     }
 
     fn enum_decl(&mut self) -> Result<EnumDecl> {

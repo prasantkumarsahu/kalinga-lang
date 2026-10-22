@@ -215,3 +215,24 @@ fn error_match() {
     assert_compile_error("enum_self", "enum T { Leaf, Node(l: T) }\nfn main() {}", "contains itself");
     assert_compile_error("enum_variant", &format!("{}fn main() {{ print(C.X) }}", e), "has no variant `X`");
 }
+
+#[test]
+fn oop_extras() {
+    let (code, out, err) = run_file("tests/oop_extras.kl");
+    assert_eq!(code, 0, "{}", err);
+    assert_eq!(out, "Rex says woof (42)\nmeow Tom hi Tom\nhi A\nhi B\n9 10\n");
+}
+
+#[test]
+fn error_oop_extras() {
+    let a = "abstract class A {\n    private x: int = 1\n    abstract fn f() -> int\n    private fn g() {}\n    static fn make() -> int {\n        return 1\n    }\n}\n";
+    assert_compile_error("abstract_missing", &format!("{}class B : A {{}}\nfn main() {{}}", a), "must implement abstract method `A.f`");
+    assert_compile_error("abstract_new", &format!("{}fn main() {{ let a = A() }}", a), "`A` is abstract and cannot be created");
+    assert_compile_error(
+        "private_field",
+        &format!("{}class B : A {{\n    override fn f() -> int {{\n        return self.x\n    }}\n}}\nfn main() {{}}", a),
+        "field `x` is private to `A`",
+    );
+    assert_compile_error("static_on_obj", "class C {\n    fn f() {}\n}\nfn main() { C.f() }", "is not a `static fn`");
+    assert_compile_error("iface_cycle", "interface I : J {}\ninterface J : I {}\nfn main() {}", "extends itself");
+}

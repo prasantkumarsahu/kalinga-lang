@@ -79,13 +79,21 @@ pub struct ClassInfo {
     pub interfaces: Vec<String>,
     pub fields: Vec<(String, Type)>,
     pub methods: HashMap<String, Signature>,
+    /// `static fn`s: not inherited through objects, called as `Class.name(...)`.
+    pub statics: HashMap<String, Signature>,
+    pub private_fields: HashSet<String>,
+    pub private_methods: HashSet<String>,
+    pub abstract_methods: HashSet<String>,
     pub init: Option<Signature>,
     pub children: Vec<String>,
 }
 
 #[derive(Debug, Clone)]
 pub struct InterfaceInfo {
+    /// Methods declared by this interface itself.
     pub methods: Vec<(String, Signature)>,
+    /// Interfaces listed after `:`.
+    pub supers: Vec<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -225,9 +233,41 @@ impl Model {
                 }
                 methods.push((s.name.clone(), signature(&s.params, &s.ret, &resolve)?));
             }
-            m.interfaces.insert(i.name.clone(), InterfaceInfo { methods });
+            let mut supers = Vec::new();
+            for (b, pos) in &i.bases {
+                if !iface_names.contains(b) {
+                    return err(format!("`{}` is not an interface (interfaces can only extend interfaces)", b), *pos);
+                }
+                if supers.contains(b) {
+                    return err(format!("interface `{}` listed twice", b), *pos);
+                }
+                supers.push(b.clone());
+            }
+            m.interfaces.insert(i.name.clone(), InterfaceInfo { methods, supers });
             m.interface_order.push(i.name.clone());
         }
+        for i in &prog.interfaces {
+            if m.iface_closure_of(&i.name).iter().skip(1).any(|s| s == &i.name) {
+                return err(format!("interface `{}` extends itself", i.name), i.pos);
+            }
+            let mut seen: HashMap<String, (String, Signature)> = HashMap::new();
+            for s in m.iface_closure(&i.name) {
+                for (mname, sig) in &m.interfaces[&s].methods {
+                    if let Some((other, osig)) = seen.get(mname) {
+                        if other != &s && osig != sig {
+                            return err(
+                                format!("`{}` gets method `{}` from both `{}` and `{}` with different signatures", i.name, mname, other, s),
+                                i.pos,
+                            );
+                        }
+                    }
+                    seen.insert(mname.clone(), (s.clone(), sig.clone()));
+                }
+            }
+        }
+        // Parents first, so trait supertraits are declared before use (not required by Rust, but readable).
+        let order = m.interface_order.clone();
+        m.interface_order = order;
 
         // 3. Functions.
         for f in &prog.functions {
@@ -240,8 +280,8 @@ impl Model {
             if m.functions.contains_key(&f.name) {
                 return err(format!("function `{}` is defined more than once", f.name), f.pos);
             }
-            if f.is_override {
-                return err("`override` is only allowed on methods", f.pos);
+            if f.is_override || f.is_private || f.is_static || f.is_abstract {
+                return err("`override`, `private`, `static` and `abstract` are only allowed on class members", f.pos);
             }
             m.functions.insert(f.name.clone(), signature(&f.params, &f.ret, &resolve)?);
         }
@@ -297,19 +337,58 @@ impl Model {
                 fields.push((f.name.clone(), ty));
             }
             let mut methods = HashMap::new();
+            let mut statics = HashMap::new();
+            let mut private_methods = HashSet::new();
+            let mut abstract_methods = HashSet::new();
             for meth in &c.methods {
-                if methods.contains_key(&meth.name) {
+                if methods.contains_key(&meth.name) || statics.contains_key(&meth.name) {
                     return err(format!("method `{}` defined twice in `{}`", meth.name, c.name), meth.pos);
                 }
-                methods.insert(meth.name.clone(), signature(&meth.params, &meth.ret, &resolve)?);
+                if meth.is_abstract && !c.is_abstract {
+                    return err(
+                        format!("`{}` has an abstract method, so it must be declared `abstract class {}`", c.name, c.name),
+                        meth.pos,
+                    );
+                }
+                if meth.is_abstract && (meth.is_private || meth.is_static) {
+                    return err("an abstract method cannot be `private` or `static`", meth.pos);
+                }
+                if meth.is_static && meth.is_override {
+                    return err("a `static fn` cannot override", meth.pos);
+                }
+                let sig = signature(&meth.params, &meth.ret, &resolve)?;
+                if meth.is_private {
+                    private_methods.insert(meth.name.clone());
+                }
+                if meth.is_abstract {
+                    abstract_methods.insert(meth.name.clone());
+                }
+                if meth.is_static {
+                    statics.insert(meth.name.clone(), sig);
+                } else {
+                    methods.insert(meth.name.clone(), sig);
+                }
             }
+            let private_fields: HashSet<String> = c.fields.iter().filter(|f| f.is_private).map(|f| f.name.clone()).collect();
             let init = match &c.init {
                 Some(i) => Some(signature(&i.params, &TypeExpr::Void, &resolve)?),
                 None => None,
             };
             m.classes.insert(
                 c.name.clone(),
-                ClassInfo { decl: c.clone(), parent, interfaces, fields, methods, init, children: vec![] },
+                ClassInfo {
+                    decl: c.clone(),
+                    parent,
+                    interfaces,
+                    fields,
+                    methods,
+                    statics,
+                    private_fields,
+                    private_methods,
+                    abstract_methods,
+                    init,
+                    children: vec![],
+                },
             );
         }
 
@@ -357,7 +436,7 @@ impl Model {
             }
         }
         // Overrides.
-        for meth in &info.decl.methods {
+        for meth in info.decl.methods.iter().filter(|m| !m.is_static) {
             let sig = &info.methods[&meth.name];
             let inherited = info.parent.as_ref().and_then(|p| self.find_method(p, &meth.name));
             match (inherited, meth.is_override) {
@@ -387,23 +466,45 @@ impl Model {
                 (None, false) => {}
             }
         }
-        // Interface conformance (including methods inherited from base classes).
-        for iname in &info.interfaces {
-            for (mname, isig) in &self.interfaces[iname].methods {
-                match self.find_method(name, mname) {
-                    None => {
-                        return err(
-                            format!("`{}` does not implement `{}.{}{}`", name, iname, mname, isig.describe()),
-                            info.decl.pos,
-                        )
+        // Interface conformance (including methods inherited from base classes and super-interfaces).
+        for direct in &info.interfaces {
+            for iname in self.iface_closure(direct) {
+                for (mname, isig) in &self.interfaces[&iname].methods {
+                    match self.find_method(name, mname) {
+                        None => {
+                            return err(
+                                format!("`{}` does not implement `{}.{}{}`", name, iname, mname, isig.describe()),
+                                info.decl.pos,
+                            )
+                        }
+                        Some((_, sig)) if !sig.same_shape(isig) => {
+                            return err(
+                                format!("`{}.{}` must match `{}.{}{}`", name, mname, iname, mname, isig.describe()),
+                                info.decl.pos,
+                            )
+                        }
+                        Some((owner, _)) if self.classes[&owner].private_methods.contains(mname) => {
+                            return err(
+                                format!("`{}.{}` implements `{}` so it cannot be `private`", owner, mname, iname),
+                                info.decl.pos,
+                            )
+                        }
+                        _ => {}
                     }
-                    Some((_, sig)) if !sig.same_shape(isig) => {
-                        return err(
-                            format!("`{}.{}` must match `{}.{}{}`", name, mname, iname, mname, isig.describe()),
-                            info.decl.pos,
-                        )
-                    }
-                    _ => {}
+                }
+            }
+        }
+        // Concrete classes must implement every inherited abstract method.
+        if !info.decl.is_abstract {
+            for (mname, owner, _) in self.method_table(name) {
+                if self.classes[&owner].abstract_methods.contains(&mname) {
+                    return err(
+                        format!(
+                            "`{}` must implement abstract method `{}.{}` (or be declared `abstract class`)",
+                            name, owner, mname
+                        ),
+                        info.decl.pos,
+                    );
                 }
             }
         }
@@ -491,21 +592,76 @@ impl Model {
         out
     }
 
-    /// Interfaces implemented by a class, directly or through a base class.
+    /// Interfaces implemented by a class, directly, through a base class, or as
+    /// super-interfaces of those.
     pub fn all_interfaces(&self, class: &str) -> Vec<String> {
         let mut out: Vec<String> = vec![];
         for a in self.ancestors(class).iter().rev() {
             for i in &self.classes[a].interfaces {
-                if !out.contains(i) {
-                    out.push(i.clone());
+                for s in self.iface_closure(i) {
+                    if !out.contains(&s) {
+                        out.push(s);
+                    }
                 }
             }
         }
         out
     }
 
+    /// The interface followed by all of its super-interfaces (each once).
+    pub fn iface_closure(&self, iface: &str) -> Vec<String> {
+        let mut out = vec![iface.to_string()];
+        let mut i = 0;
+        while i < out.len() {
+            for s in &self.interfaces[&out[i]].supers {
+                if !out.contains(s) {
+                    out.push(s.clone());
+                }
+            }
+            i += 1;
+        }
+        out
+    }
+
+    /// Like `iface_closure`, but keeps repeats so cycles can be detected.
+    fn iface_closure_of(&self, iface: &str) -> Vec<String> {
+        let mut out = vec![iface.to_string()];
+        let mut i = 0;
+        while i < out.len() && out.len() < 1000 {
+            let supers = self.interfaces[&out[i]].supers.clone();
+            for s in supers {
+                if s == iface {
+                    out.push(s);
+                    return out;
+                }
+                if !out.contains(&s) {
+                    out.push(s);
+                }
+            }
+            i += 1;
+        }
+        out
+    }
+
+    /// Signature of a method visible on an interface (own or inherited).
     pub fn interface_method(&self, iface: &str, method: &str) -> Option<Signature> {
-        self.interfaces[iface].methods.iter().find(|(n, _)| n == method).map(|(_, s)| s.clone())
+        self.declaring_interface(iface, method)
+            .and_then(|d| self.interfaces[&d].methods.iter().find(|(n, _)| n == method).map(|(_, s)| s.clone()))
+    }
+
+    /// The interface (this one or a super-interface) that declares `method`.
+    pub fn declaring_interface(&self, iface: &str, method: &str) -> Option<String> {
+        self.iface_closure(iface).into_iter().find(|i| self.interfaces[i].methods.iter().any(|(n, _)| n == method))
+    }
+
+    /// `static fn` visible on a class (own or inherited): (owner, signature).
+    pub fn find_static(&self, class: &str, method: &str) -> Option<(String, Signature)> {
+        for a in self.ancestors(class) {
+            if let Some(sig) = self.classes[&a].statics.get(method) {
+                return Some((a, sig.clone()));
+            }
+        }
+        None
     }
 
     /// Methods that get declared in the class's own Rust trait: introduced by this
@@ -527,7 +683,7 @@ impl Model {
     /// Rust trait that declares `method` when called through static type `class`.
     pub fn dispatch_trait(&self, class: &str, method: &str) -> String {
         for i in self.all_interfaces(class) {
-            if self.interface_method(&i, method).is_some() {
+            if self.interfaces[&i].methods.iter().any(|(n, _)| n == method) {
                 return i;
             }
         }
@@ -588,6 +744,7 @@ impl Model {
             (f, Type::Optional(inner)) => self.assignable(f, inner),
             (Type::Class(d), Type::Class(c)) => self.is_subclass(d, c),
             (Type::Class(d), Type::Interface(i)) => self.all_interfaces(d).contains(i),
+            (Type::Interface(a), Type::Interface(b)) => self.iface_closure(a).contains(b),
             (Type::Array(a), Type::Array(b)) => self.assignable(a, b),
             (Type::Map(ka, va), Type::Map(kb, vb)) => ka == kb && self.assignable(va, vb),
             _ => false,

@@ -1,0 +1,60 @@
+interface Named {
+    fn name() -> str
+}
+interface Pet : Named {
+    fn sound() -> str
+}
+
+abstract class Animal : Pet {
+    private secret: int = 42
+    nick: str
+
+    init(nick: str) { self.nick = nick }
+
+    fn name() -> str { return self.nick }
+    abstract fn sound() -> str
+
+    fn describe() -> str {
+        return "{self.name()} says {self.sound()} ({self.hidden()})"
+    }
+
+    private fn hidden() -> int { return self.secret }
+
+    static fn create(kind: str, nick: str) -> Animal {
+        if kind == "dog" { return Dog(nick) }
+        return Cat(nick)
+    }
+}
+
+class Dog : Animal {
+    override fn sound() -> str { return "woof" }
+}
+class Cat : Animal {
+    override fn sound() -> str { return "meow" }
+}
+
+class MathUtil {
+    static fn max(a: int, b: int) -> int {
+        if a > b { return a }
+        return b
+    }
+    static fn clamp(x: int, lo: int, hi: int) -> int {
+        return MathUtil.max(lo, MathUtil.min(x, hi))
+    }
+    private static fn min(a: int, b: int) -> int {
+        if a < b { return a }
+        return b
+    }
+}
+
+fn greet(n: Named) -> str { return "hi " + n.name() }
+
+fn main() {
+    let a = Animal.create("dog", "Rex")
+    print(a.describe())
+    let p: Pet = Cat("Tom")
+    print(p.sound(), p.name(), greet(p))
+    let pets: [Pet] = [Dog("A"), Cat("B")]
+    for x in pets { print(greet(x)) }
+    print(MathUtil.max(3, 9), MathUtil.clamp(50, 0, 10))
+}
