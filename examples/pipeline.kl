@@ -1,0 +1,78 @@
+// Lambdas and generics: a small data pipeline.
+
+class Pipeline<T> {
+    items: [T]
+
+    init(items: [T]) {
+        self.items = items
+    }
+
+    fn keep(test: fn(T) -> bool) -> Pipeline<T> {
+        return Pipeline(self.items.filter(test))
+    }
+
+    fn sorted_by(before: fn(T, T) -> bool) -> Pipeline<T> {
+        var copy = self.items
+        copy.sort_by(before)
+        return Pipeline(copy)
+    }
+
+    fn take(n: int) -> [T] {
+        var out: [T] = []
+        for x in self.items {
+            if len(out) < n {
+                out.push(x)
+            }
+        }
+        return out
+    }
+}
+
+fn group_by<T>(items: [T], key: fn(T) -> str) -> {str: [T]} {
+    var groups: {str: [T]} = {}
+    for x in items {
+        let k = key(x)
+        if !groups.has(k) {
+            groups[k] = []
+        }
+        groups[k].push(x)
+    }
+    return groups
+}
+
+class City {
+    name: str
+    country: str
+    people: int
+
+    init(name: str, country: str, people: int) {
+        self.name = name
+        self.country = country
+        self.people = people
+    }
+}
+
+fn main() {
+    let cities = [
+        City("Bhubaneswar", "IN", 837),
+        City("Cuttack", "IN", 606),
+        City("Lyon", "FR", 522),
+        City("Paris", "FR", 2161),
+        City("Puri", "IN", 201),
+    ]
+
+    let big = Pipeline(cities)
+        .keep(fn(c) => c.people > 500)
+        .sorted_by(fn(a, b) => a.people > b.people)
+        .take(3)
+    print(big.map(fn(c) => "{c.name} ({c.people}k)"))
+
+    let by_country = group_by(cities, fn(c) => c.country)
+    for country in by_country {
+        let names = by_country[country].map(fn(c) => c.name)
+        print("{country}: {names}")
+    }
+
+    let words = Pipeline(["kiwi", "fig", "banana", "apple"]).sorted_by(fn(a, b) => a < b)
+    print(words.take(2))
+}

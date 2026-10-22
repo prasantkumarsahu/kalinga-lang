@@ -1,4 +1,4 @@
-# 8. Inheritance
+# 10. Inheritance
 
 A class can **extend** one other class. It inherits all of its fields and methods, can
 add new ones, and can **override** methods to change their behaviour.
@@ -223,8 +223,108 @@ Generic makes a sound
 When mixing subclasses in one array, annotate the array's type (`let farm: [Animal] = ...`).
 Without it, the type is taken from the first element.
 
-The conversion only goes one way: a `Cat` is always an `Animal`, but an `Animal` variable
-cannot be used where a `Cat` is required (there is no downcasting).
+The conversion is automatic only one way: a `Cat` is always an `Animal`, but an `Animal`
+might not be a `Cat`. To go the other way, ask — see `is` and `as` below.
+
+## Checking the real class: is and as
+
+- `x is Cat` is `true` when the object is a `Cat` (or a subclass of `Cat`).
+- `x as Cat` gives a `Cat?`: the same object seen as a `Cat`, or `none`. Use it with `if let`.
+
+```kalinga
+class Animal {
+    name: str
+    init(name: str) {
+        self.name = name
+    }
+}
+
+class Dog : Animal {
+    fn fetch() -> str {
+        return self.name + " fetches the ball"
+    }
+}
+
+class Cat : Animal {}
+
+fn main() {
+    let pets: [Animal] = [Dog("Rex"), Cat("Tom")]
+    for p in pets {
+        if let d = p as Dog {
+            print(d.fetch())
+        } else {
+            print(p.name, "is not a dog")
+        }
+        print(p is Cat)
+    }
+}
+```
+
+```text
+Rex fetches the ball
+false
+Tom is not a dog
+true
+```
+
+`as` and `is` also work on interface values. A check that can never succeed — for
+example asking whether a `Dog` is a `Cat` when neither extends the other — is a compile
+error.
+
+## Abstract classes
+
+An **abstract class** is a base class that is not meant to be created on its own. It can
+declare **abstract methods** — methods with no body that every concrete subclass must
+implement:
+
+```kalinga
+abstract class Shape {
+    name: str
+
+    init(name: str) {
+        self.name = name
+    }
+
+    abstract fn area() -> float
+
+    fn describe() -> str {
+        return "{self.name} with area {self.area()}"
+    }
+}
+
+class Square : Shape {
+    side: float
+
+    init(side: float) {
+        super("square")
+        self.side = side
+    }
+
+    override fn area() -> float {
+        return self.side * self.side
+    }
+}
+
+fn main() {
+    let shapes: [Shape] = [Square(2.0), Square(3.0)]
+    for s in shapes {
+        print(s.describe())
+    }
+}
+```
+
+```text
+square with area 4.0
+square with area 9.0
+```
+
+The compiler enforces the rules:
+
+| Mistake | Error |
+|---|---|
+| `Shape("x")` | `` `Shape` is abstract and cannot be created; create one of its subclasses `` |
+| a subclass forgets `area` | `` `Circle` must implement abstract method `Shape.area` (or be declared `abstract class`) `` |
+| `abstract fn` in a normal class | `` `Thing` has an abstract method, so it must be declared `abstract class Thing` `` |
 
 ## Multi-level hierarchies
 
@@ -268,9 +368,11 @@ C>B>A
 - Overrides need `override fn` and the same signature.
 - `super(...)` is required in `init` when the base has an `init`.
 - Inheritance cycles (`A : B` and `B : A`) are errors.
+- `abstract class` cannot be created; its `abstract fn`s must be implemented by subclasses.
+- `x is C` tests the real class; `x as C` converts to `C?`.
 - Through a base-class variable, you can read and assign fields (`a.name = "x"`) and call
   methods, but not modify *inside* a field (`a.list.push(1)`). Add a method for that.
 
 ---
 
-Previous: [7. Classes](07-classes.md) · Next: [9. Interfaces](09-interfaces.md)
+Previous: [9. Classes](09-classes.md) · Next: [11. Interfaces](11-interfaces.md)

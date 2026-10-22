@@ -277,3 +277,26 @@ fn generics() {
     assert_eq!(code, 101);
     assert!(err.contains("field `value` was read before it was set"), "{}", err);
 }
+
+#[test]
+fn v02_examples() {
+    let cases = [
+        (
+            "examples/inventory.kl",
+            "sold 12 apples: true\nsold 9 pears: false\nsold 1 kiwi: false\n  apple: 3 at 0.5  (low!)\n  pear: 3 at 0.75  (low!)\nstock value: 3.75\n",
+        ),
+        (
+            "examples/shapes/main.kl",
+            "circle: area 3.14159, round\nrect: area 6.0, 4 corners\nrect: area 16.0, 4 corners\nlargest is the rect\na rect of 2.0 x 3.0\na rect of 4.0 x 4.0\n",
+        ),
+        (
+            "examples/pipeline.kl",
+            "[Paris (2161k), Bhubaneswar (837k), Cuttack (606k)]\nFR: [Lyon, Paris]\nIN: [Bhubaneswar, Cuttack, Puri]\n[apple, banana]\n",
+        ),
+    ];
+    for (file, expected) in cases {
+        let (code, out, err) = run_file(file);
+        assert_eq!(code, 0, "{}: {}", file, err);
+        assert_eq!(out, expected, "{}", file);
+    }
+}

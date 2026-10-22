@@ -53,6 +53,8 @@ runtime error: index out of bounds: the len is 3 but the index is 7
 | `a.pop()` | `T?` | Removes and returns the last element, or `none` if empty (needs `var`) |
 | `a.len()` | `int` | Number of elements (same as `len(a)`) |
 | `a.contains(x)` | `bool` | Whether `x` is in the array (arrays of `int`, `float`, `bool`, `str`) |
+| `a.sort()` | — | Sorts in place (`int`, `float`, `str`, `bool`; needs `var`) |
+| `a.map(f)`, `a.filter(f)`, `a.find(f)`, `a.sort_by(f)` | | Take a function; see [Lambdas](12-lambdas.md#array-helpers-that-take-functions) |
 
 ```kalinga
 fn main() {
@@ -111,7 +113,7 @@ fn main() {
 ```
 
 An array of objects copies the *references*, so both arrays point at the same objects
-(see [Classes](07-classes.md#objects-are-references)).
+(see [Classes](09-classes.md#objects-are-references)).
 
 ### Common patterns
 
@@ -177,6 +179,29 @@ fn main() {
 Kalinga v1 10
 ```
 
+### String interpolation
+
+Put any printable expression inside `{ }` in a string, and its value is inserted:
+
+```kalinga
+fn main() {
+    let name = "Mira"
+    let items = [3, 4]
+    print("Hello {name}, you have {len(items)} items: {items}")
+    print("next year you will be {30 + 1}")
+    print("use {{ and }} for literal braces")
+}
+```
+
+```text
+Hello Mira, you have 2 items: [3, 4]
+next year you will be 31
+use { and } for literal braces
+```
+
+Interpolation works with numbers, booleans, strings, arrays, maps, optionals and enums.
+For objects, insert a field or a method result: `"{user.name}"`.
+
 ### String methods
 
 | Method | Returns | Description |
@@ -225,4 +250,4 @@ Strings are values, like arrays: `+=` on one variable never changes another.
 
 ---
 
-Previous: [4. Functions](04-functions.md) · Next: [6. Optionals](06-optionals.md)
+Previous: [4. Functions](04-functions.md) · Next: [6. Maps](06-maps.md)

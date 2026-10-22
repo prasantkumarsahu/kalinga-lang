@@ -10,35 +10,62 @@ interface Show {
     fn show() -> str
 }
 
-class Animal {
+abstract class Animal : Show {
     name: str
-    sound: str = "..."
-
     init(name: str) { self.name = name }
 
-    fn speak() -> str { return self.name + " says " + self.sound }
+    abstract fn sound() -> str
+    fn show() -> str { return "{self.name} says {self.sound()}" }
 }
 
-class Dog : Animal, Show {          // `:` lists one base class + any interfaces
-    init(name: str) {
-        super(name)
-        self.sound = "woof"
-    }
-    override fn speak() -> str { return super.speak() + "!" }
-    fn show() -> str { return "Dog(" + self.name + ")" }
+class Dog : Animal {                 // `:` lists one base class + any interfaces
+    override fn sound() -> str { return "woof" }
+}
+
+enum Pet {
+    Real(a: Animal)
+    Imaginary(name: str)
 }
 
 fn main() {
-    let pets: [Animal] = [Dog("Rex"), Animal("Cat")]
-    for p in pets { print(p.speak()) }   // dynamic dispatch
+    let pets = [Pet.Real(Dog("Rex")), Pet.Imaginary("Nessie")]
+    for p in pets {
+        match p {
+            Real(a) => print(a.show())
+            Imaginary(n) => print("{n} is imaginary")
+        }
+    }
+    let counts = {"dogs": 1, "cats": 0}
+    print([3, 1, 2].map(fn(x) => x * 10), counts)
 }
 ```
+
+Output:
+
+```text
+Rex says woof
+Nessie is imaginary
+[30, 10, 20] {cats: 0, dogs: 1}
+```
+
+## Features
+
+- **Simple syntax**: no semicolons, `let`/`var`, `"string {interpolation}"`, type inference.
+- **Objects**: classes, single inheritance, interfaces (which can extend each other),
+  `abstract`, `private`, `static`, downcasting with `is`/`as`.
+- **Data**: arrays, sorted maps `{K: V}`, optionals `T?` instead of null, enums with data
+  and exhaustive `match`.
+- **Functions**: lambdas, function types, `map`/`filter`/`sort_by`, generics.
+- **Modules**: `import "file.kl"`.
+- **Fast and safe**: compiles to Rust and then native code; no null, no unchecked
+  indexing, no silent overflow, no `unsafe`.
 
 ## Documentation
 
 The full guide, with runnable examples for every feature, is in [docs/](docs/README.md):
-getting started, basics, control flow, functions, arrays and strings, optionals, classes,
-inheritance, interfaces, safety, tooling, internals and a language reference.
+getting started, basics, control flow, functions, arrays and strings, maps, optionals,
+enums and match, classes, inheritance, interfaces, lambdas, generics, modules, safety,
+tooling, internals and a language reference. See [CHANGELOG.md](CHANGELOG.md) for what is new.
 
 ## Usage
 
@@ -69,15 +96,20 @@ A VS Code extension with syntax highlighting, snippets, live errors and a Run bu
 | Feature | Syntax |
 |---|---|
 | Variables | `let x = 1` (immutable), `var y = 2` (mutable), `let z: float = 1.0` |
-| Types | `int` (64-bit), `float`, `bool`, `str`, `[T]` arrays, `T?` optionals, classes, interfaces |
-| Functions | `fn add(a: int, b: int) -> int { return a + b }` |
-| Control flow | `if / else if / else`, `while cond { }`, `for i in 0..10 { }`, `for x in array { }`, `for ch in "text" { }`, `break`, `continue` |
+| Types | `int` (64-bit), `float`, `bool`, `str`, `[T]` arrays, `{K: V}` maps, `T?` optionals, `fn(A) -> B`, classes, interfaces, enums |
+| Functions | `fn add(a: int, b: int) -> int { return a + b }`, generic `fn first<T>(xs: [T]) -> T?` |
+| Lambdas | `fn(x: int) -> int { return x * 2 }`, `fn(x) => x * 2`; named functions are values |
+| Strings | `"Hi {name}"` interpolation, `{{` `}}` for literal braces |
+| Control flow | `if / else if / else`, `while cond { }`, `for i in 0..10 { }`, `for x in array { }`, `for k in map { }`, `for ch in "text" { }`, `match`, `break`, `continue` |
+| Enums | `enum Shape { Circle(r: float), Empty }`, `Shape.Circle(1.0)`, `match s { Circle(r) => ... }` |
 | Optionals | `var o: int? = none`, `if let v = o { } else { }`, `o == none` |
-| Classes | fields with optional defaults, `init(...)`, methods with `fn`, `self.field`, `self.method()` |
-| Inheritance | `class B : A` — single base class; overriding needs `override fn`; `super(args)` in `init`, `super.method()` |
-| Interfaces | `interface I { fn m() -> str }`, `class C : Base, I, J`; interfaces work as types |
+| Classes | fields with optional defaults, `init(...)`, methods, `self`, `private`, `static fn`, generic `class Stack<T>` |
+| Inheritance | `class B : A` — single base class; `override fn`; `super(...)`, `super.method()`; `abstract class` / `abstract fn`; `x is B`, `x as B` |
+| Interfaces | `interface I : J { fn m() -> str }`, `class C : Base, I, J`; interfaces work as types |
+| Modules | `import "lib/shapes.kl"` |
 | Built-ins | `print(a, b, ...)`, `len(x)`, `str(x)`, `int(x)`, `float(x)`, `input(prompt)` |
-| Array methods | `push(v)`, `pop()` → `T?`, `len()`, `contains(v)` |
+| Array methods | `push(v)`, `pop()` → `T?`, `len()`, `contains(v)`, `map(f)`, `filter(f)`, `find(f)`, `sort()`, `sort_by(f)` |
+| Map methods | `m[k]`, `get(k)` → `V?`, `has(k)`, `remove(k)`, `keys()`, `values()`, `len()` |
 | String methods | `len()`, `upper()`, `lower()`, `trim()`, `contains(s)` |
 
 Statements end at a newline (`;` is optional). Comments use `//` and `/* */`.
@@ -115,7 +147,7 @@ through a different reference (for example `a.f(a)` where `f` modifies `a`) stop
 | `src/checker.rs` | class/interface model, inheritance and override rules |
 | `src/codegen.rs` | type checking of bodies, Rust generation, runtime prelude |
 | `src/driver.rs` | invokes `rustc` and runs the program |
-| `examples/` | `hello.kl`, `oop.kl`, `fib.kl` |
+| `examples/` | `hello.kl`, `oop.kl`, `fib.kl`, `inventory.kl`, `pipeline.kl`, `shapes/` (modules) |
 | `tests/examples.rs` | end-to-end tests |
 | `editors/vscode/` | VS Code extension |
 | `docs/` | language guide and reference |

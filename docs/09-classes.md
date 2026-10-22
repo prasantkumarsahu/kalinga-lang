@@ -1,4 +1,4 @@
-# 7. Classes
+# 9. Classes
 
 A class groups data (**fields**) with the code that works on it (**methods**).
 
@@ -146,8 +146,121 @@ fn main() {
 15
 ```
 
-`self` can only be used for `self.field` and `self.method(...)`. It cannot be returned,
-stored or passed as an argument.
+`self` can also be used as a value — returned, stored or passed to another function —
+everywhere except inside `init` (where the object is not finished yet):
+
+```kalinga
+class Node {
+    value: int
+    children: [Node]
+    parent: Node? = none
+
+    init(value: int) {
+        self.value = value
+    }
+
+    fn add(child: Node) {
+        child.parent = self
+        self.children.push(child)
+    }
+}
+
+fn main() {
+    let root = Node(1)
+    let kid = Node(2)
+    root.add(kid)
+    if let p = kid.parent {
+        print("parent of", kid.value, "is", p.value)
+    }
+}
+```
+
+```text
+parent of 2 is 1
+```
+
+## Private members
+
+Mark a field or method `private` to make it usable only inside the class's own methods:
+
+```kalinga
+class Account {
+    owner: str
+    private balance: int = 0
+
+    init(owner: str) {
+        self.owner = owner
+    }
+
+    fn deposit(amount: int) {
+        if self.valid(amount) {
+            self.balance += amount
+        }
+    }
+
+    fn balance_text() -> str {
+        return "{self.owner}: {self.balance}"
+    }
+
+    private fn valid(amount: int) -> bool {
+        return amount > 0
+    }
+}
+
+fn main() {
+    let a = Account("Ravi")
+    a.deposit(50)
+    a.deposit(-10)
+    print(a.balance_text())
+}
+```
+
+```text
+Ravi: 50
+```
+
+Using a private member from outside is a compile error:
+
+```text
+error: field `balance` is private to `Account`
+```
+
+Subclasses cannot use their base class's private members either.
+
+## Static methods
+
+A `static fn` belongs to the class itself, not to an object. It has no `self` and is
+called on the class name:
+
+```kalinga
+class Temperature {
+    celsius: float
+
+    init(celsius: float) {
+        self.celsius = celsius
+    }
+
+    static fn from_fahrenheit(f: float) -> Temperature {
+        return Temperature((f - 32.0) * 5.0 / 9.0)
+    }
+
+    static fn freezing() -> Temperature {
+        return Temperature(0.0)
+    }
+}
+
+fn main() {
+    let t = Temperature.from_fahrenheit(212.0)
+    print(t.celsius, Temperature.freezing().celsius)
+}
+```
+
+```text
+100.0 0.0
+```
+
+Static methods are handy as named constructors ("factories") and for helpers that do not
+need an object.
 
 ## Objects are references
 
@@ -241,11 +354,12 @@ sum of list: 6
 ## Rules at a glance
 
 - Class names start with an uppercase letter.
-- Fields and methods are public: any code can read and change them.
+- Fields and methods are public unless marked `private`.
+- `static fn` methods are called as `ClassName.method(...)` and have no `self`.
 - A field and a method may share a name; the `()` decides which is meant.
 - Two fields, or two methods, with the same name in one class are an error.
 - Classes, like functions, can be declared in any order.
 
 ---
 
-Previous: [6. Optionals](06-optionals.md) · Next: [8. Inheritance](08-inheritance.md)
+Previous: [8. Enums and match](08-enums-and-match.md) · Next: [10. Inheritance](10-inheritance.md)

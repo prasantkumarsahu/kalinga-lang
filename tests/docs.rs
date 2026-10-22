@@ -74,6 +74,9 @@ fn doc_examples_compile() {
         if !b.expect_error && !b.code.contains("fn main()") {
             continue; // a fragment, not a complete program
         }
+        if b.code.contains("import \"") {
+            continue; // needs other files; covered by the `imports` test
+        }
         checked += 1;
         let (ok, stderr) = check(&b.code);
         if b.expect_error && ok {

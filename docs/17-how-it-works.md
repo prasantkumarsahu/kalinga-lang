@@ -1,4 +1,4 @@
-# 12. How It Works
+# 17. How It Works
 
 Kalinga is a **source-to-source compiler**: it translates Kalinga into Rust and lets
 `rustc` produce optimized machine code. Early C++ compilers worked the same way, turning
@@ -14,7 +14,8 @@ You do not need it to write Kalinga programs, but it explains the performance mo
  Lexer        src/lexer.rs     characters → tokens; decides which newlines end statements
     │
     ▼
- Parser       src/parser.rs    tokens → syntax tree (src/ast.rs)
+ Parser       src/parser.rs    tokens → syntax tree (src/ast.rs); `import`ed files are
+                               loaded and merged by src/driver.rs
     │
     ▼
  Checker      src/checker.rs   classes, interfaces, inheritance, overrides, signatures
@@ -46,11 +47,16 @@ reported as an *internal compiler error*.
 | class `C` with no subclasses | `Rc<RefCell<C>>` |
 | class `C` with subclasses | `Rc<RefCell<dyn __I_C>>` |
 | interface `I` | `Rc<RefCell<dyn I>>` |
+| `{K: V}` | `BTreeMap<K, V>` (sorted keys) |
+| `enum E` | a Rust `enum E` (`#[derive(Clone)]`, plus `PartialEq` when printable) |
+| `fn(A) -> B` | `Rc<dyn Fn(A) -> B>` |
+| `T` (type parameter) | a Rust generic `T: Clone + 'static` |
+| `Stack<int>` | `Rc<RefCell<Stack<i64>>>` |
 
 - `Rc` is a reference-counted pointer: an object is freed automatically when the last
   reference to it goes away. No garbage collector, no manual `free`.
 - `RefCell` enforces "one writer at a time" at runtime. This is what turns the re-entrancy
-  mistake from [chapter 10](10-safety-and-errors.md#re-entrant-objects) into a clear error
+  mistake from [chapter 10](15-safety-and-errors.md#re-entrant-objects) into a clear error
   instead of undefined behaviour.
 
 ## Mapping classes
@@ -140,9 +146,20 @@ The rules behind it:
 | `xs[i]` | `xs[__idx(i)]` — rejects negative indexes, then Rust checks the length |
 | `if let v = opt { }` | `if let Some(v) = opt { }` |
 | `fn main()` | `fn kl_main()`, started by a generated `main` on a 256 MB stack thread |
+| `"a {x} b"` | `format!("a {} b", show(x))` |
+| `match e { V(x) => ... }` | `match e { E::V(x) => ... }` |
+| `fn(x) => x + k` | `{ let k = k.clone(); Rc::new(move \|x\| x + k) }` |
+| `x as Dog` | a generated `__as_Dog()` hook on the object's trait |
 
 Method-call arguments are evaluated into temporaries before the object is borrowed, so
 `a.f(a.x)` is safe.
+
+## Objects know themselves
+
+Every object stores a weak pointer to its own `Rc` (created with `Rc::new_cyclic`). That
+is what lets a method use `self` as a value, and what `as`/`is` use: each class hierarchy's
+root trait (and each interface) gets one `__as_X()` method per class `X`, returning `None`
+by default and `Some(...)` in `X` and its subclasses.
 
 ## Why Kalinga is fast
 
@@ -178,4 +195,4 @@ The costs to be aware of:
 
 ---
 
-Previous: [11. Tooling](11-tooling.md) · Next: [13. Language Reference](13-reference.md)
+Previous: [16. Tooling](16-tooling.md) · Next: [18. Language Reference](18-reference.md)

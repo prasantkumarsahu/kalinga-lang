@@ -44,6 +44,18 @@ impl Lexer {
         Some(c)
     }
 
+    fn next_line_starts_with_dot(&self) -> bool {
+        let mut j = self.i;
+        while let Some(&c) = self.chars.get(j) {
+            if c == ' ' || c == '\t' || c == '\r' || c == '\n' {
+                j += 1;
+            } else {
+                return c == '.' && self.chars.get(j + 1) != Some(&'.');
+            }
+        }
+        false
+    }
+
     fn pos(&self) -> Pos {
         Pos { line: self.line, col: self.col, file: self.file }
     }
@@ -72,7 +84,10 @@ impl Lexer {
                 }
                 '\n' => {
                     self.bump();
-                    self.push(Tok::Newline, pos);
+                    // A line starting with `.` continues the previous one (method chains).
+                    if !self.next_line_starts_with_dot() {
+                        self.push(Tok::Newline, pos);
+                    }
                 }
                 '/' if self.peek2() == Some('/') => {
                     while let Some(c) = self.peek() {

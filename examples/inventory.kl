@@ -1,0 +1,61 @@
+// Maps, string interpolation and optionals: a tiny stock tracker.
+
+class Inventory {
+    private stock: {str: int}
+    private prices: {str: float}
+
+    fn add(item: str, count: int, price: float) {
+        if self.stock.has(item) {
+            self.stock[item] += count
+        } else {
+            self.stock[item] = count
+        }
+        self.prices[item] = price
+    }
+
+    fn sell(item: str, count: int) -> bool {
+        if let have = self.stock.get(item) {
+            if have >= count {
+                self.stock[item] = have - count
+                return true
+            }
+        }
+        return false
+    }
+
+    fn value() -> float {
+        var total = 0.0
+        for item in self.stock {
+            total += float(self.stock[item]) * self.prices[item]
+        }
+        return total
+    }
+
+    fn report() {
+        for item in self.stock {
+            let n = self.stock[item]
+            let flag = if_low(n)
+            print("  {item}: {n} at {self.prices[item]}{flag}")
+        }
+    }
+}
+
+fn if_low(n: int) -> str {
+    if n < 5 {
+        return "  (low!)"
+    }
+    return ""
+}
+
+fn main() {
+    let inv = Inventory()
+    inv.add("apple", 10, 0.5)
+    inv.add("pear", 3, 0.75)
+    inv.add("apple", 5, 0.5)
+
+    print("sold 12 apples: {inv.sell("apple", 12)}")
+    print("sold 9 pears: {inv.sell("pear", 9)}")
+    print("sold 1 kiwi: {inv.sell("kiwi", 1)}")
+    inv.report()
+    print("stock value: {inv.value()}")
+}

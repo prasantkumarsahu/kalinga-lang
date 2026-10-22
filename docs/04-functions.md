@@ -189,7 +189,8 @@ fn main() {
 ## Things functions cannot do (yet)
 
 - No default parameter values and no overloading (two functions with the same name).
-- Functions are not values: you cannot store a function in a variable or pass it around.
+- Functions themselves can be stored, passed and returned — see [Lambdas](12-lambdas.md) —
+  and written once for many types — see [Generics](13-generics.md).
 - Built-in names (`print`, `len`, `str`, `int`, `float`, `input`) cannot be redefined.
 - There are no global variables; pass values as parameters or keep them in objects.
 

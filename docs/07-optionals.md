@@ -1,4 +1,4 @@
-# 6. Optionals
+# 7. Optionals
 
 Kalinga has **no null**. A normal `int`, `str` or object variable always holds a real
 value. When "there might be nothing" is a real possibility, you say so in the type with
@@ -105,7 +105,7 @@ main.kl:10:13: error: cannot apply `+` to `int?` and `int`
 
 - Function results that may be missing: `fn find(...) -> int?`
 - `array.pop()` returns `T?` because the array may be empty.
-- Object fields that may be unset: `next: Node?` (see [Classes](07-classes.md#fields-that-hold-objects)).
+- Object fields that may be unset: `next: Node?` (see [Classes](09-classes.md#fields-that-hold-objects)).
 
 Optionals of objects work the same way:
 
@@ -142,4 +142,4 @@ fn main() {
 
 ---
 
-Previous: [5. Arrays and Strings](05-arrays-and-strings.md) · Next: [7. Classes](07-classes.md)
+Previous: [6. Maps](06-maps.md) · Next: [8. Enums and match](08-enums-and-match.md)

@@ -1,0 +1,68 @@
+// Shapes for examples/shapes/main.kl: an abstract base class and an enum.
+
+enum Kind {
+    Round
+    Angular(corners: int)
+}
+
+abstract class Shape {
+    name: str
+
+    init(name: str) {
+        self.name = name
+    }
+
+    abstract fn area() -> float
+    abstract fn kind() -> Kind
+
+    fn describe() -> str {
+        return "{self.name}: area {self.area()}, {kind_text(self.kind())}"
+    }
+}
+
+class Circle : Shape {
+    r: float
+
+    init(r: float) {
+        super("circle")
+        self.r = r
+    }
+
+    override fn area() -> float {
+        return 3.14159 * self.r * self.r
+    }
+
+    override fn kind() -> Kind {
+        return Kind.Round
+    }
+}
+
+class Rect : Shape {
+    w: float
+    h: float
+
+    init(w: float, h: float) {
+        super("rect")
+        self.w = w
+        self.h = h
+    }
+
+    override fn area() -> float {
+        return self.w * self.h
+    }
+
+    override fn kind() -> Kind {
+        return Kind.Angular(4)
+    }
+
+    static fn square(side: float) -> Rect {
+        return Rect(side, side)
+    }
+}
+
+fn kind_text(k: Kind) -> str {
+    match k {
+        Round => return "round"
+        Angular(n) => return "{n} corners"
+    }
+}

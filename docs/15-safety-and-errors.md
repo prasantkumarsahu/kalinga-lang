@@ -1,4 +1,4 @@
-# 10. Safety and Errors
+# 15. Safety and Errors
 
 Kalinga is designed so that mistakes are caught as early as possible — ideally by the
 compiler, otherwise by a clear runtime error — and never turn into silent memory
@@ -46,6 +46,11 @@ Common compile errors and what to do:
 | `` `init` must call `super(...)` `` | Subclass skipped base construction | Call `super(args)` at the top of `init` |
 | `needs a default value (or make it optional)` | Object field without a value | `= ClassName()` or `field: ClassName?` |
 | `cannot print a `Dog` value` | Printing an object | Print a field or method result |
+| `` `match` does not handle every case (missing: ...) `` | A variant has no arm | Add the arm, or a `_ =>` arm |
+| `` field `x` is private to `A` `` | Using a private member from outside | Add a public method |
+| `` `A` is abstract and cannot be created `` | Creating an abstract class | Create a subclass |
+| `` cannot tell what `T` is `` | Generic call without enough information | Write the type: `Stack<int>()` |
+| `` cannot change `n` inside a lambda `` | Assigning to a captured variable | Keep shared state in an object |
 
 ## Runtime errors
 
@@ -75,6 +80,8 @@ runtime error: index out of bounds: the len is 3 but the index is 5
 | `attempt to divide by zero` | `n / 0` with integers |
 | `cannot convert "abc" to int` | `int("abc")` |
 | `RefCell already borrowed` | see *Re-entrant objects* below |
+| `key not found: plums` | `m["plums"]` when the map has no such key (use `m.get(k)`) |
+| `field `value` was read before it was set` | a generic class's `T` field read before `init` set it |
 
 Float division by zero is not an error; it produces `inf` or `NaN` as in most languages.
 
@@ -111,6 +118,14 @@ runtime error: RefCell already borrowed (an object was used while one of its own
 Inside a method, always reach the current object through `self`. If an operation may
 involve the same object twice, check for it before calling, or restructure the method.
 
+## Memory and reference cycles
+
+Objects are freed automatically when nothing refers to them any more (reference counting).
+Two objects that refer to each other — a child pointing at its parent and the parent
+holding the child — keep each other alive, so that memory is only returned when the
+program ends. This is safe (nothing is ever used after being freed), but long-running
+programs that build and drop many such cycles will use more memory than necessary.
+
 ## Debugging tips
 
 - Use `kalinga check file.kl` (or the VS Code extension) for instant feedback while
@@ -120,4 +135,4 @@ involve the same object twice, check for it before calling, or restructure the m
 
 ---
 
-Previous: [9. Interfaces](09-interfaces.md) · Next: [11. Tooling](11-tooling.md)
+Previous: [14. Modules](14-modules.md) · Next: [16. Tooling](16-tooling.md)

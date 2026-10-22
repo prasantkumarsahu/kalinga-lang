@@ -26,7 +26,7 @@ fn main() {
 ```
 
 A long expression can continue on the next line when the line ends with an operator, a
-comma, or inside `(` `)` and `[` `]`:
+comma, or inside `(` `)` and `[` `]`, or when the next line starts with `.` (a method chain):
 
 ```kalinga
 fn main() {
@@ -98,7 +98,7 @@ fn main() {
 ```
 
 Annotations are required when the value alone does not say the type: an empty array `[]`
-or `none` (see [Optionals](06-optionals.md)).
+or `none` (see [Optionals](07-optionals.md)).
 
 ### Scope
 
@@ -147,6 +147,8 @@ Notes:
 - A float literal needs digits on both sides of the dot: `2.0`, not `2.`.
 - Underscores in numbers are ignored: `1_000` is `1000`.
 - String escapes: `\n` newline, `\t` tab, `\r`, `\0`, `\\` backslash, `\"` quote.
+- `{expression}` inside a string inserts a value: `"total: {n + 1}"`. Write `{{` and `}}`
+  for literal braces. See [Arrays and Strings](05-arrays-and-strings.md#string-interpolation).
 
 ### No implicit conversions
 
@@ -240,7 +242,7 @@ fn main() {
 abcd 25
 ```
 
-For operator precedence, see the [Language Reference](13-reference.md#operator-precedence).
+For operator precedence, see the [Language Reference](18-reference.md#operator-precedence).
 
 ---
 

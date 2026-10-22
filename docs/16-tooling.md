@@ -1,4 +1,4 @@
-# 11. Tooling
+# 16. Tooling
 
 ## The kalinga command
 
@@ -49,11 +49,15 @@ The extension lives in [`editors/vscode`](../editors/vscode/README.md).
 ### Features
 
 - Syntax highlighting for keywords, types, classes, functions, strings, numbers and comments
-- Code completion after `.` (fields and methods, including inherited ones), for variables,
-  functions, classes and built-ins, for types after `:` and `->`, and `override fn` stubs
-  inside a class body. `//` comments above a declaration appear as its documentation.
-- Parameter hints while typing the arguments of a call
-- Errors underlined as you type (runs `kalinga check --stdin` about 0.4 s after you stop)
+- Code completion: members after `.` (inherited ones too; `private` ones only inside their
+  class), enum variants after `Enum.`, static methods after `Class.`, map/array/string
+  methods, variables (including lambda parameters and `match` bindings), types after `:`,
+  `->` and `<`, `match` arm patterns, `override fn` stubs in a class body, and declarations
+  from imported files. `//` comments above a declaration appear as its documentation.
+- Parameter hints while typing the arguments of a call (functions, generic functions,
+  constructors, methods, static methods, enum variants and function-typed variables)
+- Errors underlined as you type (runs `kalinga check --stdin` about 0.4 s after you stop);
+  errors inside imported files appear on the `import` line
 - ▶ **Run** button in the editor title bar, and `Ctrl+F5`
 - Commands (Ctrl+Shift+P): **Kalinga: Run File**, **Kalinga: Build Executable**,
   **Kalinga: Show Generated Rust**
@@ -76,6 +80,11 @@ Type the prefix and press Tab:
 | `if`, `ife`, `iflet` | `if`, `if/else`, `if let` |
 | `while`, `for`, `forr` | loops (`forr` = range loop) |
 | `pr` | `print(...)` |
+| `enum`, `match` | enum declaration, match statement |
+| `lam`, `lamb` | short lambda, block lambda |
+| `aclass`, `gclass`, `sfn` | abstract class, generic class, static method |
+| `ifas` | `if let d = x as Class { }` |
+| `import` | `import "file.kl"` |
 
 ### Installing
 
@@ -109,4 +118,4 @@ complete example in these docs.
 
 ---
 
-Previous: [10. Safety and Errors](10-safety-and-errors.md) · Next: [12. How It Works](12-how-it-works.md)
+Previous: [15. Safety and Errors](15-safety-and-errors.md) · Next: [17. How It Works](17-how-it-works.md)

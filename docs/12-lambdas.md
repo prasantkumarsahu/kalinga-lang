@@ -1,0 +1,210 @@
+# 12. Lambdas and Function Values
+
+Functions are values in Kalinga: you can store them in variables, pass them to other
+functions, return them, and keep them in fields and arrays. A **lambda** is a function
+written inline, without a name.
+
+## Function types
+
+The type of a function is written `fn(parameter types) -> result type`:
+
+| Type | Meaning |
+|---|---|
+| `fn(int) -> int` | takes an `int`, returns an `int` |
+| `fn(str, str) -> bool` | takes two strings, returns a `bool` |
+| `fn()` | takes nothing, returns nothing |
+
+## Writing lambdas
+
+There are two forms:
+
+```kalinga
+fn main() {
+    // Short form: `=>` followed by one expression, which is the result.
+    let double = fn(x: int) => x * 2
+
+    // Block form: like a normal function body.
+    let classify = fn(n: int) -> str {
+        if n < 0 {
+            return "negative"
+        }
+        return "non-negative"
+    }
+
+    print(double(21), classify(-5))
+}
+```
+
+```text
+42 negative
+```
+
+When Kalinga already knows what kind of function is expected, you can leave out the
+parameter types:
+
+```kalinga
+fn apply_twice(f: fn(int) -> int, x: int) -> int {
+    return f(f(x))
+}
+
+fn main() {
+    print(apply_twice(fn(n) => n + 10, 1))   // `n` is an int: apply_twice says so
+}
+```
+
+```text
+21
+```
+
+## Named functions as values
+
+Any top-level function can be used as a value by writing its name without calling it:
+
+```kalinga
+fn square(n: int) -> int {
+    return n * n
+}
+
+fn main() {
+    let ops: [fn(int) -> int] = [square, fn(n) => n + 1, fn(n) => -n]
+    for op in ops {
+        print(op(5))
+    }
+}
+```
+
+```text
+25
+6
+-5
+```
+
+## Capturing variables
+
+A lambda can use variables from where it was written. It gets its own **read-only copy**
+of each one, made when the lambda is created:
+
+```kalinga
+fn make_adder(k: int) -> fn(int) -> int {
+    return fn(x) => x + k
+}
+
+fn main() {
+    let add5 = make_adder(5)
+    let add10 = make_adder(10)
+    print(add5(1), add10(1))
+
+    var greeting = "hello"
+    let greet = fn(name: str) => "{greeting}, {name}"
+    greeting = "bye"          // the lambda kept its own copy
+    print(greet("Asha"))
+}
+```
+
+```text
+6 11
+hello, Asha
+```
+
+Assigning to a captured variable inside a lambda is a compile error:
+
+```text
+error: cannot change `count` inside a lambda: lambdas get a read-only copy of outside variables
+```
+
+To share changing state, keep it in an object: objects are references, so the lambda and
+the outside code see the same object.
+
+```kalinga
+class Counter {
+    n: int
+}
+
+fn main() {
+    let c = Counter()
+    let bump = fn() {
+        c.n += 1
+    }
+    bump()
+    bump()
+    print(c.n)
+}
+```
+
+```text
+2
+```
+
+Inside a method, `self` cannot be used in a lambda directly. Copy it to a variable first:
+`let me = self`, then use `me` in the lambda.
+
+## Functions in fields
+
+A field can hold a function. Calling it looks like calling a method:
+
+```kalinga
+class Button {
+    label: str
+    on_click: fn(str) -> str = fn(who) => "nothing happens"
+
+    init(label: str) {
+        self.label = label
+    }
+
+    fn press(who: str) -> str {
+        return self.on_click(who)
+    }
+}
+
+fn main() {
+    let ok = Button("OK")
+    print(ok.press("Asha"))
+    let label = ok.label
+    ok.on_click = fn(who) => "{who} pressed {label}"
+    print(ok.press("Asha"))
+}
+```
+
+```text
+nothing happens
+Asha pressed OK
+```
+
+Fields of function type need a default value, like fields that hold objects.
+
+## Array helpers that take functions
+
+| Method | Returns | Description |
+|---|---|---|
+| `a.map(f)` | `[U]` | A new array with `f` applied to every element |
+| `a.filter(f)` | `[T]` | The elements for which `f` returns `true` |
+| `a.find(f)` | `T?` | The first element for which `f` returns `true`, or `none` |
+| `a.sort()` | — | Sorts in place (`int`, `float`, `str`, `bool`; needs `var`) |
+| `a.sort_by(f)` | — | Sorts in place; `f(a, b)` returns `true` when `a` comes first |
+
+```kalinga
+fn main() {
+    let nums = [5, 3, 8, 1, 9, 2]
+    let evens = nums.filter(fn(n) => n % 2 == 0)
+    let labels = nums.map(fn(n) => "#{n}")
+    print(evens, labels, nums.find(fn(n) => n > 6))
+
+    var words = ["banana", "fig", "cherry", "kiwi"]
+    words.sort()
+    print(words)
+    words.sort_by(fn(a, b) => len(a) < len(b))
+    print(words)
+}
+```
+
+```text
+[8, 2] [#5, #3, #8, #1, #9, #2] 8
+[banana, cherry, fig, kiwi]
+[fig, kiwi, banana, cherry]
+```
+
+`sort_by` keeps elements that compare equal in their original order.
+
+---
+
+Previous: [11. Interfaces](11-interfaces.md) · Next: [13. Generics](13-generics.md)

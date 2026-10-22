@@ -1,4 +1,4 @@
-# 9. Interfaces
+# 11. Interfaces
 
 An **interface** is a list of method signatures with no code. A class that lists the
 interface promises to provide all of those methods. Code can then work with "anything
@@ -203,12 +203,51 @@ beep
 hello there
 ```
 
+## Interfaces extending interfaces
+
+An interface can build on others with `:`. A class implementing it must provide all the
+methods, and its values can be used as any of the interfaces:
+
+```kalinga
+interface Named {
+    fn name() -> str
+}
+
+interface Pet : Named {
+    fn sound() -> str
+}
+
+class Dog : Pet {
+    fn name() -> str {
+        return "Rex"
+    }
+
+    fn sound() -> str {
+        return "woof"
+    }
+}
+
+fn greet(n: Named) {
+    print("hello", n.name())
+}
+
+fn main() {
+    let p: Pet = Dog()
+    print(p.name(), p.sound())
+    greet(p)    // a Pet is also a Named
+}
+```
+
+```text
+Rex woof
+hello Rex
+```
+
 ## Limits in this version
 
-- An interface cannot extend another interface.
 - Interfaces contain only methods: no fields, no default method bodies.
 - Two interfaces listed by one class should not declare methods with the same name.
 
 ---
 
-Previous: [8. Inheritance](08-inheritance.md) · Next: [10. Safety and Errors](10-safety-and-errors.md)
+Previous: [10. Inheritance](10-inheritance.md) · Next: [12. Lambdas](12-lambdas.md)
