@@ -248,3 +248,18 @@ fn downcast_and_self_value() {
     assert_compile_error("downcast_never", "class A {}\nclass C {}\nfn main() {\n    print(A() as C)\n}", "can never be a `C`");
     assert_compile_error("self_in_init", "class D {\n    init() {\n        let s = self\n    }\n}\nfn main() {}", "inside `init`");
 }
+
+#[test]
+fn lambdas() {
+    let (code, out, err) = run_file("tests/lambdas.kl");
+    assert_eq!(code, 0, "{}", err);
+    assert_eq!(
+        out,
+        "[30, 10, 40, 10, 50, 90, 20, 60]\n[4, 2, 6] 5 none\n[6, 2, 8, 2, 10, 18, 4, 12] [n3, n1, n4, n1, n5, n9, n2, n6]\n\
+         [1, 1, 2, 3, 4, 5, 6, 9]\n[fig, pear, kiwi, banana]\n[-1.0, 2.5, 3.25]\n6 15 42 101\nitem-1\nnobody handles Asha\n\
+         Ravi clicked OK\n14\n12\n-7\nside effect\n"
+    );
+    assert_compile_error("lambda_infer", "fn main() { let f = fn(x) => x }", "cannot tell the type of `x`");
+    assert_compile_error("lambda_capture", "fn main() {\n    var n = 0\n    let f = fn() {\n        n += 1\n    }\n}", "cannot change `n` inside a lambda");
+    assert_compile_error("lambda_self", "class A {\n    x: int\n    fn m() {\n        let f = fn() => self.x\n    }\n}\nfn main() {}", "`self` cannot be used inside a lambda");
+}

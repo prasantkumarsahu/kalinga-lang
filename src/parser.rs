@@ -377,6 +377,21 @@ impl Parser {
                 self.expect(Tok::RBracket, "`]`")?;
                 TypeExpr::Array(Box::new(inner))
             }
+            Tok::Fn => {
+                self.expect(Tok::LParen, "`(` after `fn` in a function type")?;
+                let mut params = Vec::new();
+                while !self.check(&Tok::RParen) {
+                    params.push(self.ty()?);
+                    if !self.eat(&Tok::Comma) {
+                        break;
+                    }
+                }
+                self.expect(Tok::RParen, "`)`")?;
+                let ret = self.ret_type()?;
+                // `fn(int) -> int?` means "returns an optional"; the `?` below would apply to the
+                // whole function type, which is rarely wanted, so parentheses are not supported.
+                return Ok(TypeExpr::Func(params, Box::new(ret)));
+            }
             Tok::LBrace => {
                 let key = self.ty()?;
                 self.expect(Tok::Colon, "`:` between the key and value types of a map")?;
@@ -636,6 +651,26 @@ impl Parser {
             Tok::Int(v) => ExprKind::Int(v),
             Tok::Float(v) => ExprKind::Float(v),
             Tok::Str(s) => ExprKind::Str(s),
+            Tok::Fn => {
+                self.expect(Tok::LParen, "`(` to start the lambda's parameters")?;
+                let mut params = Vec::new();
+                while !self.check(&Tok::RParen) {
+                    let (name, ppos) = self.ident("parameter name")?;
+                    let ty = if self.eat(&Tok::Colon) { Some(self.ty()?) } else { None };
+                    params.push((name, ty, ppos));
+                    if !self.eat(&Tok::Comma) {
+                        break;
+                    }
+                }
+                self.expect(Tok::RParen, "`)`")?;
+                let ret = if self.eat(&Tok::Arrow) { Some(self.ty()?) } else { None };
+                let body = if self.eat(&Tok::FatArrow) {
+                    LambdaBody::Expr(Box::new(self.expr()?))
+                } else {
+                    LambdaBody::Block(self.block()?)
+                };
+                ExprKind::Lambda { params, ret, body }
+            }
             Tok::InterpStr(parts) => {
                 let mut out = Vec::new();
                 for p in parts {

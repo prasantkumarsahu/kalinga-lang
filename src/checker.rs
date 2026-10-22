@@ -21,6 +21,10 @@ pub enum Type {
     Class(String),
     Interface(String),
     Enum(String),
+    /// `fn(A, B) -> R`
+    Func(Vec<Type>, Box<Type>),
+    /// Placeholder for "not known yet" in expected-type hints (lambda results).
+    Unknown,
     /// Type of the `none` literal before it meets an expected optional type.
     NoneLit,
 }
@@ -48,6 +52,15 @@ impl fmt::Display for Type {
             Type::Optional(t) => write!(f, "{}?", t),
             Type::Class(n) | Type::Interface(n) | Type::Enum(n) => write!(f, "{}", n),
             Type::NoneLit => write!(f, "none"),
+            Type::Unknown => write!(f, "_"),
+            Type::Func(ps, r) => {
+                let ps: Vec<String> = ps.iter().map(|p| p.to_string()).collect();
+                if **r == Type::Void {
+                    write!(f, "fn({})", ps.join(", "))
+                } else {
+                    write!(f, "fn({}) -> {}", ps.join(", "), r)
+                }
+            }
         }
     }
 }
@@ -328,7 +341,7 @@ impl Model {
                 if ty == Type::Void {
                     return err("fields cannot have type void", f.pos);
                 }
-                if (ty.is_object() || matches!(ty, Type::Enum(_))) && f.default.is_none() {
+                if (ty.is_object() || matches!(ty, Type::Enum(_) | Type::Func(..))) && f.default.is_none() {
                     return err(
                         format!("field `{}` of type `{}` needs a default value (or make it optional: `{}?`)", f.name, ty, ty),
                         f.pos,
@@ -802,6 +815,17 @@ fn resolve_type(t: &TypeExpr, names: &TypeNames) -> Result<Type> {
                 return err("map of void is not allowed", Pos::default());
             }
             Type::Map(Box::new(kt), Box::new(vt))
+        }
+        TypeExpr::Func(ps, r) => {
+            let mut params = Vec::new();
+            for p in ps {
+                let t = resolve_type(p, names)?;
+                if t == Type::Void {
+                    return err("a function parameter cannot be void", Pos::default());
+                }
+                params.push(t);
+            }
+            Type::Func(params, Box::new(resolve_type(r, names)?))
         }
         TypeExpr::Optional(inner) => {
             let i = resolve_type(inner, names)?;

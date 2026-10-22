@@ -8,7 +8,7 @@ pub fn lex(source: &str, file: u32) -> Result<Vec<Token>> {
 
 /// Lexes `source` as if it started at `start` (used for `{...}` inside strings).
 pub fn lex_at(source: &str, start: Pos) -> Result<Vec<Token>> {
-    Lexer { chars: source.chars().collect(), i: 0, line: start.line, col: start.col, file: start.file, depth: 0, out: Vec::new() }.run()
+    Lexer { chars: source.chars().collect(), i: 0, line: start.line, col: start.col, file: start.file, brackets: Vec::new(), out: Vec::new() }.run()
 }
 
 struct Lexer {
@@ -17,8 +17,9 @@ struct Lexer {
     line: usize,
     col: usize,
     file: u32,
-    /// Nesting of `(` and `[`; newlines inside them are ignored.
-    depth: usize,
+    /// Open brackets. Newlines are ignored while the innermost one is `(` or `[`,
+    /// but count again inside a `{` (e.g. a lambda body passed as an argument).
+    brackets: Vec<char>,
     out: Vec<Token>,
 }
 
@@ -50,7 +51,7 @@ impl Lexer {
     fn push(&mut self, tok: Tok, pos: Pos) {
         if tok == Tok::Newline {
             // Collapse blank lines and drop newlines that cannot end a statement.
-            if self.depth > 0 {
+            if matches!(self.brackets.last(), Some('(') | Some('[')) {
                 return;
             }
             match self.out.last() {
@@ -284,23 +285,29 @@ impl Lexer {
             ('&', Some('&')) => two(self, Tok::And),
             ('|', Some('|')) => two(self, Tok::Or),
             ('(', _) => {
-                self.depth += 1;
+                self.brackets.push('(');
                 Tok::LParen
             }
             (')', _) => {
-                self.depth = self.depth.saturating_sub(1);
+                self.brackets.pop();
                 Tok::RParen
             }
             ('[', _) => {
-                self.depth += 1;
+                self.brackets.push('[');
                 Tok::LBracket
             }
             (']', _) => {
-                self.depth = self.depth.saturating_sub(1);
+                self.brackets.pop();
                 Tok::RBracket
             }
-            ('{', _) => Tok::LBrace,
-            ('}', _) => Tok::RBrace,
+            ('{', _) => {
+                self.brackets.push('{');
+                Tok::LBrace
+            }
+            ('}', _) => {
+                self.brackets.pop();
+                Tok::RBrace
+            }
             (',', _) => Tok::Comma,
             ('.', _) => Tok::Dot,
             (':', _) => Tok::Colon,

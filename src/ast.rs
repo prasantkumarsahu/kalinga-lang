@@ -11,6 +11,8 @@ pub enum TypeExpr {
     Array(Box<TypeExpr>),
     Map(Box<TypeExpr>, Box<TypeExpr>),
     Optional(Box<TypeExpr>),
+    /// `fn(int, str) -> bool`
+    Func(Vec<TypeExpr>, Box<TypeExpr>),
 }
 
 #[derive(Debug, Clone)]
@@ -181,6 +183,14 @@ pub enum ExprKind {
     SuperCall(String, Vec<Expr>),
     /// `x as Dog` (an optional) or `x is Dog` (a bool)
     Downcast { value: Box<Expr>, class: String, test_only: bool },
+    /// `fn(x: int) -> int { ... }` or `fn(x) => x * 2`
+    Lambda { params: Vec<(String, Option<TypeExpr>, Pos)>, ret: Option<TypeExpr>, body: LambdaBody },
+}
+
+#[derive(Debug, Clone)]
+pub enum LambdaBody {
+    Expr(Box<Expr>),
+    Block(Vec<Stmt>),
 }
 
 #[derive(Debug, Clone)]

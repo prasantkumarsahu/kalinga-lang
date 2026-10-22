@@ -1,0 +1,54 @@
+class Button {
+    label: str
+    on_click: fn(str) -> str = fn(who) => "nobody handles {who}"
+    init(label: str) { self.label = label }
+    fn press(who: str) -> str { return self.on_click(who) }
+}
+
+fn double(n: int) -> int { return n * 2 }
+
+fn apply(f: fn(int) -> int, x: int) -> int { return f(x) }
+
+fn make_adder(k: int) -> fn(int) -> int {
+    return fn(x) => x + k
+}
+
+fn main() {
+    let xs = [3, 1, 4, 1, 5, 9, 2, 6]
+    print(xs.map(fn(x) => x * 10))
+    print(xs.filter(fn(x) => x % 2 == 0), xs.find(fn(x) => x > 4), xs.find(fn(x) => x > 100))
+    print(xs.map(double), xs.map(fn(x) => "n{x}"))
+    var sorted = xs
+    sorted.sort()
+    print(sorted)
+    var words = ["pear", "fig", "banana", "kiwi"]
+    words.sort_by(fn(a, b) => len(a) < len(b))
+    print(words)
+    var fl = [2.5, -1.0, 3.25]
+    fl.sort()
+    print(fl)
+
+    let add5 = make_adder(5)
+    print(add5(1), apply(add5, 10), apply(double, 21), apply(fn(x: int) -> int {
+        var t = x
+        t += 100
+        return t
+    }, 1))
+
+    var counter = 0
+    let prefix = "item"
+    let label = fn(i: int) -> str { return "{prefix}-{i}" }
+    counter += 1
+    print(label(counter))
+
+    let b = Button("OK")
+    print(b.press("Asha"))
+    let name = b.label
+    b.on_click = fn(who) => "{who} clicked {name}"
+    print(b.press("Ravi"))
+
+    let fs: [fn(int) -> int] = [double, add5, fn(x) => -x]
+    for f in fs { print(f(7)) }
+    let say = fn() => print("side effect")
+    say()
+}

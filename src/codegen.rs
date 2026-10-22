@@ -4,6 +4,7 @@
 //! subclasses is referred to through `Rc<RefCell<dyn __I_Class>>` so calls dispatch
 //! dynamically; leaf classes use the concrete struct for static dispatch.
 
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fmt::Write as _;
 
@@ -42,9 +43,12 @@ fn fn_id(name: &str) -> String {
     format!("kl_{}", name)
 }
 
+#[derive(Clone)]
 struct Var {
     ty: Type,
     mutable: bool,
+    /// Seen from inside a lambda that captured it.
+    captured: bool,
     rust: String,
 }
 
@@ -57,15 +61,38 @@ struct Ctx {
     /// Inside a `static fn`: no `self`.
     is_static: bool,
     loops: usize,
+    /// Lambdas being generated, innermost last.
+    lambdas: Vec<LambdaFrame>,
+}
+
+/// Variables from outside a lambda that its body uses (they are cloned into the closure).
+struct LambdaFrame {
+    /// Scopes at or above this index belong to the lambda.
+    boundary: usize,
+    captures: RefCell<Vec<String>>,
 }
 
 impl Ctx {
     fn new(class: Option<String>, ret: Type, in_init: bool) -> Ctx {
-        Ctx { scopes: vec![HashMap::new()], class, ret, in_init, is_static: false, loops: 0 }
+        Ctx { scopes: vec![HashMap::new()], class, ret, in_init, is_static: false, loops: 0, lambdas: vec![] }
     }
 
-    fn lookup(&self, name: &str) -> Option<&Var> {
-        self.scopes.iter().rev().find_map(|s| s.get(name))
+    /// Finds a variable. Variables from outside the current lambda are recorded as
+    /// captures and are read-only inside it.
+    fn lookup(&self, name: &str) -> Option<Var> {
+        let idx = (0..self.scopes.len()).rev().find(|i| self.scopes[*i].contains_key(name))?;
+        let mut var = self.scopes[idx][name].clone();
+        for frame in &self.lambdas {
+            if idx < frame.boundary {
+                var.mutable = false;
+                var.captured = true;
+                let mut caps = frame.captures.borrow_mut();
+                if !caps.contains(&var.rust) {
+                    caps.push(var.rust.clone());
+                }
+            }
+        }
+        Some(var)
     }
 
     fn declare(&mut self, name: &str, ty: Type, mutable: bool, pos: Pos) -> Result<String> {
@@ -74,7 +101,7 @@ impl Ctx {
             return err(format!("`{}` is already declared in this scope", name), pos);
         }
         let rust = rid(name);
-        scope.insert(name.to_string(), Var { ty, mutable, rust: rust.clone() });
+        scope.insert(name.to_string(), Var { ty, mutable, captured: false, rust: rust.clone() });
         Ok(rust)
     }
 }
@@ -114,6 +141,15 @@ impl<'a> Gen<'a> {
             }
             Type::Interface(i) => format!("Rc<RefCell<dyn {}>>", i),
             Type::Enum(e) => e.clone(),
+            Type::Func(ps, r) => {
+                let ps: Vec<String> = ps.iter().map(|p| self.rty(p)).collect();
+                if **r == Type::Void {
+                    format!("Rc<dyn Fn({})>", ps.join(", "))
+                } else {
+                    format!("Rc<dyn Fn({}) -> {}>", ps.join(", "), self.rty(r))
+                }
+            }
+            Type::Unknown => "_".into(),
         }
     }
 
@@ -851,6 +887,10 @@ impl<'a> Gen<'a> {
         match &e.kind {
             ExprKind::Ident(name) => match cx.lookup(name) {
                 Some(v) if v.mutable => Ok((String::new(), v.rust.clone(), v.ty.clone())),
+                Some(v) if v.captured => err(
+                    format!("cannot change `{}` inside a lambda: lambdas get a read-only copy of outside variables", name),
+                    e.pos,
+                ),
                 Some(_) => err(format!("cannot change `{}`: it was declared with `let` (use `var` for a mutable variable)", name), e.pos),
                 None => err(format!("unknown variable `{}`", name), e.pos),
             },
@@ -906,6 +946,9 @@ impl<'a> Gen<'a> {
         if cx.is_static {
             return err("`self` is not available in a `static fn`", pos);
         }
+        if !cx.lambdas.is_empty() && cx.class.is_some() {
+            return err("`self` cannot be used inside a lambda; copy it first (`let me = self`) and use `me`", pos);
+        }
         cx.class.clone().ok_or_else(|| crate::error::CompileError::new("`self` is only available inside class methods", pos))
     }
 
@@ -919,6 +962,11 @@ impl<'a> Gen<'a> {
             }
             None => err(format!("`{}` has no field `{}`", class, field), pos),
         }
+    }
+
+    /// Type of field `name` when it holds a function.
+    fn func_field(&self, class: &str, name: &str) -> Option<Type> {
+        self.m.all_fields(class).into_iter().find(|(n, t, _)| n == name && matches!(t, Type::Func(..))).map(|(_, t, _)| t)
     }
 
     fn check_method_access(&self, cx: &Ctx, owner: &str, method: &str, pos: Pos) -> Result<()> {
@@ -991,9 +1039,14 @@ impl<'a> Gen<'a> {
                 Ok((format!("(self.__self.upgrade().unwrap() as {})", self.rty(&ty)), ty))
             }
             ExprKind::Downcast { value, class, test_only } => self.downcast(cx, value, class, *test_only, e.pos),
+            ExprKind::Lambda { params, ret, body } => self.lambda(cx, params, ret.as_ref(), body, expected, e.pos),
             ExprKind::Ident(name) => match cx.lookup(name) {
                 Some(v) => Ok((clone_if(v.rust.clone(), &v.ty), v.ty.clone())),
-                None if self.m.functions.contains_key(name) => err(format!("`{}` is a function; call it with `{}(...)`", name, name), e.pos),
+                None if self.m.functions.contains_key(name) => {
+                    let sig = &self.m.functions[name];
+                    let ty = Type::Func(sig.params.iter().map(|(_, t)| t.clone()).collect(), Box::new(sig.ret.clone()));
+                    Ok((format!("(Rc::new({}) as {})", fn_id(name), self.rty(&ty)), ty))
+                }
                 None if self.m.classes.contains_key(name) => err(format!("`{}` is a class; create one with `{}(...)`", name, name), e.pos),
                 None => err(format!("unknown variable `{}`", name), e.pos),
             },
@@ -1123,6 +1176,99 @@ impl<'a> Gen<'a> {
         }
     }
 
+    /// Calls a function value held in `code`.
+    #[allow(clippy::too_many_arguments)]
+    fn call_value(&self, cx: &mut Ctx, code: String, ps: &[Type], ret: &Type, args: &[Expr], pos: Pos, what: &str) -> Result<(String, Type)> {
+        let sig = Signature { params: ps.iter().enumerate().map(|(i, t)| (format!("p{}", i), t.clone())).collect(), ret: ret.clone() };
+        let (binds, names) = self.args(cx, &sig, args, pos, what)?;
+        Ok((format!("{{ let __f = {}; {}__f({}) }}", code, binds, names), ret.clone()))
+    }
+
+    fn lambda(
+        &self,
+        cx: &mut Ctx,
+        params: &[(String, Option<TypeExpr>, Pos)],
+        ret: Option<&TypeExpr>,
+        body: &LambdaBody,
+        expected: Option<&Type>,
+        pos: Pos,
+    ) -> Result<(String, Type)> {
+        let hint = match expected {
+            Some(Type::Func(ps, r)) if ps.len() == params.len() => Some((ps.clone(), (**r).clone())),
+            _ => None,
+        };
+        let mut ptypes = Vec::new();
+        for (i, (name, ty, ppos)) in params.iter().enumerate() {
+            let t = match (ty, &hint) {
+                (Some(te), _) => self.m.resolve(te).map_err(|e| crate::checker::at_pos(e, *ppos))?,
+                (None, Some((ps, _))) if ps[i] != Type::Unknown => ps[i].clone(),
+                _ => return err(format!("cannot tell the type of `{}`; write it, e.g. `fn({}: int) => ...`", name, name), *ppos),
+            };
+            ptypes.push(t);
+        }
+        let declared_ret = match ret {
+            Some(te) => Some(self.m.resolve(te).map_err(|e| crate::checker::at_pos(e, pos))?),
+            None => hint.as_ref().map(|(_, r)| r.clone()).filter(|r| *r != Type::Unknown),
+        };
+
+        // The lambda body gets its own scope; outer variables become read-only captures.
+        let boundary = cx.scopes.len();
+        cx.lambdas.push(LambdaFrame { boundary, captures: RefCell::new(vec![]) });
+        cx.scopes.push(HashMap::new());
+        let saved = (cx.ret.clone(), cx.loops, cx.in_init);
+        cx.loops = 0;
+        cx.in_init = false;
+        let result = (|| -> Result<(Vec<String>, String, Type)> {
+            let mut rust_params = vec![];
+            for ((name, _, ppos), t) in params.iter().zip(&ptypes) {
+                let r = cx.declare(name, t.clone(), false, *ppos)?;
+                rust_params.push(format!("{}: {}", r, self.rty(t)));
+            }
+            match body {
+                LambdaBody::Expr(e) => {
+                    let (code, t) = match &declared_ret {
+                        Some(r) => (self.expr_to(cx, e, r)?, r.clone()),
+                        None => self.expr(cx, e, None)?,
+                    };
+                    if t == Type::NoneLit {
+                        return err("cannot tell the result type; write it, e.g. `fn(x: int) -> int? => none`", e.pos);
+                    }
+                    let code = if t == Type::Void { format!("{{ {}; }}", code) } else { code };
+                    Ok((rust_params, code, t))
+                }
+                LambdaBody::Block(stmts) => {
+                    let r = declared_ret.clone().unwrap_or(Type::Void);
+                    cx.ret = r.clone();
+                    if r != Type::Void && !always_returns(stmts) {
+                        return err(format!("this lambda must return a `{}` on every path", r), pos);
+                    }
+                    let code = self.block_inner(cx, stmts, 2)?;
+                    Ok((rust_params, format!("{{\n{}}}", code), r))
+                }
+            }
+        })();
+        (cx.ret, cx.loops, cx.in_init) = saved;
+        cx.scopes.pop();
+        let frame = cx.lambdas.pop().unwrap();
+        let (rust_params, code, rt) = result?;
+
+        let ty = Type::Func(ptypes, Box::new(rt.clone()));
+        let caps: String = frame.captures.borrow().iter().map(|c| format!("let {} = {}.clone(); ", c, c)).collect();
+        let ret_sig = if rt == Type::Void { String::new() } else { format!(" -> {}", self.rty(&rt)) };
+        let body_code = if code.starts_with('{') { code } else { format!("{{ {} }}", code) };
+        Ok((
+            format!(
+                "{{ {}let __f: {} = Rc::new(move |{}|{} {}); __f }}",
+                caps,
+                self.rty(&ty),
+                rust_params.join(", "),
+                ret_sig,
+                body_code
+            ),
+            ty,
+        ))
+    }
+
     fn downcast(&self, cx: &mut Ctx, value: &Expr, target: &str, test_only: bool, pos: Pos) -> Result<(String, Type)> {
         if !self.m.classes.contains_key(target) {
             return err(format!("`as`/`is` need a class name, and `{}` is not a class", target), pos);
@@ -1194,6 +1340,12 @@ impl<'a> Gen<'a> {
     }
 
     fn call(&self, cx: &mut Ctx, name: &str, args: &[Expr], pos: Pos) -> Result<(String, Type)> {
+        if let Some(v) = cx.lookup(name) {
+            return match v.ty.clone() {
+                Type::Func(ps, r) => self.call_value(cx, format!("&{}", v.rust), &ps, &r, args, pos, name),
+                other => err(format!("`{}` is a `{}`, not a function", name, other), pos),
+            };
+        }
         if BUILTINS.contains(&name) {
             return self.builtin(cx, name, args, pos);
         }
@@ -1322,7 +1474,13 @@ impl<'a> Gen<'a> {
                 None if self.m.find_static(&class, name).is_some() => {
                     return err(format!("`{}` is a `static fn`; call it as `{}.{}(...)`", name, class, name), pos)
                 }
-                None => return err(format!("`{}` has no method `{}`", class, name), pos),
+                None => {
+                    if let Some(Type::Func(ps, r)) = self.func_field(&class, name) {
+                        self.field_type(cx, &class, name, pos)?;
+                        return self.call_value(cx, format!("self.{}.clone()", rid(name)), &ps, &r, args, pos, name);
+                    }
+                    return err(format!("`{}` has no method `{}`", class, name), pos);
+                }
             };
             let (binds, names) = self.args(cx, &sig, args, pos, name)?;
             return Ok((format!("{{ {}self.{}({}) }}", binds, rid(name), names), sig.ret));
@@ -1338,6 +1496,33 @@ impl<'a> Gen<'a> {
             }
             let kc = self.expr_to(cx, &args[0], k)?;
             return Ok((format!("{{ let __k = {}; {}{}.remove(&__k) }}", kc, pre, place), Type::Optional(v.clone())));
+        }
+        if let (Type::Array(elem), "sort" | "sort_by") = (&recv_ty, name) {
+            let mut n = 0;
+            let (pre, place, _) = self.place(cx, recv, &mut n)?;
+            if name == "sort" {
+                if !args.is_empty() {
+                    return err("`sort` takes no arguments (use `sort_by(fn(a, b) => ...)` for a custom order)", pos);
+                }
+                let call = match **elem {
+                    Type::Int | Type::Str | Type::Bool => "sort()",
+                    Type::Float => "sort_by(|a, b| a.total_cmp(b))",
+                    _ => return err(format!("`sort` works on arrays of int, float, str or bool, not `{}`; use `sort_by`", elem), pos),
+                };
+                return Ok((format!("{{ {}{}.{}; }}", pre, place, call), Type::Void));
+            }
+            if args.len() != 1 {
+                return err("`sort_by` takes one function: `fn(a, b) => <a comes before b>`", pos);
+            }
+            let fty = Type::Func(vec![(**elem).clone(), (**elem).clone()], Box::new(Type::Bool));
+            let f = self.expr_to(cx, &args[0], &fty)?;
+            return Ok((
+                format!(
+                    "{{ let __f = {}; {}{}.sort_by(|a, b| if __f(a.clone(), b.clone()) {{ std::cmp::Ordering::Less }} else if __f(b.clone(), a.clone()) {{ std::cmp::Ordering::Greater }} else {{ std::cmp::Ordering::Equal }}); }}",
+                    f, pre, place
+                ),
+                Type::Void,
+            ));
         }
         if matches!(recv_ty, Type::Array(_)) && (name == "push" || name == "pop") {
             let mut n = 0;
@@ -1371,7 +1556,18 @@ impl<'a> Gen<'a> {
                     None if self.m.find_static(c, name).is_some() => {
                         return err(format!("`{}` is a `static fn`; call it as `{}.{}(...)`", name, c, name), pos)
                     }
-                    None => return err(format!("`{}` has no method `{}`", c, name), pos),
+                    None => {
+                        if let Some(Type::Func(ps, r)) = self.func_field(c, name) {
+                            self.field_type(cx, c, name, pos)?;
+                            let read = if self.m.has_subclasses(c) {
+                                format!("{{ let __t = {}.borrow().__get_{}(); __t }}", rcode, name)
+                            } else {
+                                format!("{{ let __t = {}.borrow().{}.clone(); __t }}", rcode, rid(name))
+                            };
+                            return self.call_value(cx, read, &ps, &r, args, pos, name);
+                        }
+                        return err(format!("`{}` has no method `{}`", c, name), pos);
+                    }
                 };
                 let (binds, names) = self.args(cx, &sig, args, pos, name)?;
                 let call = if self.m.has_subclasses(c) {
@@ -1416,6 +1612,27 @@ impl<'a> Gen<'a> {
             (Type::Array(_), "len") => {
                 arity(0)?;
                 Ok((format!("({}.len() as i64)", rcode), Type::Int))
+            }
+            (Type::Array(elem), "map") => {
+                arity(1)?;
+                let hint = Type::Func(vec![(**elem).clone()], Box::new(Type::Unknown));
+                let (f, ft) = self.expr(cx, &args[0], Some(&hint))?;
+                let out = match &ft {
+                    Type::Func(ps, r) if ps.len() == 1 && self.m.assignable(elem, &ps[0]) && **r != Type::Void => (**r).clone(),
+                    _ => return err(format!("`map` needs a function `fn({}) -> T`, found `{}`", elem, ft), args[0].pos),
+                };
+                let arg = self.coerce("__e.clone()".into(), elem, &match &ft { Type::Func(ps, _) => ps[0].clone(), _ => unreachable!() }, pos)?;
+                Ok((format!("{{ let __f = {}; {}.iter().map(|__e| __f({})).collect::<Vec<_>>() }}", f, rcode, arg), Type::Array(Box::new(out))))
+            }
+            (Type::Array(elem), "filter" | "find") => {
+                arity(1)?;
+                let fty = Type::Func(vec![(**elem).clone()], Box::new(Type::Bool));
+                let f = self.expr_to(cx, &args[0], &fty)?;
+                if name == "filter" {
+                    Ok((format!("{{ let __f = {}; {}.iter().filter(|__e| __f((*__e).clone())).cloned().collect::<Vec<_>>() }}", f, rcode), t.clone()))
+                } else {
+                    Ok((format!("{{ let __f = {}; {}.iter().find(|__e| __f((*__e).clone())).cloned() }}", f, rcode), Type::Optional(elem.clone())))
+                }
             }
             (Type::Array(elem), "contains") => {
                 arity(1)?;
