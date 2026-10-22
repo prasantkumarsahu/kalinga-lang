@@ -5,6 +5,8 @@ use std::fmt;
 pub struct Pos {
     pub line: usize,
     pub col: usize,
+    /// Index into the driver's source map (0 = the file being compiled).
+    pub file: u32,
 }
 
 #[derive(Debug, Clone)]

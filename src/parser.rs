@@ -97,9 +97,17 @@ impl Parser {
                 Tok::Fn => prog.functions.push(self.function(false)?),
                 Tok::Class => prog.classes.push(self.class()?),
                 Tok::Interface => prog.interfaces.push(self.interface()?),
+                Tok::Import => {
+                    let pos = self.advance().pos;
+                    match self.advance().tok {
+                        Tok::Str(path) => prog.imports.push((path, pos)),
+                        other => return err(format!("expected a file name in quotes after `import`, found {}", other.describe()), pos),
+                    }
+                    self.end_of_statement()?;
+                }
                 other => {
                     return err(
-                        format!("expected `fn`, `class` or `interface` at top level, found {}", other.describe()),
+                        format!("expected `fn`, `class`, `interface` or `import` at top level, found {}", other.describe()),
                         self.pos(),
                     )
                 }

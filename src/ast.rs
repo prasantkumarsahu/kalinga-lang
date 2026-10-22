@@ -73,6 +73,8 @@ pub struct InterfaceDecl {
 
 #[derive(Debug, Clone, Default)]
 pub struct Program {
+    /// `import "path"` declarations: (path as written, position).
+    pub imports: Vec<(String, Pos)>,
     pub functions: Vec<FnDecl>,
     pub classes: Vec<ClassDecl>,
     pub interfaces: Vec<InterfaceDecl>,

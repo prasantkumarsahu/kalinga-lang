@@ -161,7 +161,7 @@ impl Model {
             m.functions.insert(f.name.clone(), signature(&f.params, &f.ret, &resolve)?);
         }
         match m.functions.get("main") {
-            None => return err("program has no `fn main()`", Pos { line: 1, col: 1 }),
+            None => return err("program has no `fn main()`", Pos { line: 1, col: 1, file: 0 }),
             Some(sig) if !sig.params.is_empty() || sig.ret != Type::Void => {
                 let pos = prog.functions.iter().find(|f| f.name == "main").unwrap().pos;
                 return err("`main` must take no parameters and return nothing", pos);

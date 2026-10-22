@@ -1,13 +1,14 @@
 use crate::error::{err, Pos, Result};
 use crate::token::{StrPart, Tok, Token};
 
-pub fn lex(source: &str) -> Result<Vec<Token>> {
-    lex_at(source, Pos { line: 1, col: 1, ..Pos::default() })
+/// Lexes a whole file; `file` is its index in the driver's source map.
+pub fn lex(source: &str, file: u32) -> Result<Vec<Token>> {
+    lex_at(source, Pos { line: 1, col: 1, file })
 }
 
 /// Lexes `source` as if it started at `start` (used for `{...}` inside strings).
 pub fn lex_at(source: &str, start: Pos) -> Result<Vec<Token>> {
-    Lexer { chars: source.chars().collect(), i: 0, line: start.line, col: start.col, depth: 0, out: Vec::new() }.run()
+    Lexer { chars: source.chars().collect(), i: 0, line: start.line, col: start.col, file: start.file, depth: 0, out: Vec::new() }.run()
 }
 
 struct Lexer {
@@ -15,6 +16,7 @@ struct Lexer {
     i: usize,
     line: usize,
     col: usize,
+    file: u32,
     /// Nesting of `(` and `[`; newlines inside them are ignored.
     depth: usize,
     out: Vec<Token>,
@@ -42,7 +44,7 @@ impl Lexer {
     }
 
     fn pos(&self) -> Pos {
-        Pos { line: self.line, col: self.col }
+        Pos { line: self.line, col: self.col, file: self.file }
     }
 
     fn push(&mut self, tok: Tok, pos: Pos) {

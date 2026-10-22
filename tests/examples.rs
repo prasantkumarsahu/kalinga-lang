@@ -174,3 +174,25 @@ fn error_map_and_interp() {
     assert_compile_error("interp_obj", "class A {}\nfn main() {\n    let a = A()\n    print(\"{a}\")\n}", "cannot put a `A` value into a string");
     assert_compile_error("interp_brace", "fn main() { print(\"a } b\") }", "unmatched `}` in string");
 }
+
+#[test]
+fn imports() {
+    let dir = std::env::temp_dir().join("kalinga-tests").join("imports");
+    std::fs::create_dir_all(dir.join("lib")).unwrap();
+    std::fs::write(dir.join("lib/geo.kl"), "import \"util.kl\"\n\nclass Square {\n    side: int\n    init(side: int) {\n        self.side = side\n    }\n    fn area() -> int {\n        return twice(self.side) / 2 * self.side\n    }\n}\n").unwrap();
+    std::fs::write(dir.join("lib/util.kl"), "import \"geo.kl\"\n\nfn twice(n: int) -> int {\n    return n * 2\n}\n").unwrap();
+    std::fs::write(dir.join("main.kl"), "import \"lib/geo.kl\"\n\nfn main() {\n    print(Square(3).area(), twice(5))\n}\n").unwrap();
+    let (code, out, err) = run_file(dir.join("main.kl").to_str().unwrap());
+    assert_eq!(code, 0, "{}", err);
+    assert_eq!(out, "9 10\n");
+
+    std::fs::write(dir.join("lib/bad.kl"), "fn oops() {\n    let x: int = \"s\"\n}\n").unwrap();
+    std::fs::write(dir.join("bad_main.kl"), "import \"lib/bad.kl\"\nfn main() {}\n").unwrap();
+    let (code, _, err) = run_file(dir.join("bad_main.kl").to_str().unwrap());
+    assert_eq!(code, 1);
+    assert!(err.contains("bad.kl:2:18: error: expected `int`, found `str`"), "{}", err);
+
+    std::fs::write(dir.join("missing.kl"), "import \"nope.kl\"\nfn main() {}\n").unwrap();
+    let (_, _, err) = run_file(dir.join("missing.kl").to_str().unwrap());
+    assert!(err.contains("cannot find `nope.kl`"), "{}", err);
+}
