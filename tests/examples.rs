@@ -75,6 +75,24 @@ fn emit_produces_rust() {
 }
 
 #[test]
+fn check_reads_stdin() {
+    use std::io::Write;
+    let mut child = Command::new(env!("CARGO_BIN_EXE_kalinga"))
+        .args(["check", "buffer.kl", "--stdin"])
+        .stdin(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+    child.stdin.take().unwrap().write_all(b"fn main() {\n    let x: int = true\n}\n").unwrap();
+    let out = child.wait_with_output().unwrap();
+    assert_eq!(out.status.code(), Some(1));
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert!(err.starts_with("buffer.kl:2:18: error: expected `int`, found `bool`"), "{}", err);
+
+    assert_eq!(kalinga(&["check", "examples/oop.kl"]).status.code(), Some(0));
+}
+
+#[test]
 fn error_two_base_classes() {
     assert_compile_error("two_bases", "class A {}\nclass B {}\nclass C : A, B {}\nfn main() {}", "can extend only one class");
 }

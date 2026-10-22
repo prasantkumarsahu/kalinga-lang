@@ -1,0 +1,111 @@
+{
+  "name": "kalinga-lang",
+  "displayName": "Kalinga Language",
+  "description": "Syntax highlighting, snippets, live error checking and run commands for the Kalinga language (.kl)",
+  "version": "0.1.0",
+  "publisher": "kalinga",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.75.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Snippets",
+    "Linters"
+  ],
+  "main": "./extension.js",
+  "activationEvents": [
+    "onLanguage:kalinga"
+  ],
+  "contributes": {
+    "languages": [
+      {
+        "id": "kalinga",
+        "aliases": [
+          "Kalinga",
+          "kalinga"
+        ],
+        "extensions": [
+          ".kl"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "kalinga",
+        "scopeName": "source.kalinga",
+        "path": "./syntaxes/kalinga.tmLanguage.json"
+      }
+    ],
+    "snippets": [
+      {
+        "language": "kalinga",
+        "path": "./snippets/kalinga.json"
+      }
+    ],
+    "commands": [
+      {
+        "command": "kalinga.run",
+        "title": "Run File",
+        "category": "Kalinga",
+        "icon": "$(play)"
+      },
+      {
+        "command": "kalinga.emit",
+        "title": "Show Generated Rust",
+        "category": "Kalinga"
+      },
+      {
+        "command": "kalinga.build",
+        "title": "Build Executable",
+        "category": "Kalinga"
+      }
+    ],
+    "menus": {
+      "editor/title/run": [
+        {
+          "command": "kalinga.run",
+          "when": "editorLangId == kalinga"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "kalinga.run",
+          "when": "editorLangId == kalinga"
+        },
+        {
+          "command": "kalinga.emit",
+          "when": "editorLangId == kalinga"
+        },
+        {
+          "command": "kalinga.build",
+          "when": "editorLangId == kalinga"
+        }
+      ]
+    },
+    "keybindings": [
+      {
+        "command": "kalinga.run",
+        "key": "ctrl+f5",
+        "mac": "cmd+f5",
+        "when": "editorLangId == kalinga"
+      }
+    ],
+    "configuration": {
+      "title": "Kalinga",
+      "properties": {
+        "kalinga.compilerPath": {
+          "type": "string",
+          "default": "kalinga",
+          "description": "Path to the `kalinga` compiler executable (or just `kalinga` if it is on PATH)."
+        },
+        "kalinga.checkOnType": {
+          "type": "boolean",
+          "default": true,
+          "description": "Check for errors while typing. When off, files are checked on open and save."
+        }
+      }
+    }
+  }
+}

@@ -15,7 +15,8 @@ const USAGE: &str = "Kalinga — a simple, safe, fast object-oriented language t
 usage:
   kalinga run   <file.kl>              compile and run
   kalinga build <file.kl> [-o <exe>]   compile to a native executable
-  kalinga emit  <file.kl>              print the generated Rust code";
+  kalinga emit  <file.kl>              print the generated Rust code
+  kalinga check <file.kl> [--stdin]    report errors only (--stdin reads the source from stdin)";
 
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -57,6 +58,17 @@ fn main() {
                 print!("{}", rust);
                 0
             }),
+        "check" => {
+            let source = if args.get(2).map(String::as_str) == Some("--stdin") {
+                let mut s = String::new();
+                std::io::Read::read_to_string(&mut std::io::stdin(), &mut s)
+                    .map(|_| s)
+                    .map_err(|e| format!("cannot read stdin: {}", e))
+            } else {
+                std::fs::read_to_string(&file).map_err(|e| format!("cannot read {}: {}", file.display(), e))
+            };
+            source.and_then(|src| driver::to_rust(&file.display().to_string(), &src)).map(|_| 0)
+        }
         _ => {
             eprintln!("unknown command `{}`\n\n{}", cmd, USAGE);
             exit(2);

@@ -51,6 +51,12 @@ cargo run -- emit examples/oop.kl
 ```
 
 `emit` prints the generated Rust so you can see exactly what your program becomes.
+`check <file> [--stdin]` only reports errors, which editors use for live diagnostics.
+
+## Editor support
+
+A VS Code extension with syntax highlighting, snippets, live errors and a Run button is in
+[editors/vscode](editors/vscode/README.md).
 
 ## Language
 
@@ -105,3 +111,4 @@ through a different reference (for example `a.f(a)` where `f` modifies `a`) stop
 | `src/driver.rs` | invokes `rustc` and runs the program |
 | `examples/` | `hello.kl`, `oop.kl`, `fib.kl` |
 | `tests/examples.rs` | end-to-end tests |
+| `editors/vscode/` | VS Code extension |

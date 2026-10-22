@@ -1,0 +1,93 @@
+{
+  "main function": {
+    "prefix": "main",
+    "body": ["fn main() {", "\t$0", "}"],
+    "description": "Program entry point"
+  },
+  "function": {
+    "prefix": "fn",
+    "body": ["fn ${1:name}(${2:param}: ${3:int}) -> ${4:int} {", "\t$0", "}"],
+    "description": "Function"
+  },
+  "class": {
+    "prefix": "class",
+    "body": [
+      "class ${1:Name} {",
+      "\t${2:field}: ${3:int}",
+      "",
+      "\tinit(${2:field}: ${3:int}) {",
+      "\t\tself.${2:field} = ${2:field}",
+      "\t}",
+      "",
+      "\t$0",
+      "}"
+    ],
+    "description": "Class with a field and init"
+  },
+  "subclass": {
+    "prefix": "classx",
+    "body": [
+      "class ${1:Name} : ${2:Base} {",
+      "\tinit(${3:args}) {",
+      "\t\tsuper(${4})",
+      "\t}",
+      "",
+      "\toverride fn ${5:method}() -> ${6:str} {",
+      "\t\treturn super.${5:method}()$0",
+      "\t}",
+      "}"
+    ],
+    "description": "Class extending a base class"
+  },
+  "interface": {
+    "prefix": "interface",
+    "body": ["interface ${1:Name} {", "\tfn ${2:method}() -> ${3:str}", "}"],
+    "description": "Interface"
+  },
+  "method": {
+    "prefix": "meth",
+    "body": ["fn ${1:name}() -> ${2:str} {", "\treturn ${3:self.field}$0", "}"],
+    "description": "Method"
+  },
+  "override method": {
+    "prefix": "override",
+    "body": ["override fn ${1:name}() -> ${2:str} {", "\t$0", "}"],
+    "description": "Override a base-class method"
+  },
+  "init": {
+    "prefix": "init",
+    "body": ["init(${1:name}: ${2:str}) {", "\tself.${1:name} = ${1:name}$0", "}"],
+    "description": "Constructor"
+  },
+  "if": {
+    "prefix": "if",
+    "body": ["if ${1:cond} {", "\t$0", "}"]
+  },
+  "if else": {
+    "prefix": "ife",
+    "body": ["if ${1:cond} {", "\t$2", "} else {", "\t$0", "}"]
+  },
+  "if let": {
+    "prefix": "iflet",
+    "body": ["if let ${1:value} = ${2:optional} {", "\t$0", "}"],
+    "description": "Unwrap an optional value"
+  },
+  "while": {
+    "prefix": "while",
+    "body": ["while ${1:cond} {", "\t$0", "}"]
+  },
+  "for range": {
+    "prefix": "forr",
+    "body": ["for ${1:i} in ${2:0}..${3:n} {", "\t$0", "}"],
+    "description": "Loop over a number range"
+  },
+  "for each": {
+    "prefix": "for",
+    "body": ["for ${1:item} in ${2:items} {", "\t$0", "}"],
+    "description": "Loop over an array"
+  },
+  "print": {
+    "prefix": "pr",
+    "body": ["print(${1})$0"]
+  }
+}
