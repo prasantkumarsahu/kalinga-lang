@@ -75,6 +75,15 @@ fn emit_produces_rust() {
 }
 
 #[test]
+fn version_flags() {
+    for flag in ["-v", "-version", "--version", "version"] {
+        let out = kalinga(&[flag]);
+        assert_eq!(out.status.code(), Some(0), "{}", flag);
+        assert_eq!(String::from_utf8_lossy(&out.stdout).trim(), format!("kalinga {}", env!("CARGO_PKG_VERSION")), "{}", flag);
+    }
+}
+
+#[test]
 fn check_reads_stdin() {
     use std::io::Write;
     let mut child = Command::new(env!("CARGO_BIN_EXE_kalinga"))

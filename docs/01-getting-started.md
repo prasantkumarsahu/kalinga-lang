@@ -15,10 +15,11 @@ executable, so you need a Rust toolchain:
 3. Check that it works:
 
    ```bash
-   kalinga
+   kalinga -v
    ```
 
-   It prints the list of commands.
+   It prints the installed version, for example `kalinga 0.2.0`. Run `kalinga` on its own
+   to see the list of commands.
 
 ## Your first program
 

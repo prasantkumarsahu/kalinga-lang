@@ -16,10 +16,15 @@ usage:
   kalinga run   <file.kl>              compile and run
   kalinga build <file.kl> [-o <exe>]   compile to a native executable
   kalinga emit  <file.kl>              print the generated Rust code
-  kalinga check <file.kl> [--stdin]    report errors only (--stdin reads the source from stdin)";
+  kalinga check <file.kl> [--stdin]    report errors only (--stdin reads the source from stdin)
+  kalinga -v | --version               print the installed version";
 
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
+    if let Some("-v" | "-version" | "--version" | "version") = args.first().map(String::as_str) {
+        println!("kalinga {}", env!("CARGO_PKG_VERSION"));
+        return;
+    }
     let (cmd, file) = match (args.first(), args.get(1)) {
         (Some(c), Some(f)) => (c.as_str(), PathBuf::from(f)),
         _ => {
