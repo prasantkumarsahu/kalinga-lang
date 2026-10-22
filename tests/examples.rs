@@ -196,3 +196,22 @@ fn imports() {
     let (_, _, err) = run_file(dir.join("missing.kl").to_str().unwrap());
     assert!(err.contains("cannot find `nope.kl`"), "{}", err);
 }
+
+#[test]
+fn enums_and_match() {
+    assert_runs(
+        "enums",
+        "enum Shape {\n    Circle(r: float)\n    Rect(w: float, h: float)\n    Empty\n}\n\nfn area(s: Shape) -> float {\n    match s {\n        Circle(r) => return 3.0 * r * r\n        Rect(w, h) => {\n            return w * h\n        }\n        Empty => return 0.0\n    }\n}\n\nfn main() {\n    for s in [Shape.Circle(1.0), Shape.Rect(2.0, 3.0), Shape.Empty] {\n        print(s, area(s))\n    }\n    print(Shape.Empty == Shape.Empty)\n    match \"b\" {\n        \"a\" => print(1)\n        _ => print(2)\n    }\n}\n",
+        "Circle(1.0) 3.0\nRect(2.0, 3.0) 6.0\nEmpty 0.0\ntrue\n2\n",
+    );
+}
+
+#[test]
+fn error_match() {
+    let e = "enum C { R, G, B }\n";
+    assert_compile_error("match_missing", &format!("{}fn main() {{\n    match C.R {{\n        R => print(1)\n    }}\n}}", e), "missing: G, B");
+    assert_compile_error("match_dup", &format!("{}fn main() {{\n    match C.R {{\n        R => print(1)\n        R => print(2)\n        _ => print(3)\n    }}\n}}", e), "already handled");
+    assert_compile_error("match_int", "fn main() {\n    match 1 {\n        1 => print(1)\n    }\n}", "add a `_ =>` arm");
+    assert_compile_error("enum_self", "enum T { Leaf, Node(l: T) }\nfn main() {}", "contains itself");
+    assert_compile_error("enum_variant", &format!("{}fn main() {{ print(C.X) }}", e), "has no variant `X`");
+}

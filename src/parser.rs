@@ -97,6 +97,7 @@ impl Parser {
                 Tok::Fn => prog.functions.push(self.function(false)?),
                 Tok::Class => prog.classes.push(self.class()?),
                 Tok::Interface => prog.interfaces.push(self.interface()?),
+                Tok::Enum => prog.enums.push(self.enum_decl()?),
                 Tok::Import => {
                     let pos = self.advance().pos;
                     match self.advance().tok {
@@ -107,7 +108,7 @@ impl Parser {
                 }
                 other => {
                     return err(
-                        format!("expected `fn`, `class`, `interface` or `import` at top level, found {}", other.describe()),
+                        format!("expected `fn`, `class`, `interface`, `enum` or `import` at top level, found {}", other.describe()),
                         self.pos(),
                     )
                 }
@@ -220,6 +221,81 @@ impl Parser {
         Ok(InterfaceDecl { name, methods, pos })
     }
 
+    fn enum_decl(&mut self) -> Result<EnumDecl> {
+        let pos = self.expect(Tok::Enum, "`enum`")?;
+        let (name, _) = self.ident("enum name")?;
+        self.expect(Tok::LBrace, "`{` to start enum body")?;
+        self.skip_newlines();
+        let mut variants = Vec::new();
+        while !self.check(&Tok::RBrace) {
+            let (vname, vpos) = self.ident("variant name")?;
+            let fields = if self.check(&Tok::LParen) { self.params()? } else { vec![] };
+            variants.push(VariantDecl { name: vname, fields, pos: vpos });
+            if self.eat(&Tok::Comma) {
+                self.skip_newlines();
+            } else {
+                self.end_of_statement()?;
+            }
+        }
+        self.expect(Tok::RBrace, "`}`")?;
+        Ok(EnumDecl { name, variants, pos })
+    }
+
+    fn pattern(&mut self) -> Result<Pattern> {
+        let pos = self.pos();
+        Ok(match self.advance().tok {
+            Tok::Ident(n) if n == "_" => Pattern::Wildcard,
+            Tok::Ident(n) => {
+                // Optional `Enum.` prefix.
+                let name = if self.eat(&Tok::Dot) { self.ident("variant name")?.0 } else { n };
+                let mut binds = Vec::new();
+                if self.eat(&Tok::LParen) {
+                    while !self.check(&Tok::RParen) {
+                        binds.push(self.ident("a name to bind")?.0);
+                        if !self.eat(&Tok::Comma) {
+                            break;
+                        }
+                    }
+                    self.expect(Tok::RParen, "`)`")?;
+                }
+                Pattern::Variant(name, binds)
+            }
+            Tok::Int(v) => Pattern::Int(v),
+            Tok::Minus => match self.advance().tok {
+                Tok::Int(v) => Pattern::Int(-v),
+                other => return err(format!("expected a number after `-`, found {}", other.describe()), pos),
+            },
+            Tok::Str(s) => Pattern::Str(s),
+            Tok::True => Pattern::Bool(true),
+            Tok::False => Pattern::Bool(false),
+            other => return err(format!("expected a pattern (a variant, literal or `_`), found {}", other.describe()), pos),
+        })
+    }
+
+    fn match_stmt(&mut self) -> Result<Stmt> {
+        let pos = self.expect(Tok::Match, "`match`")?;
+        let value = self.expr()?;
+        self.expect(Tok::LBrace, "`{` to start the match arms")?;
+        self.skip_newlines();
+        let mut arms = Vec::new();
+        while !self.check(&Tok::RBrace) {
+            let apos = self.pos();
+            let pattern = self.pattern()?;
+            self.expect(Tok::FatArrow, "`=>` after the pattern")?;
+            let body = if self.check(&Tok::LBrace) {
+                let b = self.block()?;
+                self.skip_newlines();
+                b
+            } else {
+                vec![self.statement()?]
+            };
+            arms.push(MatchArm { pattern, body, pos: apos });
+        }
+        self.expect(Tok::RBrace, "`}`")?;
+        self.skip_newlines();
+        Ok(Stmt { kind: StmtKind::Match { value, arms }, pos })
+    }
+
     fn ty(&mut self) -> Result<TypeExpr> {
         let pos = self.pos();
         let base = match self.advance().tok {
@@ -281,6 +357,7 @@ impl Parser {
                 StmtKind::Let { name, mutable, ty, value }
             }
             Tok::If => return self.if_stmt(),
+            Tok::Match => return self.match_stmt(),
             Tok::While => {
                 self.advance();
                 let cond = self.expr()?;

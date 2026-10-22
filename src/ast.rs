@@ -71,6 +71,20 @@ pub struct InterfaceDecl {
     pub pos: Pos,
 }
 
+#[derive(Debug, Clone)]
+pub struct VariantDecl {
+    pub name: String,
+    pub fields: Vec<Param>,
+    pub pos: Pos,
+}
+
+#[derive(Debug, Clone)]
+pub struct EnumDecl {
+    pub name: String,
+    pub variants: Vec<VariantDecl>,
+    pub pos: Pos,
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct Program {
     /// `import "path"` declarations: (path as written, position).
@@ -78,6 +92,7 @@ pub struct Program {
     pub functions: Vec<FnDecl>,
     pub classes: Vec<ClassDecl>,
     pub interfaces: Vec<InterfaceDecl>,
+    pub enums: Vec<EnumDecl>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -181,6 +196,23 @@ pub enum ForIter {
 }
 
 #[derive(Debug, Clone)]
+pub enum Pattern {
+    Wildcard,
+    /// `Circle(r)` / `Shape.Circle(r)` / `Empty`; `_` bindings are skipped.
+    Variant(String, Vec<String>),
+    Int(i64),
+    Str(String),
+    Bool(bool),
+}
+
+#[derive(Debug, Clone)]
+pub struct MatchArm {
+    pub pattern: Pattern,
+    pub body: Vec<Stmt>,
+    pub pos: Pos,
+}
+
+#[derive(Debug, Clone)]
 pub struct Stmt {
     pub kind: StmtKind,
     pub pos: Pos,
@@ -193,6 +225,7 @@ pub enum StmtKind {
     If { cond: Expr, then: Vec<Stmt>, otherwise: Option<Vec<Stmt>> },
     IfLet { name: String, value: Expr, then: Vec<Stmt>, otherwise: Option<Vec<Stmt>> },
     While { cond: Expr, body: Vec<Stmt> },
+    Match { value: Expr, arms: Vec<MatchArm> },
     For { var: String, iter: ForIter, body: Vec<Stmt> },
     Return(Option<Expr>),
     Break,

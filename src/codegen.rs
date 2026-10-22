@@ -85,14 +85,6 @@ fn clone_if(code: String, ty: &Type) -> String {
     if ty.is_copy() { code } else { format!("{}.clone()", code) }
 }
 
-fn showable(t: &Type) -> bool {
-    match t {
-        Type::Int | Type::Float | Type::Bool | Type::Str => true,
-        Type::Array(i) | Type::Optional(i) => showable(i),
-        Type::Map(k, v) => showable(k) && showable(v),
-        _ => false,
-    }
-}
 
 fn indent(n: usize) -> String {
     "    ".repeat(n)
@@ -119,6 +111,7 @@ impl<'a> Gen<'a> {
                 }
             }
             Type::Interface(i) => format!("Rc<RefCell<dyn {}>>", i),
+            Type::Enum(e) => e.clone(),
         }
     }
 
@@ -181,6 +174,10 @@ impl<'a> Gen<'a> {
             out.push_str("}\n");
         }
 
+        for ename in &self.m.enum_order {
+            self.enum_decl(&mut out, ename);
+        }
+
         // Bodies are generated once per defining class and pasted into every subclass.
         let mut method_bodies: HashMap<(String, String), String> = HashMap::new();
         let mut init_bodies: HashMap<String, String> = HashMap::new();
@@ -230,6 +227,78 @@ impl<'a> Gen<'a> {
 
         writeln!(out, "\nfn main() {{\n    __kl_run({});\n}}", fn_id("main")).unwrap();
         Ok(out)
+    }
+
+    fn enum_decl(&self, out: &mut String, name: &str) {
+        let info = &self.m.enums[name];
+        let plain = self.m.plain_enums.contains(name);
+        writeln!(out, "\n// enum {}", name).unwrap();
+        writeln!(out, "#[derive(Clone{})]", if plain { ", PartialEq" } else { "" }).unwrap();
+        writeln!(out, "enum {} {{", name).unwrap();
+        for (v, fields) in &info.variants {
+            if fields.is_empty() {
+                writeln!(out, "    {},", v).unwrap();
+            } else {
+                let ts: Vec<String> = fields.iter().map(|(_, t)| self.rty(t)).collect();
+                writeln!(out, "    {}({}),", v, ts.join(", ")).unwrap();
+            }
+        }
+        out.push_str("}\n");
+        if plain {
+            writeln!(out, "impl __KlShow for {} {{\n    fn __show(&self) -> String {{\n        match self {{", name).unwrap();
+            for (v, fields) in &info.variants {
+                if fields.is_empty() {
+                    writeln!(out, "            {}::{} => String::from({:?}),", name, v, v).unwrap();
+                } else {
+                    let binds: Vec<String> = (0..fields.len()).map(|i| format!("__f{}", i)).collect();
+                    let shows: Vec<String> = binds.iter().map(|b| format!("{}.__show()", b)).collect();
+                    let holes = vec!["{}"; fields.len()].join(", ");
+                    writeln!(
+                        out,
+                        "            {}::{}({}) => format!(\"{}({})\", {}),",
+                        name,
+                        v,
+                        binds.join(", "),
+                        v,
+                        holes,
+                        shows.join(", ")
+                    )
+                    .unwrap();
+                }
+            }
+            out.push_str("        }\n    }\n}\n");
+        }
+    }
+
+    /// `Shape.Circle(args)` or `Shape.Empty`, when `type_name` is an enum.
+    fn variant_value(&self, cx: &mut Ctx, type_name: &str, variant: &str, args: Option<&[Expr]>, pos: Pos) -> Result<(String, Type)> {
+        let info = &self.m.enums[type_name];
+        let fields = match info.variant(variant) {
+            Some(f) => f.clone(),
+            None => return err(format!("enum `{}` has no variant `{}`", type_name, variant), pos),
+        };
+        let ty = Type::Enum(type_name.to_string());
+        match args {
+            None if fields.is_empty() => Ok((format!("{}::{}", type_name, variant), ty)),
+            None => err(
+                format!("`{}.{}` needs {} value(s): `{}.{}(...)`", type_name, variant, fields.len(), type_name, variant),
+                pos,
+            ),
+            Some(_) if fields.is_empty() => err(format!("`{}.{}` takes no values; write it without `()`", type_name, variant), pos),
+            Some(args) => {
+                let sig = Signature { params: fields, ret: Type::Void };
+                let (binds, names) = self.args(cx, &sig, args, pos, variant)?;
+                Ok((format!("{{ {}{}::{}({}) }}", binds, type_name, variant, names), ty))
+            }
+        }
+    }
+
+    /// Type name used as a receiver (`Shape.Circle`), unless a variable shadows it.
+    fn type_receiver(&self, cx: &Ctx, recv: &Expr) -> Option<String> {
+        match &recv.kind {
+            ExprKind::Ident(n) if cx.lookup(n).is_none() && self.m.enums.contains_key(n) => Some(n.clone()),
+            _ => None,
+        }
     }
 
     fn comma_params(&self, sig: &Signature) -> String {
@@ -476,6 +545,7 @@ impl<'a> Gen<'a> {
                 }
                 Ok(out)
             }
+            StmtKind::Match { value, arms } => self.match_stmt(cx, value, arms, s.pos, depth),
             StmtKind::While { cond, body } => {
                 let infinite = matches!(cond.kind, ExprKind::Bool(true));
                 let c = self.cond(cx, cond)?;
@@ -533,6 +603,105 @@ impl<'a> Gen<'a> {
                 Ok(format!("{};", code))
             }
         }
+    }
+
+    fn match_stmt(&self, cx: &mut Ctx, value: &Expr, arms: &[MatchArm], pos: Pos, depth: usize) -> Result<String> {
+        let (code, ty) = self.expr(cx, value, None)?;
+        let enum_info = match &ty {
+            Type::Enum(e) => Some((e.clone(), self.m.enums[e].clone())),
+            Type::Int | Type::Str | Type::Bool => None,
+            other => return err(format!("cannot `match` on `{}` (use an enum, int, str or bool)", other), value.pos),
+        };
+        let scrutinee = if ty == Type::Str { format!("({}).as_str()", code) } else { code };
+        let mut out = format!("match {} {{\n", scrutinee);
+        let mut covered: Vec<String> = vec![];
+        let mut wildcard = false;
+        let (mut saw_true, mut saw_false) = (false, false);
+        for arm in arms {
+            if wildcard {
+                return err("this arm can never run: an earlier `_` arm already matches everything", arm.pos);
+            }
+            cx.scopes.push(HashMap::new());
+            let pat = self.pattern(cx, arm, &ty, &enum_info, &mut covered, &mut wildcard, &mut saw_true, &mut saw_false);
+            let pat = match pat {
+                Ok(p) => p,
+                Err(e) => {
+                    cx.scopes.pop();
+                    return Err(e);
+                }
+            };
+            let body = self.block(cx, &arm.body, depth + 1);
+            cx.scopes.pop();
+            writeln!(out, "{}{} => {}", indent(depth + 1), pat, body?).unwrap();
+        }
+        let all_variants = enum_info.as_ref().is_some_and(|(_, info)| info.variants.iter().all(|(v, _)| covered.contains(v)));
+        if !(wildcard || (saw_true && saw_false) || all_variants) {
+            let missing = match &enum_info {
+                Some((_, info)) => {
+                    let m: Vec<&str> = info.variants.iter().filter(|(v, _)| !covered.contains(v)).map(|(v, _)| v.as_str()).collect();
+                    format!("missing: {}", m.join(", "))
+                }
+                None => "add a `_ =>` arm".to_string(),
+            };
+            return err(format!("`match` does not handle every case ({})", missing), pos);
+        }
+        write!(out, "{}}}", indent(depth)).unwrap();
+        Ok(out)
+    }
+
+    /// Rust pattern for one match arm; declares its bindings in the current scope.
+    #[allow(clippy::too_many_arguments)]
+    fn pattern(
+        &self,
+        cx: &mut Ctx,
+        arm: &MatchArm,
+        ty: &Type,
+        enum_info: &Option<(String, crate::checker::EnumInfo)>,
+        covered: &mut Vec<String>,
+        wildcard: &mut bool,
+        saw_true: &mut bool,
+        saw_false: &mut bool,
+    ) -> Result<String> {
+        Ok(match (&arm.pattern, enum_info) {
+            (Pattern::Wildcard, _) => {
+                *wildcard = true;
+                "_".to_string()
+            }
+            (Pattern::Variant(v, binds), Some((ename, info))) => {
+                let fields = match info.variant(v) {
+                    Some(f) => f.clone(),
+                    None => return err(format!("enum `{}` has no variant `{}`", ename, v), arm.pos),
+                };
+                if covered.contains(v) {
+                    return err(format!("variant `{}` is already handled by an earlier arm", v), arm.pos);
+                }
+                covered.push(v.clone());
+                if binds.len() != fields.len() {
+                    return err(format!("`{}` has {} value(s), but the pattern binds {}", v, fields.len(), binds.len()), arm.pos);
+                }
+                let mut rust = vec![];
+                for (b, (_, t)) in binds.iter().zip(&fields) {
+                    if b == "_" {
+                        rust.push("_".to_string());
+                    } else {
+                        rust.push(cx.declare(b, t.clone(), false, arm.pos)?);
+                    }
+                }
+                if fields.is_empty() { format!("{}::{}", ename, v) } else { format!("{}::{}({})", ename, v, rust.join(", ")) }
+            }
+            (Pattern::Int(n), None) if *ty == Type::Int => format!("{}i64", n),
+            (Pattern::Str(st), None) if *ty == Type::Str => format!("{:?}", st),
+            (Pattern::Bool(b), None) if *ty == Type::Bool => {
+                if *b {
+                    *saw_true = true
+                } else {
+                    *saw_false = true
+                }
+                b.to_string()
+            }
+            (Pattern::Variant(v, _), None) => return err(format!("`{}` is not a variant of `{}`", v, ty), arm.pos),
+            _ => return err(format!("this pattern does not fit a `{}` value", ty), arm.pos),
+        })
     }
 
     fn super_init(&self, cx: &mut Ctx, args: &[Expr], pos: Pos) -> Result<String> {
@@ -628,6 +797,9 @@ impl<'a> Gen<'a> {
                 None => err(format!("unknown variable `{}`", name), e.pos),
             },
             ExprKind::Field(recv, f) => {
+                if self.type_receiver(cx, recv).is_some() {
+                    return err("cannot assign to an enum variant", e.pos);
+                }
                 if matches!(recv.kind, ExprKind::SelfRef) {
                     let class = self.self_class(cx, recv.pos)?;
                     let t = self.field_type(&class, f, e.pos)?;
@@ -777,7 +949,7 @@ impl<'a> Gen<'a> {
                         InterpPart::Lit(s) => fmt.push_str(&s.replace('{', "{{").replace('}', "}}")),
                         InterpPart::Expr(x) => {
                             let (c, t) = self.expr(cx, x, None)?;
-                            if !showable(&t) {
+                            if !self.m.is_plain(&t) {
                                 return err(format!("cannot put a `{}` value into a string", t), x.pos);
                             }
                             fmt.push_str("{}");
@@ -800,6 +972,9 @@ impl<'a> Gen<'a> {
             ExprKind::Call(name, args) => self.call(cx, name, args, e.pos),
             ExprKind::MethodCall(recv, name, args) => self.method_call(cx, recv, name, args, e.pos),
             ExprKind::Field(recv, f) => {
+                if let Some(t) = self.type_receiver(cx, recv) {
+                    return self.variant_value(cx, &t, f, None, e.pos);
+                }
                 if matches!(recv.kind, ExprKind::SelfRef) {
                     let class = self.self_class(cx, recv.pos)?;
                     let t = self.field_type(&class, f, e.pos)?;
@@ -869,7 +1044,7 @@ impl<'a> Gen<'a> {
                 if lt != rt {
                     return err(format!("cannot compare `{}` with `{}`", lt, rt), pos);
                 }
-                if !showable(&lt) {
+                if !self.m.is_plain(&lt) {
                     return err(format!("`{}` values cannot be compared with `{}`", lt, op.rust()), pos);
                 }
                 Ok((format!("({} {} {})", lc, op.rust(), rc), Type::Bool))
@@ -933,7 +1108,7 @@ impl<'a> Gen<'a> {
                 let mut parts = vec![];
                 for a in args {
                     let (c, t) = self.expr(cx, a, None)?;
-                    if !showable(&t) {
+                    if !self.m.is_plain(&t) {
                         return err(format!("cannot print a `{}` value (print its fields or a method result instead)", t), a.pos);
                     }
                     parts.push(format!("__KlShow::__show(&{})", c));
@@ -956,7 +1131,7 @@ impl<'a> Gen<'a> {
             }
             "str" => {
                 let (c, t) = one(cx)?;
-                if !showable(&t) {
+                if !self.m.is_plain(&t) {
                     return err(format!("cannot convert `{}` to str", t), pos);
                 }
                 Ok((format!("__KlShow::__show(&{})", c), Type::Str))
@@ -999,6 +1174,9 @@ impl<'a> Gen<'a> {
     }
 
     fn method_call(&self, cx: &mut Ctx, recv: &Expr, name: &str, args: &[Expr], pos: Pos) -> Result<(String, Type)> {
+        if let Some(t) = self.type_receiver(cx, recv) {
+            return self.variant_value(cx, &t, name, Some(args), pos);
+        }
         if matches!(recv.kind, ExprKind::SelfRef) {
             let class = self.self_class(cx, recv.pos)?;
             let sig = match self.m.find_method(&class, name) {
@@ -1086,7 +1264,7 @@ impl<'a> Gen<'a> {
             }
             (Type::Array(elem), "contains") => {
                 arity(1)?;
-                if !showable(elem) {
+                if !self.m.is_plain(elem) {
                     return err("`contains` only works on arrays of simple values", pos);
                 }
                 let v = self.expr_to(cx, &args[0], elem)?;
@@ -1159,6 +1337,8 @@ fn always_returns(stmts: &[Stmt]) -> bool {
             always_returns(then) && always_returns(o)
         }
         Some(StmtKind::While { cond: Expr { kind: ExprKind::Bool(true), .. }, body }) => !has_break(body),
+        // Non-exhaustive matches are rejected during code generation.
+        Some(StmtKind::Match { arms, .. }) => arms.iter().all(|a| always_returns(&a.body)),
         _ => false,
     }
 }
@@ -1170,6 +1350,7 @@ fn has_break(stmts: &[Stmt]) -> bool {
         StmtKind::If { then, otherwise, .. } | StmtKind::IfLet { then, otherwise, .. } => {
             has_break(then) || otherwise.as_deref().is_some_and(has_break)
         }
+        StmtKind::Match { arms, .. } => arms.iter().any(|a| has_break(&a.body)),
         _ => false,
     })
 }

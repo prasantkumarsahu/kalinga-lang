@@ -20,6 +20,7 @@ pub enum Type {
     Optional(Box<Type>),
     Class(String),
     Interface(String),
+    Enum(String),
     /// Type of the `none` literal before it meets an expected optional type.
     NoneLit,
 }
@@ -45,7 +46,7 @@ impl fmt::Display for Type {
             Type::Array(t) => write!(f, "[{}]", t),
             Type::Map(k, v) => write!(f, "{{{}: {}}}", k, v),
             Type::Optional(t) => write!(f, "{}?", t),
-            Type::Class(n) | Type::Interface(n) => write!(f, "{}", n),
+            Type::Class(n) | Type::Interface(n) | Type::Enum(n) => write!(f, "{}", n),
             Type::NoneLit => write!(f, "none"),
         }
     }
@@ -87,6 +88,25 @@ pub struct InterfaceInfo {
     pub methods: Vec<(String, Signature)>,
 }
 
+#[derive(Debug, Clone)]
+pub struct EnumInfo {
+    pub variants: Vec<(String, Vec<(String, Type)>)>,
+}
+
+impl EnumInfo {
+    pub fn variant(&self, name: &str) -> Option<&Vec<(String, Type)>> {
+        self.variants.iter().find(|(n, _)| n == name).map(|(_, f)| f)
+    }
+}
+
+/// Names of user-defined types, used to resolve `TypeExpr::Named`.
+#[derive(Debug, Default)]
+pub struct TypeNames {
+    pub classes: HashSet<String>,
+    pub ifaces: HashSet<String>,
+    pub enums: HashSet<String>,
+}
+
 #[derive(Debug)]
 pub struct Model {
     pub classes: HashMap<String, ClassInfo>,
@@ -95,6 +115,11 @@ pub struct Model {
     pub interfaces: HashMap<String, InterfaceInfo>,
     pub interface_order: Vec<String>,
     pub functions: HashMap<String, Signature>,
+    pub enums: HashMap<String, EnumInfo>,
+    pub enum_order: Vec<String>,
+    /// Enums whose payloads can all be printed and compared.
+    pub plain_enums: HashSet<String>,
+    pub names: TypeNames,
 }
 
 pub const BUILTINS: &[&str] = &["print", "len", "str", "int", "float", "input"];
@@ -111,6 +136,10 @@ impl Model {
             interfaces: HashMap::new(),
             interface_order: vec![],
             functions: HashMap::new(),
+            enums: HashMap::new(),
+            enum_order: vec![],
+            plain_enums: HashSet::new(),
+            names: TypeNames::default(),
         };
 
         // 1. Register names so types can refer to each other in any order.
@@ -127,9 +156,65 @@ impl Model {
                 return err(format!("`{}` is defined more than once", c.name), c.pos);
             }
         }
-        let class_names: HashSet<String> = prog.classes.iter().map(|c| c.name.clone()).collect();
-        let iface_names: HashSet<String> = prog.interfaces.iter().map(|i| i.name.clone()).collect();
-        let resolve = |t: &TypeExpr| resolve_type(t, &class_names, &iface_names);
+        for e in &prog.enums {
+            check_type_name(&e.name, e.pos)?;
+            if !type_names.insert(&e.name) {
+                return err(format!("`{}` is defined more than once", e.name), e.pos);
+            }
+        }
+        let names = TypeNames {
+            classes: prog.classes.iter().map(|c| c.name.clone()).collect(),
+            ifaces: prog.interfaces.iter().map(|i| i.name.clone()).collect(),
+            enums: prog.enums.iter().map(|e| e.name.clone()).collect(),
+        };
+        let class_names = names.classes.clone();
+        let iface_names = names.ifaces.clone();
+        let resolve = |t: &TypeExpr| resolve_type(t, &names);
+
+        // Enums.
+        for e in &prog.enums {
+            let mut variants: Vec<(String, Vec<(String, Type)>)> = Vec::new();
+            if e.variants.is_empty() {
+                return err(format!("enum `{}` needs at least one variant", e.name), e.pos);
+            }
+            for v in &e.variants {
+                if !v.name.starts_with(|c: char| c.is_uppercase()) || v.name == "Self" {
+                    return err(format!("variant names must start with an uppercase letter: `{}`", v.name), v.pos);
+                }
+                if variants.iter().any(|(n, _)| n == &v.name) {
+                    return err(format!("variant `{}` declared twice in `{}`", v.name, e.name), v.pos);
+                }
+                let sig = signature(&v.fields, &TypeExpr::Void, &resolve)?;
+                variants.push((v.name.clone(), sig.params));
+            }
+            m.enums.insert(e.name.clone(), EnumInfo { variants });
+            m.enum_order.push(e.name.clone());
+        }
+        for e in &prog.enums {
+            if m.enum_contains(&e.name, &e.name, &mut HashSet::new()) {
+                return err(
+                    format!("enum `{}` contains itself; put the recursive part in an array (`[{}]`) or use a class", e.name, e.name),
+                    e.pos,
+                );
+            }
+        }
+        // An enum is "plain" (printable, comparable) when all payloads are; iterate to a fixpoint.
+        m.plain_enums = m.enums.keys().cloned().collect();
+        loop {
+            let before = m.plain_enums.len();
+            let bad: Vec<String> = m
+                .plain_enums
+                .iter()
+                .filter(|n| m.enums[*n].variants.iter().any(|(_, fs)| fs.iter().any(|(_, t)| !m.is_plain(t))))
+                .cloned()
+                .collect();
+            for b in bad {
+                m.plain_enums.remove(&b);
+            }
+            if m.plain_enums.len() == before {
+                break;
+            }
+        }
 
         // 2. Interfaces.
         for i in &prog.interfaces {
@@ -203,7 +288,7 @@ impl Model {
                 if ty == Type::Void {
                     return err("fields cannot have type void", f.pos);
                 }
-                if ty.is_object() && f.default.is_none() {
+                if (ty.is_object() || matches!(ty, Type::Enum(_))) && f.default.is_none() {
                     return err(
                         format!("field `{}` of type `{}` needs a default value (or make it optional: `{}?`)", f.name, ty, ty),
                         f.pos,
@@ -240,9 +325,9 @@ impl Model {
             }
         }
         let mut order: Vec<String> = Vec::new();
-        let mut names: Vec<&String> = prog.classes.iter().map(|c| &c.name).collect();
-        names.sort_by_key(|n| m.ancestors(n).len());
-        for n in names {
+        let mut sorted: Vec<&String> = prog.classes.iter().map(|c| &c.name).collect();
+        sorted.sort_by_key(|n| m.ancestors(n).len());
+        for n in sorted {
             order.push(n.clone());
         }
         m.class_order = order;
@@ -256,6 +341,7 @@ impl Model {
         for n in m.class_order.clone() {
             m.check_class(&n)?;
         }
+        m.names = names;
         Ok(m)
     }
 
@@ -456,9 +542,39 @@ impl Model {
     }
 
     pub fn resolve(&self, t: &TypeExpr) -> Result<Type> {
-        let classes: HashSet<String> = self.classes.keys().cloned().collect();
-        let ifaces: HashSet<String> = self.interfaces.keys().cloned().collect();
-        resolve_type(t, &classes, &ifaces)
+        resolve_type(t, &self.names)
+    }
+
+    /// Values that can be printed and compared with `==`.
+    pub fn is_plain(&self, t: &Type) -> bool {
+        match t {
+            Type::Int | Type::Float | Type::Bool | Type::Str => true,
+            Type::Array(i) | Type::Optional(i) => self.is_plain(i),
+            Type::Map(k, v) => self.is_plain(k) && self.is_plain(v),
+            Type::Enum(e) => self.plain_enums.contains(e),
+            _ => false,
+        }
+    }
+
+    /// Does `t` (an enum) hold `target` by value (not behind an array or map)?
+    fn enum_contains(&self, current: &str, target: &str, seen: &mut HashSet<String>) -> bool {
+        if !seen.insert(current.to_string()) {
+            return false;
+        }
+        fn direct(t: &Type, out: &mut Vec<String>) {
+            match t {
+                Type::Enum(e) => out.push(e.clone()),
+                Type::Optional(i) => direct(i, out),
+                _ => {}
+            }
+        }
+        let mut inner = vec![];
+        for (_, fs) in &self.enums[current].variants {
+            for (_, t) in fs {
+                direct(t, &mut inner);
+            }
+        }
+        inner.iter().any(|e| e == target || self.enum_contains(e, target, seen))
     }
 
     /// Can a value of type `from` be used where `to` is expected?
@@ -505,7 +621,7 @@ fn check_type_name(name: &str, pos: Pos) -> Result<()> {
     Ok(())
 }
 
-fn resolve_type(t: &TypeExpr, classes: &HashSet<String>, ifaces: &HashSet<String>) -> Result<Type> {
+fn resolve_type(t: &TypeExpr, names: &TypeNames) -> Result<Type> {
     Ok(match t {
         TypeExpr::Int => Type::Int,
         TypeExpr::Float => Type::Float,
@@ -513,35 +629,37 @@ fn resolve_type(t: &TypeExpr, classes: &HashSet<String>, ifaces: &HashSet<String
         TypeExpr::Str => Type::Str,
         TypeExpr::Void => Type::Void,
         TypeExpr::Array(inner) => {
-            let i = resolve_type(inner, classes, ifaces)?;
+            let i = resolve_type(inner, names)?;
             if i == Type::Void {
                 return err("array of void is not allowed", Pos::default());
             }
             Type::Array(Box::new(i))
         }
         TypeExpr::Map(k, v) => {
-            let kt = resolve_type(k, classes, ifaces)?;
+            let kt = resolve_type(k, names)?;
             if !is_map_key(&kt) {
                 return err(format!("map keys must be `int`, `str` or `bool`, not `{}`", kt), Pos::default());
             }
-            let vt = resolve_type(v, classes, ifaces)?;
+            let vt = resolve_type(v, names)?;
             if vt == Type::Void {
                 return err("map of void is not allowed", Pos::default());
             }
             Type::Map(Box::new(kt), Box::new(vt))
         }
         TypeExpr::Optional(inner) => {
-            let i = resolve_type(inner, classes, ifaces)?;
+            let i = resolve_type(inner, names)?;
             if matches!(i, Type::Optional(_)) {
                 return err("nested optional `T??` is not allowed", Pos::default());
             }
             Type::Optional(Box::new(i))
         }
         TypeExpr::Named(n, pos) => {
-            if classes.contains(n) {
+            if names.classes.contains(n) {
                 Type::Class(n.clone())
-            } else if ifaces.contains(n) {
+            } else if names.ifaces.contains(n) {
                 Type::Interface(n.clone())
+            } else if names.enums.contains(n) {
+                Type::Enum(n.clone())
             } else {
                 return err(format!("unknown type `{}`", n), *pos);
             }

@@ -58,6 +58,7 @@ fn load(root_name: &str, root_source: &str) -> Result<(Program, SourceMap), Stri
         program.functions.extend(parsed.functions);
         program.classes.extend(parsed.classes);
         program.interfaces.extend(parsed.interfaces);
+        program.enums.extend(parsed.enums);
     }
     Ok((program, map))
 }

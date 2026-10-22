@@ -21,6 +21,8 @@ pub enum Tok {
     Class,
     Interface,
     Import,
+    Enum,
+    Match,
     Init,
     Override,
     Let,
@@ -52,6 +54,7 @@ pub enum Tok {
     Colon,
     Semi,
     Arrow,
+    FatArrow,
     Question,
 
     // operators
@@ -87,6 +90,8 @@ impl Tok {
             "class" => Tok::Class,
             "interface" => Tok::Interface,
             "import" => Tok::Import,
+            "enum" => Tok::Enum,
+            "match" => Tok::Match,
             "init" => Tok::Init,
             "override" => Tok::Override,
             "let" => Tok::Let,
@@ -127,6 +132,9 @@ impl Tok {
             Tok::Class => "class",
             Tok::Interface => "interface",
             Tok::Import => "import",
+            Tok::Enum => "enum",
+            Tok::Match => "match",
+            Tok::FatArrow => "=>",
             Tok::Init => "init",
             Tok::Override => "override",
             Tok::Let => "let",
@@ -209,6 +217,7 @@ impl Tok {
                 | Tok::Dot
                 | Tok::DotDot
                 | Tok::Arrow
+                | Tok::FatArrow
                 | Tok::Colon
                 | Tok::Newline
         )
