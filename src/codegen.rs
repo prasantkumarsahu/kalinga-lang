@@ -1112,6 +1112,43 @@ impl<'a> Gen<'a> {
         Ok((format!("{{ {}{}::__s_{}({}) }}", binds, owner, name, names), sig.ret))
     }
 
+    /// Receiver for a method call or field access: (setup statements, Rust expression, type).
+    /// Locals, `self.field` and indexing into those are borrowed in place, so calling a
+    /// method on `shapes[i]` does not copy the object reference. Anything else is evaluated
+    /// once into `__rv`.
+    fn receiver(&self, cx: &mut Ctx, e: &Expr) -> Result<(String, String, Type)> {
+        let mut n = 0;
+        if let Some(x) = self.recv_place(cx, e, &mut n)? {
+            return Ok(x);
+        }
+        let (code, t) = self.expr(cx, e, None)?;
+        Ok((format!("let __rv = {}; ", code), "__rv".into(), t))
+    }
+
+    /// A place that can be borrowed without cloning, or `None`.
+    fn recv_place(&self, cx: &mut Ctx, e: &Expr, n: &mut usize) -> Result<Option<(String, String, Type)>> {
+        match &e.kind {
+            ExprKind::Ident(name) => Ok(cx.lookup(name).map(|v| (String::new(), v.rust.clone(), v.ty.clone()))),
+            ExprKind::Field(recv, f) if matches!(recv.kind, ExprKind::SelfRef) => {
+                let class = self.self_class(cx, recv.pos)?;
+                if self.m.is_wrapped_field(&class, f) {
+                    return Ok(None);
+                }
+                let t = self.field_type(cx, &class, f, e.pos)?;
+                Ok(Some((String::new(), format!("self.{}", rid(f)), t)))
+            }
+            ExprKind::Index(base, idx) => {
+                let Some((pre, bplace, bt)) = self.recv_place(cx, base, n)? else { return Ok(None) };
+                let Type::Array(elem) = bt else { return Ok(None) };
+                let ic = self.expr_to(cx, idx, &Type::Int)?;
+                let tmp = format!("__ri{}", n);
+                *n += 1;
+                Ok(Some((format!("{}let {} = __idx({}); ", pre, tmp, ic), format!("{}[{}]", bplace, tmp), *elem)))
+            }
+            _ => Ok(None),
+        }
+    }
+
     /// Receiver for a method call or field access, borrowed when it is a plain variable.
     fn recv(&self, cx: &mut Ctx, e: &Expr) -> Result<(String, Type)> {
         if let ExprKind::Ident(name) = &e.kind {
@@ -1253,7 +1290,7 @@ impl<'a> Gen<'a> {
                     }
                     return Ok((clone_if(format!("self.{}", rid(f)), &t), t));
                 }
-                let (rcode, rt) = self.recv(cx, recv)?;
+                let (setup, rcode, rt) = self.receiver(cx, recv)?;
                 match &rt {
                     Type::Generic(c, targs) => {
                         let t = subst(&self.field_type(cx, c, f, e.pos)?, &self.m.bindings(c, targs));
@@ -1262,7 +1299,7 @@ impl<'a> Gen<'a> {
                         } else {
                             clone_if(format!("{}.borrow().{}", rcode, rid(f)), &t)
                         };
-                        Ok((format!("{{ let __t = {}; __t }}", read), t))
+                        Ok((format!("{{ {}let __t = {}; __t }}", setup, read), t))
                     }
                     Type::Class(c) => {
                         let t = self.field_type(cx, c, f, e.pos)?;
@@ -1271,7 +1308,7 @@ impl<'a> Gen<'a> {
                         } else {
                             clone_if(format!("{}.borrow().{}", rcode, rid(f)), &t)
                         };
-                        Ok((format!("{{ let __t = {}; __t }}", read), t))
+                        Ok((format!("{{ {}let __t = {}; __t }}", setup, read), t))
                     }
                     Type::Array(_) | Type::Str | Type::Map(..) if f == "len" => err("`len` is a method: use `.len()`", e.pos),
                     Type::Interface(i) => err(format!("interface `{}` has no fields; only methods can be used", i), e.pos),
@@ -1699,9 +1736,13 @@ impl<'a> Gen<'a> {
             return Ok((format!("{{ {}{}.pop() }}", pre, place), Type::Optional(Box::new(elem))));
         }
 
-        let (rcode, rt) = self.recv(cx, recv)?;
+        // Arguments are evaluated before the receiver is borrowed, so they may use it freely.
+        let (setup, rcode, rt) = self.receiver(cx, recv)?;
         match &rt {
-            Type::Array(_) | Type::Str | Type::Map(..) => self.value_method(cx, &rcode, &rt, name, args, pos),
+            Type::Array(_) | Type::Str | Type::Map(..) => {
+                let (code, t) = self.value_method(cx, &rcode, &rt, name, args, pos)?;
+                Ok((if setup.is_empty() { code } else { format!("{{ {}{} }}", setup, code) }, t))
+            }
             Type::Generic(c, targs) => {
                 let (owner, sig) = match self.m.find_method(c, name) {
                     Some(x) => x,
@@ -1710,7 +1751,7 @@ impl<'a> Gen<'a> {
                 self.check_method_access(cx, &owner, name, pos)?;
                 let sig = subst_sig(&sig, &self.m.bindings(c, targs));
                 let (binds, names) = self.args(cx, &sig, args, pos, name)?;
-                Ok((format!("{{ let __r = &{}; {}let __t = __r.borrow_mut().{}({}); __t }}", rcode, binds, rid(name), names), sig.ret))
+                Ok((format!("{{ {}{}let __r = &{}; let __t = __r.borrow_mut().{}({}); __t }}", setup, binds, rcode, rid(name), names), sig.ret))
             }
             Type::Class(c) => {
                 let sig = match self.m.find_method(c, name) {
@@ -1725,9 +1766,9 @@ impl<'a> Gen<'a> {
                         if let Some(Type::Func(ps, r)) = self.func_field(c, name) {
                             self.field_type(cx, c, name, pos)?;
                             let read = if self.m.has_subclasses(c) {
-                                format!("{{ let __t = {}.borrow().__get_{}(); __t }}", rcode, name)
+                                format!("{{ {}let __t = {}.borrow().__get_{}(); __t }}", setup, rcode, name)
                             } else {
-                                format!("{{ let __t = {}.borrow().{}.clone(); __t }}", rcode, rid(name))
+                                format!("{{ {}let __t = {}.borrow().{}.clone(); __t }}", setup, rcode, rid(name))
                             };
                             return self.call_value(cx, read, &ps, &r, args, pos, name);
                         }
@@ -1742,7 +1783,7 @@ impl<'a> Gen<'a> {
                 } else {
                     format!("__r.borrow_mut().{}({})", rid(name), names)
                 };
-                Ok((format!("{{ let __r = &{}; {}let __t = {}; __t }}", rcode, binds, call), sig.ret))
+                Ok((format!("{{ {}{}let __r = &{}; let __t = {}; __t }}", setup, binds, rcode, call), sig.ret))
             }
             Type::Interface(i) => {
                 let sig = match self.m.interface_method(i, name) {
@@ -1753,9 +1794,10 @@ impl<'a> Gen<'a> {
                 let sep = if names.is_empty() { "" } else { ", " };
                 Ok((
                     format!(
-                        "{{ let __r = &{}; {}let __t = {}::{}(&mut *__r.borrow_mut(){}{}); __t }}",
-                        rcode,
+                        "{{ {}{}let __r = &{}; let __t = {}::{}(&mut *__r.borrow_mut(){}{}); __t }}",
+                        setup,
                         binds,
+                        rcode,
                         self.m.declaring_interface(i, name).unwrap(),
                         rid(name),
                         sep,
