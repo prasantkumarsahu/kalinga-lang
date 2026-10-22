@@ -34,6 +34,12 @@ fn main() {
 }
 ```
 
+## Documentation
+
+The full guide, with runnable examples for every feature, is in [docs/](docs/README.md):
+getting started, basics, control flow, functions, arrays and strings, optionals, classes,
+inheritance, interfaces, safety, tooling, internals and a language reference.
+
 ## Usage
 
 Requires a Rust toolchain (`rustc` on PATH).
@@ -112,3 +118,5 @@ through a different reference (for example `a.f(a)` where `f` modifies `a`) stop
 | `examples/` | `hello.kl`, `oop.kl`, `fib.kl` |
 | `tests/examples.rs` | end-to-end tests |
 | `editors/vscode/` | VS Code extension |
+| `docs/` | language guide and reference |
+| `tests/docs.rs` | compiles every example in `docs/` |
