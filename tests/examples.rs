@@ -236,3 +236,15 @@ fn error_oop_extras() {
     assert_compile_error("static_on_obj", "class C {\n    fn f() {}\n}\nfn main() { C.f() }", "is not a `static fn`");
     assert_compile_error("iface_cycle", "interface I : J {}\ninterface J : I {}\nfn main() {}", "extends itself");
 }
+
+#[test]
+fn downcast_and_self_value() {
+    let (code, out, err) = run_file("tests/downcast.kl");
+    assert_eq!(code, 0, "{}", err);
+    assert_eq!(
+        out,
+        "Rex fetches\nfalse true\nTom is not a dog\nfalse true\nBit fetches\ntrue true\npuppy Nib\ntrue\nR true\nparent of 2 is 1\n1\n"
+    );
+    assert_compile_error("downcast_never", "class A {}\nclass C {}\nfn main() {\n    print(A() as C)\n}", "can never be a `C`");
+    assert_compile_error("self_in_init", "class D {\n    init() {\n        let s = self\n    }\n}\nfn main() {}", "inside `init`");
+}

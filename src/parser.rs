@@ -584,7 +584,14 @@ impl Parser {
             let e = self.unary()?;
             return Ok(Expr { kind: ExprKind::Unary(UnOp::Not, Box::new(e)), pos });
         }
-        self.postfix()
+        let mut e = self.postfix()?;
+        while self.check(&Tok::As) || self.check(&Tok::Is) {
+            let pos = self.pos();
+            let test_only = self.advance().tok == Tok::Is;
+            let (class, _) = self.ident("a class name")?;
+            e = Expr { kind: ExprKind::Downcast { value: Box::new(e), class, test_only }, pos };
+        }
+        Ok(e)
     }
 
     fn args(&mut self) -> Result<Vec<Expr>> {

@@ -179,6 +179,8 @@ pub enum ExprKind {
     SuperInit(Vec<Expr>),
     /// `super.name(args)`
     SuperCall(String, Vec<Expr>),
+    /// `x as Dog` (an optional) or `x is Dog` (a bool)
+    Downcast { value: Box<Expr>, class: String, test_only: bool },
 }
 
 #[derive(Debug, Clone)]

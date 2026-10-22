@@ -1,0 +1,47 @@
+interface Show { fn show() -> str }
+
+class Animal {
+    name: str
+    init(name: str) { self.name = name }
+    fn me() -> Animal { return self }
+}
+class Dog : Animal, Show {
+    fn fetch() -> str { return "{self.name} fetches" }
+    fn show() -> str { return "Dog {self.name}" }
+}
+class Puppy : Dog {}
+class Cat : Animal {}
+
+class Node {
+    value: int
+    children: [Node]
+    parent: Node? = none
+    init(value: int) { self.value = value }
+    fn add(child: Node) {
+        child.parent = self
+        self.children.push(child)
+    }
+}
+
+fn main() {
+    let zoo: [Animal] = [Dog("Rex"), Cat("Tom"), Puppy("Bit")]
+    for a in zoo {
+        if let d = a as Dog {
+            print(d.fetch())
+        } else {
+            print(a.name, "is not a dog")
+        }
+        print(a is Puppy, a is Animal)
+    }
+    let s: Show = Puppy("Nib")
+    if let p = s as Puppy { print("puppy", p.name) }
+    print(s is Dog)
+    let r = Dog("R")
+    print(r.me().name, r.me() is Dog)
+
+    let root = Node(1)
+    let kid = Node(2)
+    root.add(kid)
+    if let p = kid.parent { print("parent of 2 is", p.value) }
+    print(len(root.children))
+}

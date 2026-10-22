@@ -175,6 +175,9 @@ impl<'a> Gen<'a> {
             for (mname, sig) in &info.methods {
                 writeln!(out, "    fn {}(&mut self{}){};", rid(mname), self.comma_params(sig), self.ret_suffix(&sig.ret)).unwrap();
             }
+            for target in self.m.class_order.iter().filter(|c| self.m.all_interfaces(c).contains(iname)) {
+                writeln!(out, "    fn __as_{}(&self) -> Option<{}> {{ None }}", target, self.rty(&Type::Class(target.clone()))).unwrap();
+            }
             out.push_str("}\n");
         }
 
@@ -312,6 +315,17 @@ impl<'a> Gen<'a> {
         }
     }
 
+    /// Classes sharing `root` as their topmost base class (including `root`).
+    fn hierarchy(&self, root: &str) -> Vec<String> {
+        self.m.class_order.iter().filter(|c| self.m.ancestors(c).last().map(String::as_str) == Some(root)).cloned().collect()
+    }
+
+    /// `fn __as_T(&self)` that succeeds, for an object whose class is `T` or derives from it.
+    fn downcast_hook(&self, out: &mut String, target: &str) {
+        let ty = self.rty(&Type::Class(target.to_string()));
+        writeln!(out, "    fn __as_{}(&self) -> Option<{}> {{ self.__self.upgrade().map(|__r| __r as {}) }}", target, ty, ty).unwrap();
+    }
+
     fn comma_params(&self, sig: &Signature) -> String {
         if sig.params.is_empty() { String::new() } else { format!(", {}", self.params_decl(sig)) }
     }
@@ -346,6 +360,7 @@ impl<'a> Gen<'a> {
         writeln!(out, "\n// ===== class {} =====", cname).unwrap();
         // struct
         writeln!(out, "struct {} {{", cname).unwrap();
+        writeln!(out, "    __self: std::rc::Weak<RefCell<{}>>,", cname).unwrap();
         for (f, t, _) in &fields {
             writeln!(out, "    {}: {},", rid(f), self.rty(t)).unwrap();
         }
@@ -366,6 +381,11 @@ impl<'a> Gen<'a> {
             writeln!(out, "    fn __get_{}(&self) -> {};", f, self.rty(t)).unwrap();
             writeln!(out, "    fn __set_{}(&mut self, v: {});", f, self.rty(t)).unwrap();
         }
+        if info.parent.is_none() {
+            for target in self.hierarchy(cname) {
+                writeln!(out, "    fn __as_{}(&self) -> Option<{}> {{ None }}", target, self.rty(&Type::Class(target.clone()))).unwrap();
+            }
+        }
         out.push_str("}\n");
 
         // inherent impl
@@ -373,15 +393,17 @@ impl<'a> Gen<'a> {
         let ctor = m.find_init(cname);
         let ctor_params = ctor.as_ref().map(|(_, s)| self.params_decl(s)).unwrap_or_default();
         writeln!(out, "    fn __new({}) -> Rc<RefCell<{}>> {{", ctor_params, cname).unwrap();
-        writeln!(out, "        let mut __o = {} {{", cname).unwrap();
+        out.push_str("        Rc::new_cyclic(|__w| {\n");
+        writeln!(out, "            let mut __o = {} {{", cname).unwrap();
+        out.push_str("                __self: __w.clone(),\n");
         for (f, _, owner) in &fields {
-            writeln!(out, "            {}: {},", rid(f), field_defaults[&(owner.clone(), f.clone())]).unwrap();
+            writeln!(out, "                {}: {},", rid(f), field_defaults[&(owner.clone(), f.clone())]).unwrap();
         }
-        out.push_str("        };\n");
+        out.push_str("            };\n");
         if let Some((owner, sig)) = &ctor {
-            writeln!(out, "        __o.__{}__init({});", owner, self.params_names(sig)).unwrap();
+            writeln!(out, "            __o.__{}__init({});", owner, self.params_names(sig)).unwrap();
         }
-        out.push_str("        Rc::new(RefCell::new(__o))\n    }\n");
+        out.push_str("            RefCell::new(__o)\n        })\n    }\n");
         for a in &ancestors {
             let ainfo = &m.classes[a];
             if let Some(sig) = &ainfo.init {
@@ -458,12 +480,20 @@ impl<'a> Gen<'a> {
                 writeln!(out, "    fn __get_{}(&self) -> {} {{ {} }}", f, self.rty(t), get).unwrap();
                 writeln!(out, "    fn __set_{}(&mut self, v: {}) {{ self.{} = v; }}", f, self.rty(t), rid(f)).unwrap();
             }
+            if m.classes[a].parent.is_none() {
+                for target in &ancestors {
+                    self.downcast_hook(out, target);
+                }
+            }
             out.push_str("}\n");
         }
         for iname in m.all_interfaces(cname) {
             writeln!(out, "impl {} for {} {{", iname, cname).unwrap();
             for (mname, sig) in &m.interfaces[&iname].methods {
                 forward(out, mname, sig);
+            }
+            for target in ancestors.iter().filter(|t| m.all_interfaces(t).contains(&iname)) {
+                self.downcast_hook(out, target);
             }
             out.push_str("}\n");
         }
@@ -952,7 +982,15 @@ impl<'a> Gen<'a> {
                 Some(t @ Type::Optional(_)) => Ok(("None".into(), t.clone())),
                 _ => Ok(("None".into(), Type::NoneLit)),
             },
-            ExprKind::SelfRef => err("`self` cannot be used as a value here (use `self.field` or `self.method()`)", e.pos),
+            ExprKind::SelfRef => {
+                let class = self.self_class(cx, e.pos)?;
+                if cx.in_init {
+                    return err("`self` cannot be used as a value inside `init` (the object is not finished yet)", e.pos);
+                }
+                let ty = Type::Class(class);
+                Ok((format!("(self.__self.upgrade().unwrap() as {})", self.rty(&ty)), ty))
+            }
+            ExprKind::Downcast { value, class, test_only } => self.downcast(cx, value, class, *test_only, e.pos),
             ExprKind::Ident(name) => match cx.lookup(name) {
                 Some(v) => Ok((clone_if(v.rust.clone(), &v.ty), v.ty.clone())),
                 None if self.m.functions.contains_key(name) => err(format!("`{}` is a function; call it with `{}(...)`", name, name), e.pos),
@@ -1082,6 +1120,33 @@ impl<'a> Gen<'a> {
                 let (binds, names) = self.args(cx, &sig, args, e.pos, name)?;
                 Ok((format!("{{ {}self.__{}__{}({}) }}", binds, owner, name, names), sig.ret))
             }
+        }
+    }
+
+    fn downcast(&self, cx: &mut Ctx, value: &Expr, target: &str, test_only: bool, pos: Pos) -> Result<(String, Type)> {
+        if !self.m.classes.contains_key(target) {
+            return err(format!("`as`/`is` need a class name, and `{}` is not a class", target), pos);
+        }
+        let (code, ty) = self.expr(cx, value, None)?;
+        let target_ty = Type::Class(target.to_string());
+        let call = match &ty {
+            Type::Class(c) if c == target => format!("Some({})", code),
+            Type::Class(c) if self.m.is_subclass(target, c) => {
+                let root = self.m.ancestors(c).last().unwrap().clone();
+                format!("{{ let __x = {}; let __t = {}::__as_{}(&*__x.borrow()); __t }}", code, class_trait(&root), target)
+            }
+            Type::Interface(i) if self.m.all_interfaces(target).contains(i) => {
+                format!("{{ let __x = {}; let __t = {}::__as_{}(&*__x.borrow()); __t }}", code, i, target)
+            }
+            Type::Class(_) | Type::Interface(_) => {
+                return err(format!("a `{}` can never be a `{}`, so this check would always fail", ty, target), pos)
+            }
+            other => return err(format!("`as`/`is` work on objects, not on `{}`", other), pos),
+        };
+        if test_only {
+            Ok((format!("({}).is_some()", call), Type::Bool))
+        } else {
+            Ok((call, Type::Optional(Box::new(target_ty))))
         }
     }
 
