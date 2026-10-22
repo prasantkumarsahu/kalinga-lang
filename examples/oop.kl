@@ -1,0 +1,102 @@
+// Classes, single inheritance, interfaces and dynamic dispatch.
+
+interface Show {
+    fn show() -> str
+}
+
+class Animal {
+    name: str
+    sound: str = "..."
+    legs: int = 4
+
+    init(name: str) {
+        self.name = name
+    }
+
+    fn speak() -> str {
+        return self.name + " says " + self.sound
+    }
+
+    fn describe() -> str {
+        return self.speak() + " and has " + str(self.legs) + " legs"
+    }
+}
+
+class Dog : Animal, Show {
+    tricks: [str]
+
+    init(name: str) {
+        super(name)
+        self.sound = "woof"
+    }
+
+    fn learn(trick: str) {
+        self.tricks.push(trick)
+    }
+
+    fn show() -> str {
+        return "Dog(" + self.name + ", tricks=" + str(self.tricks) + ")"
+    }
+}
+
+class Puppy : Dog {
+    init(name: str) {
+        super(name)
+        self.sound = "yip"
+    }
+
+    override fn speak() -> str {
+        return super.speak() + " (tiny)"
+    }
+}
+
+class Bird : Animal {
+    init(name: str) {
+        super(name)
+        self.sound = "tweet"
+        self.legs = 2
+    }
+}
+
+class Counter {
+    count: int
+
+    fn tick() -> int {
+        self.count += 1
+        return self.count
+    }
+}
+
+fn loudest(animals: [Animal]) -> Animal? {
+    var best: Animal? = none
+    for a in animals {
+        if a.legs < 4 { best = a }
+    }
+    return best
+}
+
+fn main() {
+    let rex = Dog("Rex")
+    rex.learn("sit")
+    rex.learn("roll")
+
+    let zoo: [Animal] = [rex, Puppy("Bit"), Bird("Tweety"), Animal("Generic")]
+    for a in zoo {
+        print(a.describe())
+    }
+
+    let shown: [Show] = [rex, Puppy("Nib")]
+    for s in shown {
+        print(s.show())
+    }
+
+    if let b = loudest(zoo) { print("fewest legs:", b.name) }
+
+    let c = Counter()
+    c.tick()
+    c.tick()
+    print("counter:", c.tick())
+
+    rex.name = "Rexy"
+    print(zoo[0].name)
+}
