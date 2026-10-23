@@ -447,3 +447,16 @@ fn error_handling() {
     assert_eq!(code, 101);
     assert!(err.contains("called unwrap() on an error: disk full"), "{}", err);
 }
+
+#[test]
+fn generic_structs_and_left_operators() {
+    let (code, out, err) = run_file("tests/generic_structs.kl");
+    assert_eq!(code, 0, "{}", err);
+    assert_eq!(
+        out,
+        "# . 6 Grid(w: 3, h: 2, cells: [., ., ., ., #, .])\n[5, 0, 0, 0] true\nPair(first: 3, second: x) 4\n\
+         Vec2(x: 2.0, y: 4.0) Vec2(x: 3.0, y: 6.0) Vec2(x: 1.0, y: 2.0)\ne\n"
+    );
+    assert_compile_error("gstruct_arity", "struct B<T> { v: T }\nfn main() { let b: B = B(1) }", "needs 1 type argument");
+    assert_compile_error("gstruct_print", "struct B<T> { v: T }\nclass C {}\nfn main() { print(B(C())) }", "cannot print");
+}

@@ -1,0 +1,40 @@
+import "std/math2d"
+
+struct Grid<T> {
+    w: int
+    h: int
+    cells: [T]
+
+    static fn filled(w: int, h: int, value: T) -> Grid<T> {
+        var cells: [T] = []
+        for i in 0..w * h { cells.push(value) }
+        return Grid(w, h, cells)
+    }
+
+    fn get(x: int, y: int) -> T { return self.cells[y * self.w + x] }
+
+    mut fn set(x: int, y: int, v: T) { self.cells[y * self.w + x] = v }
+
+    fn count() -> int { return len(self.cells) }
+}
+
+struct Pair<A, B> {
+    first: A
+    second: B
+    fn swap() -> Pair<B, A> { return Pair(self.second, self.first) }
+}
+
+fn main() {
+    var g = Grid.filled(3, 2, ".")
+    g.set(1, 1, "#")
+    print(g.get(1, 1), g.get(0, 0), g.count(), g)
+    var nums: Grid<int> = Grid.filled(2, 2, 0)
+    nums.set(0, 0, 5)
+    print(nums.cells, nums == Grid(2, 2, [5, 0, 0, 0]))
+    let p = Pair("x", 3)
+    print(p.swap(), p.swap().first + 1)
+    let v = Vec2(1.0, 2.0)
+    print(2.0 * v, v * 3.0, 0.5 * (v + v))
+    let explicit = Grid<str>(1, 1, ["e"])
+    print(explicit.get(0, 0))
+}

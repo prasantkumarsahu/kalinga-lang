@@ -393,11 +393,12 @@ impl Parser {
     fn struct_decl(&mut self) -> Result<StructDecl> {
         let pos = self.expect(Tok::Struct, "`struct`")?;
         let (name, _) = self.ident("struct name")?;
+        let tparams = self.tparams()?;
         if self.check(&Tok::Colon) {
             return err("structs cannot extend classes or implement interfaces (use a class for that)", self.pos());
         }
         self.expect(Tok::LBrace, "`{` to start struct body")?;
-        let mut s = StructDecl { name, fields: vec![], methods: vec![], ops: vec![], pos };
+        let mut s = StructDecl { name, tparams, fields: vec![], methods: vec![], ops: vec![], pos };
         self.skip_newlines();
         while !self.check(&Tok::RBrace) {
             let mpos = self.pos();

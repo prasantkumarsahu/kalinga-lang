@@ -162,7 +162,9 @@ impl<'a> Gen<'a> {
                 }
             }
             Type::Interface(i) => format!("Rc<RefCell<dyn {}>>", i),
-            Type::Enum(e) | Type::Struct(e) | Type::Extern(e) => e.clone(),
+            Type::Enum(e) | Type::Extern(e) => e.clone(),
+            Type::Struct(n, args) if args.is_empty() => n.clone(),
+            Type::Struct(n, args) => format!("{}<{}>", n, args.iter().map(|a| self.rty(a)).collect::<Vec<_>>().join(", ")),
             Type::Func(ps, r) => {
                 let ps: Vec<String> = ps.iter().map(|p| self.rty(p)).collect();
                 if **r == Type::Void {
@@ -361,17 +363,19 @@ impl<'a> Gen<'a> {
         for name in &self.m.struct_order {
             let info = &self.m.structs[name];
             let plain = self.m.plain_structs.contains(name);
+            let self_ty = if info.tparams.is_empty() { name.clone() } else { format!("{}<{}>", name, info.tparams.join(", ")) };
             writeln!(out, "\n// ===== struct {} =====", name).unwrap();
             writeln!(out, "#[derive(Clone{})]", if plain { ", PartialEq" } else { "" }).unwrap();
-            writeln!(out, "struct {} {{", name).unwrap();
+            writeln!(out, "struct {} {{", self_ty).unwrap();
             for (f, t) in &info.fields {
                 writeln!(out, "    {}: {},", rid(f), self.rty(t)).unwrap();
             }
             out.push_str("}\n");
-            writeln!(out, "impl {} {{", name).unwrap();
+            writeln!(out, "impl{} {} {{", generic_params(&info.tparams), self_ty).unwrap();
             for meth in &info.decl.methods {
                 let m = &info.methods[&meth.name];
                 let mut cx = Ctx::new(None, m.sig.ret.clone(), false);
+                cx.tparams = info.tparams.clone();
                 cx.strukt = Some(name.clone());
                 cx.self_mut = m.is_mut;
                 cx.is_static = m.is_static;
@@ -398,6 +402,7 @@ impl<'a> Gen<'a> {
                     ret: o.ret.clone(),
                 };
                 let mut cx = Ctx::new(None, o.ret.clone(), false);
+                cx.tparams = info.tparams.clone();
                 cx.strukt = Some(name.clone());
                 let body = self.body_in(&mut cx, &sig, &decl.body, decl.pos, &format!("op {}", o.op.rust()), 2)?;
                 writeln!(out, "    fn __op_{}(&self{}){} {{\n{}    }}", o.index, self.comma_params(&sig), self.ret_suffix(&o.ret), body).unwrap();
@@ -406,10 +411,16 @@ impl<'a> Gen<'a> {
             if plain {
                 let parts: Vec<String> = info.fields.iter().map(|(f, _)| format!("{}: {{}}", f)).collect();
                 let shows: Vec<String> = info.fields.iter().map(|(f, _)| format!("self.{}.__show()", rid(f))).collect();
+                let bounds = if info.tparams.is_empty() {
+                    String::new()
+                } else {
+                    format!("<{}>", info.tparams.iter().map(|t| format!("{}: Clone + 'static + __KlShow", t)).collect::<Vec<_>>().join(", "))
+                };
                 writeln!(
                     out,
-                    "impl __KlShow for {} {{\n    fn __show(&self) -> String {{ format!(\"{}({})\"{}{}) }}\n}}",
-                    name,
+                    "impl{} __KlShow for {} {{\n    fn __show(&self) -> String {{ format!(\"{}({})\"{}{}) }}\n}}",
+                    bounds,
+                    self_ty,
                     name,
                     parts.join(", "),
                     if shows.is_empty() { "" } else { ", " },
@@ -421,15 +432,15 @@ impl<'a> Gen<'a> {
         Ok(out)
     }
 
-    /// Type of struct field `f`, checking `private` access.
-    fn struct_field_type(&self, cx: &Ctx, st: &str, f: &str, pos: Pos) -> Result<Type> {
+    /// Type of struct field `f` (with the struct's type arguments), checking `private`.
+    fn struct_field_type(&self, cx: &Ctx, st: &str, args: &[Type], f: &str, pos: Pos) -> Result<Type> {
         let info = &self.m.structs[st];
         match info.fields.iter().find(|(n, _)| n == f) {
             Some((_, t)) => {
                 if info.private_fields.contains(f) && cx.strukt.as_deref() != Some(st) {
                     return err(format!("field `{}` is private to `{}`", f, st), pos);
                 }
-                Ok(t.clone())
+                Ok(subst(t, &self.m.struct_bindings(st, args)))
             }
             None if info.methods.contains_key(f) => err(format!("`{}` is a method of `{}`; call it with `()`", f, st), pos),
             None => err(format!("`{}` has no field `{}`", st, f), pos),
@@ -437,8 +448,13 @@ impl<'a> Gen<'a> {
     }
 
     /// The operator method of struct `st` for `op` with a right-hand side of type `rhs`.
-    fn find_op(&self, st: &str, op: BinOp, rhs: Option<&Type>) -> Option<StructOp> {
-        let ops = &self.m.structs[st].ops;
+    fn find_op(&self, st: &str, args: &[Type], op: BinOp, rhs: Option<&Type>) -> Option<StructOp> {
+        let map = self.m.struct_bindings(st, args);
+        let ops: Vec<StructOp> = self.m.structs[st]
+            .ops
+            .iter()
+            .map(|o| StructOp { param: o.param.as_ref().map(|p| subst(p, &map)), ret: subst(&o.ret, &map), ..o.clone() })
+            .collect();
         let candidates = ops.iter().filter(|o| o.op == op);
         match rhs {
             None => candidates.into_iter().find(|o| o.param.is_none()).cloned(),
@@ -450,9 +466,9 @@ impl<'a> Gen<'a> {
     }
 
     /// Calls `method` on a struct value: on `self`, on a place (for `mut fn`), or on any value.
-    fn struct_method_call(&self, cx: &mut Ctx, st: &str, recv: &Expr, name: &str, args: &[Expr], pos: Pos) -> Result<(String, Type)> {
+    fn struct_method_call(&self, cx: &mut Ctx, st: &str, targs: &[Type], recv: &Expr, name: &str, args: &[Expr], pos: Pos) -> Result<(String, Type)> {
         let info = &self.m.structs[st];
-        let m = match info.methods.get(name) {
+        let mut m = match info.methods.get(name) {
             Some(m) if !m.is_static => m.clone(),
             Some(_) => return err(format!("`{}` is a `static fn`; call it as `{}.{}(...)`", name, st, name), pos),
             None => return err(format!("`{}` has no method `{}`", st, name), pos),
@@ -460,6 +476,7 @@ impl<'a> Gen<'a> {
         if m.is_private && cx.strukt.as_deref() != Some(st) {
             return err(format!("method `{}` is private to `{}`", name, st), pos);
         }
+        m.sig = subst_sig(&m.sig, &self.m.struct_bindings(st, targs));
         let (binds, names) = self.args(cx, &m.sig, args, pos, name)?;
         if matches!(recv.kind, ExprKind::SelfRef) {
             if m.is_mut && !cx.self_mut {
@@ -610,6 +627,44 @@ impl<'a> Gen<'a> {
             }
             _ => err(format!("`{}` has no function `{}`", ns, name), pos),
         }
+    }
+
+    /// `Grid(...)` / `Grid<int>(...)` for a generic struct: type arguments come from the
+    /// field values, explicit type arguments or the expected type.
+    fn generic_struct_new(&self, cx: &mut Ctx, name: &str, targs: &[TypeExpr], args: &[Expr], expected: Option<&Type>, pos: Pos) -> Result<(String, Type)> {
+        let info = self.m.structs[name].clone();
+        if info.tparams.is_empty() {
+            return err(format!("`{}` is not generic and takes no type arguments", name), pos);
+        }
+        let (min, max) = (info.required_args(), info.fields.len());
+        if args.len() < min || args.len() > max {
+            return err(format!("`{}(...)` takes {} to {} argument(s) (its fields in order) but {} were given", name, min, max, args.len()), pos);
+        }
+        let sig = Signature { params: info.fields[..args.len()].to_vec(), ret: self.struct_self_type(name) };
+        let (binds, names, bound, ret) = self.infer_call(cx, &info.tparams, targs, &sig, args, expected, pos, name)?;
+        let map = self.m.struct_bindings(name, &bound);
+        let given: Vec<String> = if names.is_empty() { vec![] } else { names.split(", ").map(String::from).collect() };
+        let mut inits = vec![];
+        for (i, (f, t)) in info.fields.iter().enumerate() {
+            let code = match given.get(i) {
+                Some(n) => n.clone(),
+                None => {
+                    let mut dcx = Ctx::new(None, Type::Void, false);
+                    self.expr_to(&mut dcx, info.decl.fields[i].default.as_ref().unwrap(), &subst(t, &map))?
+                }
+            };
+            inits.push(format!("{}: {}", rid(f), code));
+        }
+        Ok((format!("{{ {}{}{} {{ {} }} }}", binds, name, self.turbofish(&bound), inits.join(", ")), ret))
+    }
+
+    fn struct_param_args(&self, st: &str) -> Vec<Type> {
+        self.m.structs[st].tparams.iter().map(|t| Type::Param(t.clone())).collect()
+    }
+
+    /// Type of `self` inside struct `st` (generic structs use their own parameters).
+    fn struct_self_type(&self, st: &str) -> Type {
+        Type::Struct(st.to_string(), self.m.structs[st].tparams.iter().map(|t| Type::Param(t.clone())).collect())
     }
 
     fn is_cast_target(&self, class: &str) -> bool {
@@ -1210,7 +1265,7 @@ impl<'a> Gen<'a> {
         if op != AssignOp::Set {
             let mut n = 0;
             let (pre, place, ty) = self.place(cx, target, &mut n)?;
-            if let Type::Struct(st) = &ty {
+            if let Type::Struct(st, sargs) = &ty {
                 let bin = match op {
                     AssignOp::Add => BinOp::Add,
                     AssignOp::Sub => BinOp::Sub,
@@ -1219,8 +1274,8 @@ impl<'a> Gen<'a> {
                     _ => BinOp::Rem,
                 };
                 let (vc, vt) = self.expr(cx, value, None)?;
-                let Some(o) = self.find_op(st, bin, Some(&vt)) else {
-                    return err(format!("`{}` has no `op {}` taking a `{}`", st, bin.rust(), vt), value.pos);
+                let Some(o) = self.find_op(st, sargs, bin, Some(&vt)) else {
+                    return err(format!("`{}` has no `op {}` taking a `{}`", ty, bin.rust(), vt), value.pos);
                 };
                 if o.ret != ty {
                     return err(format!("`{}=` needs `op {}` to return `{}`, but it returns `{}`", bin.rust(), bin.rust(), st, o.ret), value.pos);
@@ -1390,7 +1445,8 @@ impl<'a> Gen<'a> {
                         if !cx.self_mut {
                             return err("this method changes `self`; declare it `mut fn`", e.pos);
                         }
-                        let t = self.struct_field_type(cx, &st, f, e.pos)?;
+                        let sargs = self.struct_param_args(&st);
+                        let t = self.struct_field_type(cx, &st, &sargs, f, e.pos)?;
                         return Ok((String::new(), format!("self.{}", rid(f)), t));
                     }
                     let class = self.self_class(cx, recv.pos)?;
@@ -1398,8 +1454,8 @@ impl<'a> Gen<'a> {
                     return Ok((String::new(), format!("self.{}", rid(f)), t));
                 }
                 // A field of a struct value: change it where the struct lives.
-                if let Type::Struct(st) = self.recv(cx, recv)?.1 {
-                    let t = self.struct_field_type(cx, &st, f, e.pos)?;
+                if let Type::Struct(st, sargs) = self.recv(cx, recv)?.1 {
+                    let t = self.struct_field_type(cx, &st, &sargs, f, e.pos)?;
                     let (pre, bplace, _) = self.place(cx, recv, n)?;
                     return Ok((pre, format!("{}.{}", bplace, rid(f)), t));
                 }
@@ -1517,13 +1573,14 @@ impl<'a> Gen<'a> {
                     return Ok(None);
                 }
                 let st = cx.strukt.clone().unwrap();
-                let t = self.struct_field_type(cx, &st, f, e.pos)?;
+                let sargs = self.struct_param_args(&st);
+                let t = self.struct_field_type(cx, &st, &sargs, f, e.pos)?;
                 Ok(Some((String::new(), format!("self.{}", rid(f)), t)))
             }
             ExprKind::Field(recv, f) if !matches!(recv.kind, ExprKind::SelfRef) => {
                 let Some((pre, bplace, bt)) = self.recv_place(cx, recv, n)? else { return Ok(None) };
-                let Type::Struct(st) = bt else { return Ok(None) };
-                let t = self.struct_field_type(cx, &st, f, e.pos)?;
+                let Type::Struct(st, sargs) = bt else { return Ok(None) };
+                let t = self.struct_field_type(cx, &st, &sargs, f, e.pos)?;
                 Ok(Some((pre, format!("{}.{}", bplace, rid(f)), t)))
             }
             ExprKind::Field(recv, f) if matches!(recv.kind, ExprKind::SelfRef) => {
@@ -1590,7 +1647,7 @@ impl<'a> Gen<'a> {
                     if cx.is_static {
                         return err("`self` is not available in a `static fn`", e.pos);
                     }
-                    return Ok(("self.clone()".into(), Type::Struct(st)));
+                    return Ok(("self.clone()".into(), self.struct_self_type(&st)));
                 }
                 let class = self.self_class(cx, e.pos)?;
                 if cx.in_init {
@@ -1698,7 +1755,7 @@ impl<'a> Gen<'a> {
                 let (code, t) = self.expr(cx, inner, None)?;
                 match (op, &t) {
                     (UnOp::Neg, Type::Int | Type::Float) => Ok((format!("(-{})", code), t)),
-                    (UnOp::Neg, Type::Struct(st)) => match self.find_op(st, BinOp::Sub, None) {
+                    (UnOp::Neg, Type::Struct(st, sargs)) => match self.find_op(st, sargs, BinOp::Sub, None) {
                         Some(o) => Ok((format!("{{ let __l = {}; __l.__op_{}() }}", code, o.index), o.ret)),
                         None => err(format!("`{}` has no `op -()` for negation", st), e.pos),
                     },
@@ -1728,7 +1785,8 @@ impl<'a> Gen<'a> {
                         if cx.is_static {
                             return err("`self` is not available in a `static fn`", e.pos);
                         }
-                        let t = self.struct_field_type(cx, &st, f, e.pos)?;
+                        let sargs = self.struct_param_args(&st);
+                        let t = self.struct_field_type(cx, &st, &sargs, f, e.pos)?;
                         return Ok((clone_if(format!("self.{}", rid(f)), &t), t));
                     }
                     let class = self.self_class(cx, recv.pos)?;
@@ -1740,8 +1798,8 @@ impl<'a> Gen<'a> {
                 }
                 let (setup, rcode, rt) = self.receiver(cx, recv)?;
                 match &rt {
-                    Type::Struct(st) => {
-                        let t = self.struct_field_type(cx, st, f, e.pos)?;
+                    Type::Struct(st, sargs) => {
+                        let t = self.struct_field_type(cx, st, sargs, f, e.pos)?;
                         let read = clone_if(format!("{}.{}", rcode, rid(f)), &t);
                         Ok((if setup.is_empty() { read } else { format!("{{ {}let __t = {}; __t }}", setup, read) }, t))
                     }
@@ -1927,13 +1985,22 @@ impl<'a> Gen<'a> {
     fn binary(&self, cx: &mut Ctx, op: BinOp, l: &Expr, r: &Expr, pos: Pos) -> Result<(String, Type)> {
         let (lc, lt) = self.expr(cx, l, None)?;
         let (rc, rt) = self.expr(cx, r, None)?;
-        if let Type::Struct(st) = &lt {
+        if let Type::Struct(st, sargs) = &lt {
             if matches!(op, BinOp::Add | BinOp::Sub | BinOp::Mul | BinOp::Div | BinOp::Rem) {
-                let Some(o) = self.find_op(st, op, Some(&rt)) else {
-                    return err(format!("`{}` has no `op {}` taking a `{}`", st, op.rust(), rt), pos);
+                let Some(o) = self.find_op(st, sargs, op, Some(&rt)) else {
+                    return err(format!("`{}` has no `op {}` taking a `{}`", lt, op.rust(), rt), pos);
                 };
                 let rc = self.coerce(rc, &rt, o.param.as_ref().unwrap(), r.pos)?;
                 return Ok((format!("{{ let __l = {}; let __r = {}; __l.__op_{}(__r) }}", lc, rc, o.index), o.ret));
+            }
+        }
+        // `2.0 * v` / `1.0 + v`: a number on the left uses the struct's `*` / `+` operator.
+        if let Type::Struct(st, sargs) = &rt {
+            if matches!(op, BinOp::Add | BinOp::Mul) && !matches!(lt, Type::Struct(..)) {
+                if let Some(o) = self.find_op(st, sargs, op, Some(&lt)) {
+                    let lc = self.coerce(lc, &lt, o.param.as_ref().unwrap(), l.pos)?;
+                    return Ok((format!("{{ let __l = {}; let __r = {}; __r.__op_{}(__l) }}", lc, rc, o.index), o.ret));
+                }
             }
         }
         use BinOp::*;
@@ -2007,7 +2074,8 @@ impl<'a> Gen<'a> {
         }
         let generic_class = self.m.classes.get(name).is_some_and(|c| !c.tparams.is_empty());
         let generic_fn = self.m.fn_tparams.get(name).is_some_and(|t| !t.is_empty());
-        if !targs.is_empty() && !generic_class && !generic_fn {
+        let generic_struct = self.m.structs.get(name).is_some_and(|s| !s.tparams.is_empty());
+        if !targs.is_empty() && !generic_class && !generic_fn && !generic_struct {
             return err(format!("`{}` is not generic and takes no type arguments", name), pos);
         }
         if generic_class && cx.lookup(name).is_none() {
@@ -2033,6 +2101,9 @@ impl<'a> Gen<'a> {
             return self.builtin(cx, name, args, pos);
         }
         if let Some(info) = self.m.structs.get(name) {
+            if !info.tparams.is_empty() || !targs.is_empty() {
+                return self.generic_struct_new(cx, name, targs, args, expected, pos);
+            }
             let (min, max) = (info.required_args(), info.fields.len());
             if args.len() < min || args.len() > max {
                 let range = if min == max { format!("{}", max) } else { format!("{} to {}", min, max) };
@@ -2051,7 +2122,7 @@ impl<'a> Gen<'a> {
                 write!(binds, "let __a{} = {}; ", i, code).unwrap();
                 inits.push(format!("{}: __a{}", rid(f), i));
             }
-            return Ok((format!("{{ {}{} {{ {} }} }}", binds, name, inits.join(", ")), Type::Struct(name.to_string())));
+            return Ok((format!("{{ {}{} {{ {} }} }}", binds, name, inits.join(", ")), Type::Struct(name.to_string(), vec![])));
         }
         if self.m.classes.contains_key(name) {
             if self.m.classes[name].decl.is_abstract {
@@ -2183,6 +2254,11 @@ impl<'a> Gen<'a> {
                 if m.is_private && cx.strukt.as_deref() != Some(n.as_str()) {
                     return err(format!("method `{}` is private to `{}`", name, n), pos);
                 }
+                let tparams = self.m.structs[n].tparams.clone();
+                if !tparams.is_empty() {
+                    let (binds, names, bound, ret) = self.infer_call(cx, &tparams, &[], &m.sig, args, None, pos, name)?;
+                    return Ok((format!("{{ {}{}{}::__s_{}({}) }}", binds, n, self.turbofish(&bound), name, names), ret));
+                }
                 let (binds, names) = self.args(cx, &m.sig, args, pos, name)?;
                 return Ok((format!("{{ {}{}::__s_{}({}) }}", binds, n, name, names), m.sig.ret));
             }
@@ -2192,7 +2268,11 @@ impl<'a> Gen<'a> {
                 if cx.is_static {
                     return err("`self` is not available in a `static fn`", pos);
                 }
-                return self.struct_method_call(cx, &st, recv, name, args, pos);
+                let sargs = match self.struct_self_type(&st) {
+                    Type::Struct(_, a) => a,
+                    _ => unreachable!(),
+                };
+                return self.struct_method_call(cx, &st, &sargs, recv, name, args, pos);
             }
             let class = self.self_class(cx, recv.pos)?;
             let sig = match self.m.find_method(&class, name) {
@@ -2242,8 +2322,8 @@ impl<'a> Gen<'a> {
             };
             return Ok((format!("{{ {}{} }}", setup, code), ty));
         }
-        if let Type::Struct(st) = &recv_ty {
-            return self.struct_method_call(cx, st, recv, name, args, pos);
+        if let Type::Struct(st, sargs) = &recv_ty {
+            return self.struct_method_call(cx, st, sargs, recv, name, args, pos);
         }
         if let (Type::Map(k, v), "remove") = (&recv_ty, name) {
             let mut n = 0;
@@ -2491,6 +2571,8 @@ fn unknown_params(t: &Type) -> Type {
         Type::Map(k, v) => Type::Map(Box::new(unknown_params(k)), Box::new(unknown_params(v))),
         Type::Func(ps, r) => Type::Func(ps.iter().map(unknown_params).collect(), Box::new(unknown_params(r))),
         Type::Generic(n, args) => Type::Generic(n.clone(), args.iter().map(unknown_params).collect()),
+        Type::Struct(n, args) => Type::Struct(n.clone(), args.iter().map(unknown_params).collect()),
+        Type::Result(t, e) => Type::Result(Box::new(unknown_params(t)), Box::new(unknown_params(e))),
         other => other.clone(),
     }
 }

@@ -104,6 +104,8 @@ pub struct OpDecl {
 #[derive(Debug, Clone)]
 pub struct StructDecl {
     pub name: String,
+    /// Type parameters: `struct Grid<T>`.
+    pub tparams: Vec<String>,
     pub fields: Vec<FieldDecl>,
     pub methods: Vec<FnDecl>,
     pub ops: Vec<OpDecl>,
