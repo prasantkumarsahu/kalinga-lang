@@ -27,9 +27,9 @@ fn main() {
     var d = Direction.North
     for i in 0..3 {
         d = turn_right(d)
-        print(d)
+        println(d)
     }
-    print(d == Direction.West)
+    println(d == Direction.West)
 }
 ```
 
@@ -66,7 +66,7 @@ fn area(s: Shape) -> float {
 fn main() {
     let shapes = [Shape.Circle(1.0), Shape.Rect(2.0, 3.0), Shape.Empty]
     for s in shapes {
-        print(s, area(s))
+        println(s, area(s))
     }
 }
 ```
@@ -94,13 +94,13 @@ fn run(c: Command) {
     match c {
         Move(n) => {
             if n > 0 {
-                print("moving", n, "steps")
+                println("moving", n, "steps")
             } else {
-                print("staying put")
+                println("staying put")
             }
         }
-        Say(t) => print("saying: {t}")
-        _ => print("other command")
+        Say(t) => println("saying: {t}")
+        _ => println("other command")
     }
 }
 
@@ -128,8 +128,8 @@ enum Light { Red, Amber, Green }
 
 fn main() {
     match Light.Red {
-        Red => print("stop")
-        Green => print("go")
+        Red => println("stop")
+        Green => println("go")
     }
 }
 ```
@@ -160,11 +160,11 @@ fn describe(n: int) -> str {
 }
 
 fn main() {
-    print(describe(0), describe(-1), describe(42))
+    println(describe(0), describe(-1), describe(42))
     match "kiwi" {
-        "apple" => print("red")
-        "kiwi" => print("green")
-        _ => print("unknown")
+        "apple" => println("red")
+        "kiwi" => println("green")
+        _ => println("unknown")
     }
 }
 ```
@@ -195,8 +195,8 @@ enum Owner {
 fn main() {
     let o = Owner.Person(User("Asha"))
     match o {
-        Person(u) => print("owned by", u.name)
-        Nobody => print("free")
+        Person(u) => println("owned by", u.name)
+        Nobody => println("free")
     }
 }
 ```
@@ -233,7 +233,7 @@ fn total(t: Tree) -> int {
 
 fn main() {
     let t = Tree.Node([Tree.Leaf(1), Tree.Node([Tree.Leaf(2), Tree.Leaf(3)])])
-    print(total(t))
+    println(total(t))
 }
 ```
 

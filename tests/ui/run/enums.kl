@@ -16,11 +16,11 @@ fn area(s: Shape) -> float {
 
 fn main() {
     for s in [Shape.Circle(1.0), Shape.Rect(2.0, 3.0), Shape.Empty] {
-        print(s, area(s))
+        println(s, area(s))
     }
-    print(Shape.Empty == Shape.Empty)
+    println(Shape.Empty == Shape.Empty)
     match "b" {
-        "a" => print(1)
-        _ => print(2)
+        "a" => println(1)
+        _ => println(2)
     }
 }

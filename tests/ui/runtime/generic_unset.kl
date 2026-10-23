@@ -5,5 +5,5 @@ class Holder<T> {
     }
 }
 fn main() {
-    print(Holder<int>().get())
+    println(Holder<int>().get())
 }

@@ -76,9 +76,9 @@ fn main() {
     for frame in 0..120 {
         e.update(dt)
         if frame % 30 == 0 {
-            print("frame {frame}: {len(e.particles)} particles, highest at {int(e.highest() * 100.0)} cm")
+            println("frame {frame}: {len(e.particles)} particles, highest at {int(e.highest() * 100.0)} cm")
         }
     }
     let ms = (Time.now() - start) * 1000.0
-    print("120 frames of 10000 particles took under a second: {ms < 1000.0}")
+    println("120 frames of 10000 particles took under a second: {ms < 1000.0}")
 }

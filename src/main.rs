@@ -12,6 +12,8 @@ usage:
   kalinga check <file.kl> [--stdin]    report errors only; `fn main()` is optional, so files
                                        meant to be imported can be checked (--stdin reads the
                                        source from stdin)
+  kalinga fix   <file.kl or folder>...  update code written for an earlier Kalinga version
+                                       (0.4 → 0.5: `print(...)` becomes `println(...)`)
   kalinga -v | --version               print the installed version";
 
 /// Errors from the compiler and the command's own messages, shown as text.
@@ -19,6 +21,20 @@ type CliResult<T> = Result<T, Box<dyn std::error::Error>>;
 
 fn read(file: &Path) -> CliResult<String> {
     std::fs::read_to_string(file).map_err(|e| format!("cannot read {}: {}", file.display(), e).into())
+}
+
+/// `kalinga fix`: updates each file (or every `.kl` file in each folder) in place.
+fn fix(paths: &[String]) -> CliResult<i32> {
+    for p in paths {
+        let report = driver::fix::fix_path(Path::new(p))?;
+        for (file, n) in &report.changed {
+            println!("fixed {} place(s) in {}", n, file.display());
+        }
+        for e in &report.skipped {
+            eprintln!("skipped a file that is not valid Kalinga:\n{}", e);
+        }
+    }
+    Ok(0)
 }
 
 fn main() {
@@ -62,6 +78,7 @@ fn main() {
             print!("{}", rust);
             0
         }),
+        "fix" => fix(&args[1..]),
         "check" => {
             let source = if args.get(2).map(String::as_str) == Some("--stdin") {
                 let mut s = String::new();

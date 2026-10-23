@@ -358,7 +358,7 @@ impl Checker<'_> {
             self.expr(cx, &args[0], None)
         };
         match name {
-            "print" => {
+            "print" | "println" => {
                 let mut parts = vec![];
                 for a in args {
                     let t = self.expr(cx, a, None)?;
@@ -370,7 +370,8 @@ impl Checker<'_> {
                     }
                     parts.push(t);
                 }
-                intrinsic(Builtin::Print, parts, Type::Void)
+                let op = if name == "print" { Builtin::Print } else { Builtin::Println };
+                intrinsic(op, parts, Type::Void)
             }
             "len" => {
                 if args.len() != 1 {

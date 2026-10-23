@@ -85,7 +85,7 @@ class Sq : Shape {
 
 fn main() {
     let s: Shape = Sq(3.0)
-    print(s.area)
+    println(s.area)
 }
 ```
 

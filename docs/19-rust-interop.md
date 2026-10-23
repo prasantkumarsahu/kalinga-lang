@@ -33,7 +33,7 @@ use rust "native/stats.rs"
 extern fn mean(xs: [float]) -> float
 
 fn main() {
-    print(mean([2.0, 4.0, 9.0]))
+    println(mean([2.0, 4.0, 9.0]))
 }
 ```
 
@@ -81,7 +81,7 @@ extern fn cube_root(x: float) -> float = "f64::cbrt"
 extern fn min_int(a: int, b: int) -> int = "std::cmp::min"
 
 fn main() {
-    print(cube_root(27.0), min_int(3, -8))
+    println(cube_root(27.0), min_int(3, -8))
 }
 ```
 
@@ -99,7 +99,7 @@ extern fn clamp_byte(x: int) -> int = rust { x.clamp(0, 255) }
 extern fn shout(s: str) -> str = rust { s.to_uppercase() + "!" }
 
 fn main() {
-    print(clamp_byte(300), shout("hi"))
+    println(clamp_byte(300), shout("hi"))
 }
 ```
 
@@ -121,7 +121,7 @@ extern fn parse_hex(s: str) -> Result<int, str> = rust {
 }
 
 fn main() {
-    print(parse_hex("ff"), parse_hex("zz"))
+    println(parse_hex("ff"), parse_hex("zz"))
 }
 ```
 
@@ -161,7 +161,7 @@ extern fn matrix_trace(m: Matrix) -> float
 
 fn main() {
     let m = matrix_identity(4)
-    print(matrix_trace(m))
+    println(matrix_trace(m))
 }
 ```
 
@@ -188,7 +188,7 @@ use rust "native/rng.rs"
 extern fn roll(sides: int) -> int
 
 fn main() {
-    print(roll(6) <= 6)
+    println(roll(6) <= 6)
 }
 ```
 

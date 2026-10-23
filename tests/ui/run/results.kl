@@ -39,24 +39,24 @@ fn setup(ok: bool) -> Result<void, str> {
 }
 
 fn main() -> Result<void, str> {
-    print(parse_level("3"), parse_level(""), parse_level("0"))
+    println(parse_level("3"), parse_level(""), parse_level("0"))
     match total("game") {
-        Ok(t) => print("total", t)
-        Err(e) => print("failed")
+        Ok(t) => println("total", t)
+        Err(e) => println("failed")
     }
     match total("missing") {
-        Ok(t) => print("total", t)
+        Ok(t) => println("total", t)
         Err(e) => match e {
-            Missing(n) => print("missing file:", n)
-            Bad(l) => print("bad line", l)
+            Missing(n) => println("missing file:", n)
+            Bad(l) => println("bad line", l)
         }
     }
     let r = parse_level("7")
-    print(r.is_ok(), r.unwrap_or(1), parse_level("").unwrap_or(1), r.ok(), parse_level("").err(), r.unwrap())
-    print(first_even([1, 3, 4]), first_even([1, 3]))
+    println(r.is_ok(), r.unwrap_or(1), parse_level("").unwrap_or(1), r.ok(), parse_level("").err(), r.unwrap())
+    println(first_even([1, 3, 4]), first_even([1, 3]))
     setup(true)?
-    print("setup ok")
+    println("setup ok")
     setup(false)?
-    print("never printed")
+    println("never printed")
     return Ok()
 }

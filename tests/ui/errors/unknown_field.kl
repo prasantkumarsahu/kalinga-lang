@@ -1,5 +1,5 @@
 class A { a: int }
 fn main() {
     let a = A()
-    print(a.b)
+    println(a.b)
 }

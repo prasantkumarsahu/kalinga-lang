@@ -1,0 +1,9 @@
+// `print` stays on the line; `println` ends it. Several values are joined by spaces.
+fn main() {
+    print("a")
+    print("b", 1)
+    println()
+    println("c", 2)
+    print()
+    println("done")
+}

@@ -143,11 +143,11 @@ class Shooter : Game {
     init() {
         match Image.load("assets/ship.png") {
             Ok(img) => self.ship = img
-            Err(e) => print("no ship image:", e)
+            Err(e) => println("no ship image:", e)
         }
         match Sound.load("assets/laser.wav") {
             Ok(s) => self.laser = s
-            Err(e) => print("no laser sound:", e)
+            Err(e) => println("no laser sound:", e)
         }
     }
 

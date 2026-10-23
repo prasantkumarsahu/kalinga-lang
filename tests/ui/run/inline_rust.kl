@@ -15,5 +15,5 @@ extern fn sum_sq(xs: [float]) -> float = rust {
 }
 
 fn main() {
-    print(shout("hi"), count_braces("{{a}}{{b"), sum_sq([1.0, 2.0, 3.0]))
+    println(shout("hi"), count_braces("{{a}}{{b"), sum_sq([1.0, 2.0, 3.0]))
 }

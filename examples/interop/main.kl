@@ -14,13 +14,13 @@ extern fn cbrt(x: float) -> float = "f64::cbrt"
 
 fn main() {
     let scores = [2.0, 4.0, 4.0, 4.0, 5.0, 5.0, 7.0, 9.0]
-    print("mean {mean(scores)}, std dev {std_dev(scores)}")
+    println("mean {mean(scores)}, std dev {std_dev(scores)}")
 
     var a = matrix_new(2, 2, 0.0)
     a = matrix_set(a, 0, 0, 1.0)
     a = matrix_set(a, 0, 1, 2.0)
     a = matrix_set(a, 1, 0, 3.0)
     a = matrix_set(a, 1, 1, 4.0)
-    print(matrix_rows(matrix_mul(a, a)))
-    print(cbrt(64.0))
+    println(matrix_rows(matrix_mul(a, a)))
+    println(cbrt(64.0))
 }

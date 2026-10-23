@@ -88,7 +88,7 @@ import "mathx/noise"
 
 fn main() {
     let v = Vec2(3.0, 4.0)
-    print(v.length(), perlin(0.5, 0.5))
+    println(v.length(), perlin(0.5, 0.5))
 }
 ```
 
@@ -113,7 +113,7 @@ fn main() {
     let a = mx.Vec2(1.0, 2.0)
     let b: mx.Vec2 = mx.Vec2(3.0, 4.0)
     let body = phys.Body(a)
-    print(a.dot(b), mx.version(), Vec2(1, 2))
+    println(a.dot(b), mx.version(), Vec2(1, 2))
 }
 ```
 
@@ -206,7 +206,7 @@ and `= rust { ... }` bodies) without a `use crate` line:
 extern fn roll() -> int = rust { fastrand::i64(1..=6) }
 
 fn main() {
-    print(roll())
+    println(roll())
 }
 ```
 

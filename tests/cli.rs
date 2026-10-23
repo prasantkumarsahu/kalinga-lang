@@ -81,7 +81,7 @@ fn games_type_check() {
 fn rust_errors_in_inline_bodies_are_reported() {
     let src = scratch(
         "inline_bad.kl",
-        "extern fn bad(x: int) -> int = rust { x + \"s\" }\nfn main() {\n    print(bad(1))\n}\n",
+        "extern fn bad(x: int) -> int = rust { x + \"s\" }\nfn main() {\n    println(bad(1))\n}\n",
     );
     let out = kalinga(&["run", src.to_str().unwrap()]);
     assert_eq!(out.status.code(), Some(1));
@@ -92,7 +92,7 @@ fn rust_errors_in_inline_bodies_are_reported() {
 #[cfg(windows)]
 #[test]
 fn static_c_runtime() {
-    let src = scratch("static_crt.kl", "fn main() {\n    print(\"hi\")\n}\n");
+    let src = scratch("static_crt.kl", "fn main() {\n    println(\"hi\")\n}\n");
     let exe = src.with_extension("exe");
     let out = kalinga(&["build", src.to_str().unwrap(), "-o", exe.to_str().unwrap()]);
     assert!(out.status.success(), "{}", stderr(&out));
@@ -113,7 +113,7 @@ fn game_window_smoke() {
     std::fs::write(
         &src,
         format!(
-            "import \"std/game\"\n\nclass Smoke : Game {{\n    frame: int\n\n    override fn update(input: Input, dt: float) {{\n        self.frame += 1\n        if self.frame >= 5 {{\n            input.quit()\n        }}\n    }}\n\n    override fn draw(screen: Screen) {{\n        screen.clear(Color.BLACK)\n        screen.rect(Rect(10.0, 10.0, 50.0, 50.0), Color.YELLOW)\n        if self.frame == 3 {{\n            screen.screenshot({:?})\n        }}\n    }}\n}}\n\nfn main() {{\n    let g = Smoke()\n    Window.run(\"smoke\", 200, 100, g)\n    print(\"frames\", g.frame)\n}}\n",
+            "import \"std/game\"\n\nclass Smoke : Game {{\n    frame: int\n\n    override fn update(input: Input, dt: float) {{\n        self.frame += 1\n        if self.frame >= 5 {{\n            input.quit()\n        }}\n    }}\n\n    override fn draw(screen: Screen) {{\n        screen.clear(Color.BLACK)\n        screen.rect(Rect(10.0, 10.0, 50.0, 50.0), Color.YELLOW)\n        if self.frame == 3 {{\n            screen.screenshot({:?})\n        }}\n    }}\n}}\n\nfn main() {{\n    let g = Smoke()\n    Window.run(\"smoke\", 200, 100, g)\n    println(\"frames\", g.frame)\n}}\n",
             shot.to_str().unwrap()
         ),
     )

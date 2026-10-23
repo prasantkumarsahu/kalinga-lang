@@ -23,8 +23,8 @@ fn repeat<T>(value: T, times: int) -> [T] {
 }
 
 fn main() {
-    print(first([10, 20]), first(["a", "b"]))
-    print(repeat("ho", 3), repeat(true, 2))
+    println(first([10, 20]), first(["a", "b"]))
+    println(repeat("ho", 3), repeat(true, 2))
 }
 ```
 
@@ -47,8 +47,8 @@ fn transform<T, U>(items: [T], f: fn(T) -> U) -> [U] {
 }
 
 fn main() {
-    print(transform([1, 2, 3], fn(n) => n * n))
-    print(transform(["a", "bcd"], fn(s) => len(s)))
+    println(transform([1, 2, 3], fn(n) => n * n))
+    println(transform(["a", "bcd"], fn(s) => len(s)))
 }
 ```
 
@@ -80,11 +80,11 @@ fn main() {
     let numbers: Stack<int> = Stack()
     numbers.push(1)
     numbers.push(2)
-    print(numbers.size(), numbers.pop(), numbers.pop(), numbers.pop())
+    println(numbers.size(), numbers.pop(), numbers.pop(), numbers.pop())
 
     let words = Stack<str>()
     words.push("hi")
-    print(words.pop())
+    println(words.pop())
 }
 ```
 
@@ -125,7 +125,7 @@ class Pair<A, B> {
 fn main() {
     let p = Pair("x", 5)
     let q = p.swap()
-    print(p.first, p.second, "->", q.first, q.second)
+    println(p.first, p.second, "->", q.first, q.second)
 }
 ```
 

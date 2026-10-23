@@ -8,5 +8,5 @@ struct V {
     }
 }
 fn main() {
-    print(V(1.0) * 2.0)
+    println(V(1.0) * 2.0)
 }

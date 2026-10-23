@@ -65,14 +65,14 @@ fn main() {
         .keep(fn(c) => c.people > 500)
         .sorted_by(fn(a, b) => a.people > b.people)
         .take(3)
-    print(big.map(fn(c) => "{c.name} ({c.people}k)"))
+    println(big.map(fn(c) => "{c.name} ({c.people}k)"))
 
     let by_country = group_by(cities, fn(c) => c.country)
     for country in by_country {
         let names = by_country[country].map(fn(c) => c.name)
-        print("{country}: {names}")
+        println("{country}: {names}")
     }
 
     let words = Pipeline(["kiwi", "fig", "banana", "apple"]).sorted_by(fn(a, b) => a < b)
-    print(words.take(2))
+    println(words.take(2))
 }

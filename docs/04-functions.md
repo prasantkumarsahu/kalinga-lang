@@ -8,11 +8,11 @@ fn add(a: int, b: int) -> int {
 }
 
 fn say_hi(name: str) {
-    print("Hi,", name)
+    println("Hi,", name)
 }
 
 fn main() {
-    print(add(2, 3))
+    println(add(2, 3))
     say_hi("Asha")
 }
 ```
@@ -52,10 +52,10 @@ A function without a return type can use a bare `return` to stop early:
 ```kalinga
 fn check(n: int) {
     if n < 0 {
-        print("negative, stopping")
+        println("negative, stopping")
         return
     }
-    print("ok:", n)
+    println("ok:", n)
 }
 
 fn main() {
@@ -78,7 +78,7 @@ Parameters cannot be reassigned inside the function (they behave like `let`). Co
 fn countdown(from: int) {
     var n = from
     while n > 0 {
-        print(n)
+        println(n)
         n -= 1
     }
 }
@@ -111,7 +111,7 @@ fn main() {
     let nums = [1, 2]
     let b = Holder()
     fill(nums, b)
-    print(nums, b.value)
+    println(nums, b.value)
 }
 ```
 
@@ -140,8 +140,8 @@ fn sum_to(n: int) -> int {
 }
 
 fn main() {
-    print(fib(30))
-    print(sum_to(100000))
+    println(fib(30))
+    println(sum_to(100000))
 }
 ```
 
@@ -166,7 +166,7 @@ How values are printed:
 ```kalinga
 fn main() {
     let maybe: int? = none
-    print(42, 2.0, 0.25, true, "text", [1, 2, 3], maybe)
+    println(42, 2.0, 0.25, true, "text", [1, 2, 3], maybe)
 }
 ```
 
@@ -182,7 +182,7 @@ Reading input:
 fn main() {
     let name = input("Your name: ")
     let age = int(input("Your age: "))
-    print("Hello", name, "- next year you will be", age + 1)
+    println("Hello", name, "- next year you will be", age + 1)
 }
 ```
 

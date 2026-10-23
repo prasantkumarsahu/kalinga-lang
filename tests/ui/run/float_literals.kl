@@ -10,5 +10,5 @@ fn main() {
     let w: float = 5
     let z = -3
     let n: float = -3
-    print(v, w, z, n, speed(4), 1.5 + 1, 2 * 0.5, v * 2, 2 * v, w > 0, 7 / 2)
+    println(v, w, z, n, speed(4), 1.5 + 1, 2 * 0.5, v * 2, 2 * v, w > 0, 7 / 2)
 }

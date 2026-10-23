@@ -10,5 +10,5 @@ class C {
 }
 
 fn main() {
-    print(nothing)
+    println(nothing)
 }

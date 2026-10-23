@@ -19,7 +19,7 @@ fn main() {
     for v in [1.0, 2.5, 2.7, 4.1, 4.2, 4.9, 9.0] {
         h = histogram_add(h, v, 2.0)
     }
-    print(histogram_render(h, 2.0))
-    print(sum_squares([1.0, 2.0, 3.0]), first_word("  hello world"), first_word(""))
-    print(length(Vec2(3.0, 4.0)), cube_root(27.0))
+    println(histogram_render(h, 2.0))
+    println(sum_squares([1.0, 2.0, 3.0]), first_word("  hello world"), first_word(""))
+    println(length(Vec2(3.0, 4.0)), cube_root(27.0))
 }

@@ -65,7 +65,18 @@ const fn mutating(
 }
 
 pub const FUNCTIONS: &[Function] = &[
-    f("print", &["values..."], "void", "Prints the values separated by spaces, then a newline."),
+    f(
+        "print",
+        &["values..."],
+        "void",
+        "Prints the values separated by spaces, without a newline; the text appears at once.",
+    ),
+    f(
+        "println",
+        &["values..."],
+        "void",
+        "Prints the values separated by spaces, then a newline. `println()` prints an empty line.",
+    ),
     f("len", &["x: [T], {K: V} or str"], "int", "Number of elements in an array or map, or characters in a string."),
     f("str", &["x"], "str", "Text form of a printable value."),
     f("int", &["x"], "int", "Converts a float (drops the fraction), bool or str to int."),

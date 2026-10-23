@@ -67,9 +67,9 @@ immediately with a message on stderr and exit code `101`:
 fn main() {
     let xs = [1, 2, 3]
     let i = 5
-    print("before")
-    print(xs[i])
-    print("never printed")
+    println("before")
+    println(xs[i])
+    println("never printed")
 }
 ```
 
@@ -117,7 +117,7 @@ fn main() {
     let a = Account()
     let b = Account()
     a.transfer_to(b, 30)    // fine: two different objects
-    print(a.balance, b.balance)
+    println(a.balance, b.balance)
     a.transfer_to(a, 10)    // the same object twice: runtime error
 }
 ```

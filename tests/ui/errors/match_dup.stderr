@@ -1,3 +1,3 @@
 tests/ui/errors/match_dup.kl:5:9: error: variant `R` is already handled by an earlier arm
-5 |         R => print(2)
+5 |         R => println(2)
   |         ^

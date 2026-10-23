@@ -17,7 +17,7 @@ fn grade(score: int) -> str {
 }
 
 fn main() {
-    print(grade(95), grade(80), grade(40))
+    println(grade(95), grade(80), grade(40))
 }
 ```
 
@@ -31,10 +31,10 @@ A B C
 fn main() {
     let ready = false
     if ready {
-        print("go")
+        println("go")
     }
     else {
-        print("wait")
+        println("wait")
     }
 }
 ```
@@ -49,7 +49,7 @@ fn main() {
     while n < 100 {
         n *= 2
     }
-    print(n)
+    println(n)
 }
 ```
 
@@ -66,7 +66,7 @@ fn main() {
 ```kalinga
 fn main() {
     for i in 0..3 {
-        print("step", i)
+        println("step", i)
     }
 }
 ```
@@ -86,7 +86,7 @@ If `b <= a`, the loop body never runs.
 fn main() {
     let fruits = ["apple", "mango", "kiwi"]
     for f in fruits {
-        print(f.upper())
+        println(f.upper())
     }
 }
 ```
@@ -112,7 +112,7 @@ fn main() {
             vowels += 1
         }
     }
-    print(vowels)
+    println(vowels)
 }
 ```
 
@@ -134,7 +134,7 @@ fn main() {
         if i > 9 {
             break
         }
-        print(i)
+        println(i)
     }
 }
 ```

@@ -28,7 +28,7 @@ Create a file called `hello.kl`:
 
 ```kalinga
 fn main() {
-    print("Hello, world!")
+    println("Hello, world!")
 }
 ```
 
@@ -59,8 +59,8 @@ fn main() {
         total += square(i)
     }
 
-    print("Hi from", name)
-    print("1² + 2² + 3² =", total)
+    println("Hi from", name)
+    println("1² + 2² + 3² =", total)
 }
 ```
 

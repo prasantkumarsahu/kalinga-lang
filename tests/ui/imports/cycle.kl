@@ -2,5 +2,5 @@
 import "lib/geo.kl"
 
 fn main() {
-    print(Square(3).area(), twice(5))
+    println(Square(3).area(), twice(5))
 }

@@ -19,7 +19,7 @@ class Greeter {
 
 fn main() {
     let g = Greeter("Kalinga")
-    print(g.greet())
+    println(g.greet())
 }
 ```
 

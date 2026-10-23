@@ -1,25 +1,25 @@
 fn main() {
-    print(Math.sqrt(16), Math.pow(2, 10), Math.abs(-3), Math.abs(-2.5), Math.min(3, 7), Math.max(1.5, 0.5))
-    print(Math.floor(2.7), Math.ceil(2.1), Math.round(2.5), Math.clamp(15, 0, 10), Math.clamp(-0.5, 0.0, 1.0))
-    print(Math.lerp(0, 10, 0.25), Math.sign(-4), int(Math.sin(Math.PI / 2.0) * 100.0), Math.hypot(3, 4), Math.atan2(1, 1) * 4.0 == Math.PI)
+    println(Math.sqrt(16), Math.pow(2, 10), Math.abs(-3), Math.abs(-2.5), Math.min(3, 7), Math.max(1.5, 0.5))
+    println(Math.floor(2.7), Math.ceil(2.1), Math.round(2.5), Math.clamp(15, 0, 10), Math.clamp(-0.5, 0.0, 1.0))
+    println(Math.lerp(0, 10, 0.25), Math.sign(-4), int(Math.sin(Math.PI / 2.0) * 100.0), Math.hypot(3, 4), Math.atan2(1, 1) * 4.0 == Math.PI)
     Random.seed(42)
     let a = Random.int(1, 7)
     Random.seed(42)
-    print(a == Random.int(1, 7))
+    println(a == Random.int(1, 7))
     var ok = true
     for i in 0..10000 {
         let r = Random.int(-3, 3)
         let f = Random.float()
         if r < -3 || r >= 3 || f < 0.0 || f >= 1.0 { ok = false }
     }
-    print("ranges ok:", ok)
+    println("ranges ok:", ok)
     var deck = [1, 2, 3, 4, 5, 6]
     Random.shuffle(deck)
     deck.sort()
     let empty: [int] = []
-    print(deck, Random.pick(deck) != none, Random.pick(empty))
+    println(deck, Random.pick(deck) != none, Random.pick(empty))
     let t0 = Time.now()
     Time.sleep(0.05)
     let dt = Time.now() - t0
-    print(dt >= 0.04 && dt < 1.0, Time.millis() > 1700000000000)
+    println(dt >= 0.04 && dt < 1.0, Time.millis() > 1700000000000)
 }

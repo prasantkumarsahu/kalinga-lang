@@ -31,7 +31,7 @@ fn describe(s: Square) -> str {
 import "geometry.kl"
 
 fn main() {
-    print(describe(Square(3.0)))
+    println(describe(Square(3.0)))
 }
 ```
 
@@ -75,7 +75,7 @@ import "std/math2d"
 
 fn main() {
     let a = Vec2(3.0, 4.0)
-    print(a.length(), a + Vec2(1.0, 1.0), Rect(0.0, 0.0, 10.0, 10.0).contains(a))
+    println(a.length(), a + Vec2(1.0, 1.0), Rect(0.0, 0.0, 10.0, 10.0).contains(a))
 }
 ```
 

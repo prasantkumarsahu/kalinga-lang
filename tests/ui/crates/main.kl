@@ -15,5 +15,5 @@ fn main() {
         if c < 800 { ok = false }
     }
     let flip = coin()
-    print("fastrand works:", ok, flip == true || flip == false)
+    println("fastrand works:", ok, flip == true || flip == false)
 }

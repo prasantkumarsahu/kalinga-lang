@@ -1,5 +1,5 @@
 fn main() {
     let name = "Asha"
     let xs = [1, 2]
-    print("Hi {name}! {len(xs) * 10}% {xs} {{literal}}")
+    println("Hi {name}! {len(xs) * 10}% {xs} {{literal}}")
 }

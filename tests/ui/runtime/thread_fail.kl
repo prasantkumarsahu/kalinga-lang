@@ -3,6 +3,6 @@ fn main() {
         let xs = [1]
         return xs[5]
     })
-    print("before join")
-    print(t.join())
+    println("before join")
+    println(t.join())
 }

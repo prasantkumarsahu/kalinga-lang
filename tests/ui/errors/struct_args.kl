@@ -7,4 +7,4 @@ struct V {
         return V(self.x + o.x)
     }
 }
-fn main() { print(V()) }
+fn main() { println(V()) }

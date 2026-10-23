@@ -138,7 +138,7 @@ pub struct Model {
     pub names: TypeNames,
 }
 
-pub const BUILTINS: &[&str] = &["print", "len", "str", "int", "float", "input"];
+pub const BUILTINS: &[&str] = &["print", "println", "len", "str", "int", "float", "input"];
 pub(crate) const RESERVED_TYPES: &[&str] = &[
     "Rc", "RefCell", "String", "Vec", "BTreeMap", "Result", "Ok", "Err", "Thread", "Channel", "Shared", "Task",
     "Async", "Math", "Random", "Time", "Option", "Some", "None", "Box", "Self", "std", "main", "int", "float", "bool",

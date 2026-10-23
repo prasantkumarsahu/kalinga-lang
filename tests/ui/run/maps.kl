@@ -5,7 +5,7 @@ fn main() {
     m["a"] += 5
     var lists = {1: [10]}
     lists[1].push(20)
-    print(m, m["a"], m.get("z"), m.has("b"), len(m))
-    print(m.keys(), m.values(), lists, m.remove("b"), m)
-    for k in lists { print(k) }
+    println(m, m["a"], m.get("z"), m.has("b"), len(m))
+    println(m.keys(), m.values(), lists, m.remove("b"), m)
+    for k in lists { println(k) }
 }

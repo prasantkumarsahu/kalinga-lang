@@ -27,7 +27,7 @@ fn main() {
     let a = Thread.spawn(fn() => work(1000000))
     let b = Thread.spawn(fn() => work(2000000))
     // both run at the same time, on two cores
-    print(a.join() == work(1000000), b.join() == work(2000000))
+    println(a.join() == work(1000000), b.join() == work(2000000))
 }
 ```
 
@@ -100,7 +100,7 @@ fn main() {
         jobs.send(Job(i, 10))
     }
     jobs.close()
-    print("worker handled", worker.join(), "jobs")
+    println("worker handled", worker.join(), "jobs")
 
     var total = 0
     while true {
@@ -110,7 +110,7 @@ fn main() {
             break
         }
     }
-    print("total", total)
+    println("total", total)
 }
 ```
 
@@ -149,7 +149,7 @@ fn main() {
     for t in tasks {
         t.join()
     }
-    print("counter", counter.get())
+    println("counter", counter.get())
 }
 ```
 
@@ -186,7 +186,7 @@ fn main() {
     let sizes = [300000, 300000, 300000, 300000, 300000, 300000]
     let a = sizes.map(fn(n) => cost(n))
     let b = sizes.par_map(fn(n) => cost(n))
-    print(a == b, Thread.cores() >= 1)
+    println(a == b, Thread.cores() >= 1)
 }
 ```
 

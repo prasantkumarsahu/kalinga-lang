@@ -10,5 +10,5 @@ class B : A {
 }
 fn main() {
     let xs: [S] = [A(), B()]
-    for x in xs { print(x.show()) }
+    for x in xs { println(x.show()) }
 }

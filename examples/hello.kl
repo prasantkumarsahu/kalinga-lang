@@ -4,26 +4,26 @@ fn greet(name: str) -> str {
 }
 
 fn main() {
-    print(greet("Kalinga"))
+    println(greet("Kalinga"))
 
     var total = 0
     for i in 1..11 {
         total += i
     }
-    print("sum 1..10 =", total)
+    println("sum 1..10 =", total)
 
     let nums = [3, 1, 4, 1, 5]
     var evens: [int] = []
     for n in nums {
-        if n % 2 == 0 { evens.push(n) } else if n > 3 { print("big odd", n) }
+        if n % 2 == 0 { evens.push(n) } else if n > 3 { println("big odd", n) }
     }
-    print("evens:", evens, "count:", len(nums))
+    println("evens:", evens, "count:", len(nums))
 
     var maybe: int? = none
-    if let v = maybe { print("got", v) } else { print("nothing yet") }
+    if let v = maybe { println("got", v) } else { println("nothing yet") }
     maybe = 42
-    if let v = maybe { print("now got", v) }
+    if let v = maybe { println("now got", v) }
 
     let pi = 3.14159
-    print("area:", pi * 2.0 * 2.0, "as int:", int(pi * 4.0))
+    println("area:", pi * 2.0 * 2.0, "as int:", int(pi * 4.0))
 }

@@ -4,5 +4,5 @@ async fn answer() -> int {
 }
 
 fn main() {
-    print("sync main got", Async.run(answer()))
+    println("sync main got", Async.run(answer()))
 }

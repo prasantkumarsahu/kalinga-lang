@@ -21,6 +21,7 @@ usage:
   utkal build                       compile src/main.kl to target/<name>
   utkal run [args...]               build and run
   utkal check                       report errors (src/main.kl or src/lib.kl)
+  utkal fix                         update src/ and tests/ for this Kalinga version
   utkal test                        run every tests/*.kl; a test passes when it exits with 0
   utkal update                      fetch the newest allowed versions and rewrite utkal.lock
   utkal -v | --version              print the installed version";
@@ -42,6 +43,7 @@ fn main() {
         }),
         Some("run") => run(&rest),
         Some("check") => check(),
+        Some("fix") => fix(),
         Some("test") => test(),
         Some("update") => project_dir().and_then(|dir| {
             let r = project::resolve(&dir, Mode::Update)?;
@@ -94,7 +96,7 @@ fn new(args: &[&str]) -> CliResult<i32> {
         &format!(
             "[package]\nname = \"{}\"\nversion = \"0.1.0\"\nkalinga = \"{}\"\n\n[dependencies]\n\n[rust-dependencies]\n",
             pkg,
-            env!("CARGO_PKG_VERSION").rsplit_once('.').map(|(a, _)| a).unwrap_or("0.4")
+            language_version()
         ),
     )?;
     write(dir.join(".gitignore"), "target/\n")?;
@@ -111,7 +113,7 @@ fn new(args: &[&str]) -> CliResult<i32> {
             "// A test passes when main returns Ok (exit code 0).\nimport \"../src/lib.kl\"\n\nfn main() -> Result<void, str> {\n    if greet(\"utkal\") != \"Hello, utkal!\" {\n        return Err(\"greet is wrong\")\n    }\n    return Ok()\n}\n",
         )?;
     } else {
-        write(src.join("main.kl"), "fn main() {\n    print(\"Hello from Kalinga!\")\n}\n")?;
+        write(src.join("main.kl"), "fn main() {\n    println(\"Hello from Kalinga!\")\n}\n")?;
     }
     println!("created {} `{}` in {}", if lib { "library" } else { "app" }, pkg, dir.display());
     Ok(0)
@@ -260,6 +262,36 @@ fn run(args: &[&str]) -> CliResult<i32> {
     let exe = build(&dir)?;
     let status = Command::new(&exe).args(args).status().map_err(|e| format!("cannot run {}: {}", exe.display(), e))?;
     Ok(status.code().unwrap_or(1))
+}
+
+/// Updates the project's code for this Kalinga version, and its `kalinga = "..."` line.
+fn fix() -> CliResult<i32> {
+    let dir = project_dir()?;
+    for folder in ["src", "tests"] {
+        if dir.join(folder).is_dir() {
+            let report = driver::fix::fix_path(&dir.join(folder))?;
+            for (file, n) in &report.changed {
+                println!("fixed {} place(s) in {}", n, file.display());
+            }
+            for e in &report.skipped {
+                eprintln!("skipped a file that is not valid Kalinga:\n{}", e);
+            }
+        }
+    }
+    let path = dir.join(MANIFEST);
+    let old = std::fs::read_to_string(&path).map_err(|e| format!("cannot read {}: {}", path.display(), e))?;
+    let line = format!("kalinga = {}", toml_str(&language_version()));
+    let text = set_entry(&old, "package", "kalinga", Some(&line));
+    if text != old {
+        std::fs::write(&path, &text).map_err(|e| format!("cannot write {}: {}", path.display(), e))?;
+        println!("set {} in {}", line, MANIFEST);
+    }
+    Ok(0)
+}
+
+/// This compiler's language version, `major.minor` (`0.5`).
+fn language_version() -> String {
+    env!("CARGO_PKG_VERSION").rsplit_once('.').map_or(env!("CARGO_PKG_VERSION"), |(v, _)| v).to_string()
 }
 
 fn check() -> CliResult<i32> {

@@ -27,21 +27,21 @@ fn main() {
     let zoo: [Animal] = [Dog("Rex"), Cat("Tom"), Puppy("Bit")]
     for a in zoo {
         if let d = a as Dog {
-            print(d.fetch())
+            println(d.fetch())
         } else {
-            print(a.name, "is not a dog")
+            println(a.name, "is not a dog")
         }
-        print(a is Puppy, a is Animal)
+        println(a is Puppy, a is Animal)
     }
     let s: Show = Puppy("Nib")
-    if let p = s as Puppy { print("puppy", p.name) }
-    print(s is Dog)
+    if let p = s as Puppy { println("puppy", p.name) }
+    println(s is Dog)
     let r = Dog("R")
-    print(r.me().name, r.me() is Dog)
+    println(r.me().name, r.me() is Dog)
 
     let root = Node(1)
     let kid = Node(2)
     root.add(kid)
-    if let p = kid.parent { print("parent of 2 is", p.value) }
-    print(len(root.children))
+    if let p = kid.parent { println("parent of 2 is", p.value) }
+    println(len(root.children))
 }

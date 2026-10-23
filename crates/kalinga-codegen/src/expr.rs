@@ -283,10 +283,14 @@ impl Gen<'_> {
         let a = |i: usize| self.expr(&args[i]);
         use Builtin::*;
         match op {
-            Print if args.is_empty() => "println!()".into(),
-            Print => {
+            Print | Println => {
                 let parts: Vec<String> = args.iter().map(|x| format!("__KlShow::__show(&{})", self.expr(x))).collect();
-                format!("println!(\"{{}}\", [{}].join(\" \"))", parts.join(", "))
+                match (op, parts.is_empty()) {
+                    (Println, true) => "println!()".into(),
+                    (Println, false) => format!("println!(\"{{}}\", [{}].join(\" \"))", parts.join(", ")),
+                    (_, true) => "()".into(),
+                    _ => format!("__print([{}].join(\" \"))", parts.join(", ")),
+                }
             }
             Len => match args[0].ty {
                 Type::Str => format!("({}.chars().count() as i64)", self.recv(&args[0])),

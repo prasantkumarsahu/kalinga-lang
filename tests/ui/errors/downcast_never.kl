@@ -1,5 +1,5 @@
 class A {}
 class C {}
 fn main() {
-    print(A() as C)
+    println(A() as C)
 }

@@ -20,9 +20,9 @@ fn parse_level(text: str) -> Result<int, str> {
 }
 
 fn main() {
-    print(parse_level("3"))
-    print(parse_level(""))
-    print(parse_level("0"))
+    println(parse_level("3"))
+    println(parse_level(""))
+    println(parse_level("0"))
 }
 ```
 
@@ -56,8 +56,8 @@ fn divide(a: int, b: int) -> Result<int, str> {
 fn main() {
     for b in [2, 0] {
         match divide(10, b) {
-            Ok(v) => print("10 /", b, "=", v)
-            Err(e) => print("cannot divide:", e)
+            Ok(v) => println("10 /", b, "=", v)
+            Err(e) => println("cannot divide:", e)
         }
     }
 }
@@ -79,7 +79,7 @@ fn f() -> Result<int, str> {
 
 fn main() {
     match f() {
-        Ok(v) => print(v)
+        Ok(v) => println(v)
     }
 }
 ```
@@ -119,10 +119,10 @@ fn total(name: str) -> Result<int, LoadError> {
 fn main() {
     for name in ["game", "missing"] {
         match total(name) {
-            Ok(t) => print("total", t)
+            Ok(t) => println("total", t)
             Err(e) => match e {
-                Missing(n) => print("missing file:", n)
-                Bad(l) => print("bad line", l)
+                Missing(n) => println("missing file:", n)
+                Bad(l) => println("bad line", l)
             }
         }
     }
@@ -163,7 +163,7 @@ fn first_even_times_ten(xs: [int]) -> int? {
 }
 
 fn main() {
-    print(first_even_times_ten([1, 3, 4]), first_even_times_ten([1, 3]))
+    println(first_even_times_ten([1, 3, 4]), first_even_times_ten([1, 3]))
 }
 ```
 
@@ -194,9 +194,9 @@ fn parse_level(text: str) -> Result<int, str> {
 fn main() {
     let good = parse_level("7")
     let bad = parse_level("")
-    print(good.is_ok(), bad.is_err())
-    print(good.unwrap_or(1), bad.unwrap_or(1))
-    print(good.ok(), bad.err())
+    println(good.is_ok(), bad.is_err())
+    println(good.unwrap_or(1), bad.unwrap_or(1))
+    println(good.ok(), bad.err())
 }
 ```
 
@@ -227,7 +227,7 @@ fn load_config() -> Result<int, str> {
 
 fn main() -> Result<void, str> {
     let volume = load_config()?
-    print("volume", volume)
+    println("volume", volume)
     return Ok()
 }
 ```
@@ -255,7 +255,7 @@ main.kl:2:13: error: cannot tell which `Result` this `Ok` belongs to; give the v
 ```kalinga
 fn main() {
     let r: Result<int, str> = Ok(5)
-    print(r)
+    println(r)
 }
 ```
 
@@ -273,7 +273,7 @@ this for images and sounds that fail to load:
 ```kalinga
 match Image.load("ship.png") {
     Ok(img) => self.ship = img
-    Err(e) => print("no ship image:", e)
+    Err(e) => println("no ship image:", e)
 }
 ```
 

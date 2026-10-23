@@ -35,7 +35,7 @@ class Inventory {
         for item in self.stock {
             let n = self.stock[item]
             let flag = if_low(n)
-            print("  {item}: {n} at {self.prices[item]}{flag}")
+            println("  {item}: {n} at {self.prices[item]}{flag}")
         }
     }
 }
@@ -53,9 +53,9 @@ fn main() {
     inv.add("pear", 3, 0.75)
     inv.add("apple", 5, 0.5)
 
-    print("sold 12 apples: {inv.sell("apple", 12)}")
-    print("sold 9 pears: {inv.sell("pear", 9)}")
-    print("sold 1 kiwi: {inv.sell("kiwi", 1)}")
+    println("sold 12 apples: {inv.sell("apple", 12)}")
+    println("sold 9 pears: {inv.sell("pear", 9)}")
+    println("sold 1 kiwi: {inv.sell("kiwi", 1)}")
     inv.report()
-    print("stock value: {inv.value()}")
+    println("stock value: {inv.value()}")
 }

@@ -9,7 +9,7 @@ fn main() {
     let primes = [2, 3, 5, 7]
     let names: [str] = ["Ravi", "Mira"]
     var empty: [float] = []
-    print(primes, names, empty)
+    println(primes, names, empty)
 }
 ```
 
@@ -26,10 +26,10 @@ Indexes start at `0`:
 ```kalinga
 fn main() {
     var scores = [10, 20, 30]
-    print(scores[0], scores[2])
+    println(scores[0], scores[2])
     scores[1] = 25
     scores[2] += 5
-    print(scores, len(scores))
+    println(scores, len(scores))
 }
 ```
 
@@ -62,12 +62,12 @@ fn main() {
     stack.push("a")
     stack.push("b")
     stack.push("c")
-    print(stack.contains("b"), stack.len())
+    println(stack.contains("b"), stack.len())
 
     if let top = stack.pop() {
-        print("popped", top)
+        println("popped", top)
     }
-    print(stack)
+    println(stack)
 }
 ```
 
@@ -84,7 +84,7 @@ fn main() {
     var grid = [[0, 0, 0], [0, 0, 0]]
     grid[1][2] = 5
     for row in grid {
-        print(row)
+        println(row)
     }
 }
 ```
@@ -104,7 +104,7 @@ fn main() {
     var a = [1, 2, 3]
     var b = a
     b.push(4)
-    print(a, b)
+    println(a, b)
 }
 ```
 
@@ -151,9 +151,9 @@ fn evens(xs: [int]) -> [int] {
 
 fn main() {
     let data = [4, 9, 2, 7, 6]
-    print(sum(data), max_of(data), evens(data))
+    println(sum(data), max_of(data), evens(data))
     let nothing: [int] = []
-    print(max_of(nothing))
+    println(max_of(nothing))
 }
 ```
 
@@ -171,7 +171,7 @@ fn main() {
     let lang = "Kalinga"
     let version = 1
     let line = lang + " v" + str(version)
-    print(line, len(line))
+    println(line, len(line))
 }
 ```
 
@@ -187,9 +187,9 @@ Put any printable expression inside `{ }` in a string, and its value is inserted
 fn main() {
     let name = "Mira"
     let items = [3, 4]
-    print("Hello {name}, you have {len(items)} items: {items}")
-    print("next year you will be {30 + 1}")
-    print("use {{ and }} for literal braces")
+    println("Hello {name}, you have {len(items)} items: {items}")
+    println("next year you will be {30 + 1}")
+    println("use {{ and }} for literal braces")
 }
 ```
 
@@ -216,7 +216,7 @@ For objects, insert a field or a method result: `"{user.name}"`.
 fn main() {
     let raw = "  Hello World  "
     let clean = raw.trim()
-    print(clean.upper(), clean.lower(), clean.contains("World"))
+    println(clean.upper(), clean.lower(), clean.contains("World"))
 }
 ```
 
@@ -238,7 +238,7 @@ fn reverse(s: str) -> str {
 }
 
 fn main() {
-    print(reverse("stressed"))
+    println(reverse("stressed"))
 }
 ```
 

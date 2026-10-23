@@ -51,10 +51,10 @@ fn greet(n: Named) -> str { return "hi " + n.name() }
 
 fn main() {
     let a = Animal.create("dog", "Rex")
-    print(a.describe())
+    println(a.describe())
     let p: Pet = Cat("Tom")
-    print(p.sound(), p.name(), greet(p))
+    println(p.sound(), p.name(), greet(p))
     let pets: [Pet] = [Dog("A"), Cat("B")]
-    for x in pets { print(greet(x)) }
-    print(MathUtil.max(3, 9), MathUtil.clamp(50, 0, 10))
+    for x in pets { println(greet(x)) }
+    println(MathUtil.max(3, 9), MathUtil.clamp(50, 0, 10))
 }

@@ -41,20 +41,20 @@ fn main() {
     let a = Vec2(1.0, 2.0)
     var b = a
     b.x = 10.0
-    print(a, b, a == Vec2(1.0, 2.0))
-    print(a + b, a - b, a * 2.0, -a, Vec2.zero())
+    println(a, b, a == Vec2(1.0, 2.0))
+    println(a + b, a - b, a * 2.0, -a, Vec2.zero())
     var c = Vec2(3.0, 4.0)
     c.scale_in_place(2.0)
     c += Vec2(1.0, 1.0)
-    print(c, c.dot(Vec2(1.0, 0.0)), "{c}")
+    println(c, c.dot(Vec2(1.0, 0.0)), "{c}")
 
     let w = World()
     w.parts.push(Particle(Vec2(0.0, 1.0), Vec2(1.0, 0.0)))
     w.parts.push(Particle(Vec2(0.0, 100.0), Vec2(0.0, 0.0), true))
     for s in 0..10 { w.step(0.1) }
-    for p in w.parts { print(p.alive, p.pos.y < 50.0) }
+    for p in w.parts { println(p.alive, p.pos.y < 50.0) }
     var ps = [Particle(Vec2.zero(), Vec2(1.0, 1.0))]
     ps[0].pos.x += 5.0
     ps[0].vel.scale_in_place(3.0)
-    print(ps[0].pos, ps[0].vel, len(ps))
+    println(ps[0].pos, ps[0].vel, len(ps))
 }

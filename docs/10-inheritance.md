@@ -34,8 +34,8 @@ class Dog : Animal {
 
 fn main() {
     let d = Dog("Rex")
-    print(d.speak())    // inherited from Animal
-    print(d.fetch())    // defined in Dog
+    println(d.speak())    // inherited from Animal
+    println(d.fetch())    // defined in Dog
 }
 ```
 
@@ -75,7 +75,7 @@ class Blob : Shape {
 
 fn main() {
     let b = Blob("blobby")
-    print(b.label)
+    println(b.label)
 }
 ```
 
@@ -126,8 +126,8 @@ class Circle : Shape {
 }
 
 fn main() {
-    print(Rect(2.0, 3.0).describe())
-    print(Circle(1.0).describe())
+    println(Rect(2.0, 3.0).describe())
+    println(Circle(1.0).describe())
 }
 ```
 
@@ -166,7 +166,7 @@ class TimedLogger : Logger {
 }
 
 fn main() {
-    print(TimedLogger().format("started"))
+    println(TimedLogger().format("started"))
 }
 ```
 
@@ -203,7 +203,7 @@ class Cow : Animal {
 }
 
 fn introduce(a: Animal) {
-    print(a.speak())
+    println(a.speak())
 }
 
 fn main() {
@@ -251,11 +251,11 @@ fn main() {
     let pets: [Animal] = [Dog("Rex"), Cat("Tom")]
     for p in pets {
         if let d = p as Dog {
-            print(d.fetch())
+            println(d.fetch())
         } else {
-            print(p.name, "is not a dog")
+            println(p.name, "is not a dog")
         }
-        print(p is Cat)
+        println(p is Cat)
     }
 }
 ```
@@ -308,7 +308,7 @@ class Square : Shape {
 fn main() {
     let shapes: [Shape] = [Square(2.0), Square(3.0)]
     for s in shapes {
-        print(s.describe())
+        println(s.describe())
     }
 }
 ```
@@ -352,7 +352,7 @@ class C : B {
 
 fn main() {
     let x: A = C()
-    print(x.who())
+    println(x.who())
 }
 ```
 

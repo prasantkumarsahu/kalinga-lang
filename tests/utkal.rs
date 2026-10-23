@@ -120,7 +120,7 @@ fn describe(p: Point) -> str {
 fn main() {
     let a: geo.Point = geo.Point(1, 2)
     let b = px.Point(0.5)
-    print(geo.describe(a), px.describe(b), describe(Point("x")), geo.origin().x, extra())
+    println(geo.describe(a), px.describe(b), describe(Point("x")), geo.origin().x, extra())
 }
 "#,
     );
@@ -131,7 +131,7 @@ fn main() {
     // A name two plain imports both define is an error that suggests `as`.
     write(
         &app.join("src/main.kl"),
-        "import \"geo\"\nimport \"pixels\"\n\nfn main() {\n    print(describe(origin()))\n}\n",
+        "import \"geo\"\nimport \"pixels\"\n\nfn main() {\n    println(describe(origin()))\n}\n",
     );
     let err = fails(&utkal(&app, &["build"]));
     assert!(err.contains("`describe` is defined in both `geo` and `pixels`"), "{}", err);
@@ -145,7 +145,7 @@ fn main() {
     let err = fails(&utkal(&app, &["build"]));
     assert!(err.contains("pixels.Point"), "{}", err);
 
-    write(&app.join("src/main.kl"), "import \"geo\" as g\n\nfn main() {\n    print(g.nothing())\n}\n");
+    write(&app.join("src/main.kl"), "import \"geo\" as g\n\nfn main() {\n    println(g.nothing())\n}\n");
     assert!(fails(&utkal(&app, &["build"])).contains("package `g` has no `nothing`"));
     write(&app.join("src/main.kl"), "import \"missing\"\n\nfn main() {\n}\n");
     assert!(fails(&utkal(&app, &["build"])).contains("unknown package `missing`"));
@@ -175,7 +175,7 @@ fn git_packages_versions_and_lock() {
 
     ok(&utkal(&ws, &["new", "app"]));
     let app = ws.join("app");
-    write(&app.join("src/main.kl"), "import \"mathx\"\n\nfn main() {\n    print(mathx_version())\n}\n");
+    write(&app.join("src/main.kl"), "import \"mathx\"\n\nfn main() {\n    println(mathx_version())\n}\n");
     ok(&utkal(&app, &["add", "mathx", "--git", &url, "--version", "0.1"]));
     assert_eq!(ok(&utkal(&app, &["run"])).trim(), "0.1.5", "newest 0.1.x");
     let lock = std::fs::read_to_string(app.join("utkal.lock")).unwrap();
@@ -233,7 +233,7 @@ fn rust_dependencies_from_the_manifest() {
     ok(&utkal(&app, &["add", "fastrand", "--rust", "2"]));
     write(
         &app.join("src/main.kl"),
-        "extern fn roll() -> int = rust { fastrand::i64(1..=6) }\n\nfn main() {\n    let r = roll()\n    print(r >= 1 && r <= 6)\n}\n",
+        "extern fn roll() -> int = rust { fastrand::i64(1..=6) }\n\nfn main() {\n    let r = roll()\n    println(r >= 1 && r <= 6)\n}\n",
     );
     assert_eq!(ok(&utkal(&app, &["run"])).trim(), "true");
 }

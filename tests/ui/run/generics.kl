@@ -43,23 +43,23 @@ fn main() {
     let s: Stack<int> = Stack()
     s.push(1)
     s.push(2)
-    print(s.size(), s.peek(), s.pop(), s.pop(), s.pop())
+    println(s.size(), s.peek(), s.pop(), s.pop(), s.pop())
 
     let names = Stack<str>()
     names.push("a")
-    print(names.peek())
+    println(names.peek())
 
     let p = Pair("x", 5)
     let q = p.swap()
-    print(p.first, p.second, q.first, q.second)
+    println(p.first, p.second, q.first, q.second)
     p.second += 10
-    print(p.second)
+    println(p.second)
 
-    print(first([3, 4]), first(["z"]), first(map_all([1, 2], fn(x) => x * 3)))
-    print(map_all(["a", "bb"], fn(s) => len(s)), repeat("ab", 3))
+    println(first([3, 4]), first(["z"]), first(map_all([1, 2], fn(x) => x * 3)))
+    println(map_all(["a", "bb"], fn(s) => len(s)), repeat("ab", 3))
     let dogs = Stack<Dog>()
     dogs.push(Dog())
-    if let d = dogs.peek() { print(d.name) }
+    if let d = dogs.peek() { println(d.name) }
     let e: [str] = []
-    print(first(e))
+    println(first(e))
 }

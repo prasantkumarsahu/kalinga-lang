@@ -43,7 +43,7 @@ class Planet : Describable {
 fn main() {
     let things: [Describable] = [Book("Dune"), Planet("Mars", 2)]
     for t in things {
-        print(t.describe())
+        println(t.describe())
     }
 }
 ```
@@ -109,8 +109,8 @@ fn best(words: [str], s: Scorer) -> str {
 
 fn main() {
     let words = ["sky", "banana", "queue"]
-    print(best(words, LengthScorer()))
-    print(best(words, VowelScorer()))
+    println(best(words, LengthScorer()))
+    println(best(words, VowelScorer()))
 }
 ```
 
@@ -163,7 +163,7 @@ fn total(items: [Priced]) -> float {
 fn main() {
     let l = Laptop("Zen")
     let p: Printable = l
-    print(p.to_text(), total([l, Laptop("Pro")]))
+    println(p.to_text(), total([l, Laptop("Pro")]))
 }
 ```
 
@@ -201,7 +201,7 @@ class Chatbot : Droid {
 fn main() {
     let voices: [Speaker] = [Droid(), Chatbot()]
     for v in voices {
-        print(v.speak())
+        println(v.speak())
     }
 }
 ```
@@ -236,12 +236,12 @@ class Dog : Pet {
 }
 
 fn greet(n: Named) {
-    print("hello", n.name())
+    println("hello", n.name())
 }
 
 fn main() {
     let p: Pet = Dog()
-    print(p.name(), p.sound())
+    println(p.name(), p.sound())
     greet(p)    // a Pet is also a Named
 }
 ```

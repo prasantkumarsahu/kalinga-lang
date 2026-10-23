@@ -4,6 +4,6 @@ tests/ui/errors/several_errors.kl:3:18: error: expected `int`, found `str`
 tests/ui/errors/several_errors.kl:8:16: error: expected `int`, found `bool`
 8 |         return true
   |                ^^^^
-tests/ui/errors/several_errors.kl:13:11: error: unknown variable `nothing`
-13 |     print(nothing)
-   |           ^^^^^^^
+tests/ui/errors/several_errors.kl:13:13: error: unknown variable `nothing`
+13 |     println(nothing)
+   |             ^^^^^^^

@@ -9,7 +9,7 @@
    can span several lines. */
 
 fn main() {
-    print("comments are ignored") // trailing comments are fine too
+    println("comments are ignored") // trailing comments are fine too
 }
 ```
 
@@ -37,7 +37,7 @@ fn shift(p: Point, dx: int) -> Point {
 }
 
 fn main() {
-    print(shift(Point(1, 2), 3))
+    println(shift(Point(1, 2), 3))
 }
 ```
 
@@ -56,7 +56,7 @@ A statement ends at the end of the line. Semicolons are allowed but never needed
 fn main() {
     let a = 1
     let b = 2; let c = 3
-    print(a + b + c)
+    println(a + b + c)
 }
 ```
 
@@ -72,7 +72,7 @@ fn main() {
         "one",
         "two",
     ]
-    print(total, words)
+    println(total, words)
 }
 ```
 
@@ -93,7 +93,7 @@ fn main() {
     var count = 0
     count = count + 1
     count += 1
-    print(pi, count)
+    println(pi, count)
 }
 ```
 
@@ -128,7 +128,7 @@ fn main() {
     let a = 10            // int, inferred
     let b: float = 2.5    // float, written out
     var names: [str] = [] // an empty array needs a type
-    print(a, b, names)
+    println(a, b, names)
 }
 ```
 
@@ -145,9 +145,9 @@ fn main() {
     let x = 1
     if true {
         let x = "inner"   // a different variable that hides the outer one
-        print(x)
+        println(x)
     }
-    print(x)
+    println(x)
 }
 ```
 
@@ -193,10 +193,10 @@ Kalinga never converts between types on its own. Use `int()`, `float()` and `str
 fn main() {
     let n = 7
     let f = 2.5
-    print(float(n) * f)       // int → float
-    print(int(f))             // float → int (drops the fraction)
-    print("n is " + str(n))   // int → str
-    print(int("42") + 1)      // str → int
+    println(float(n) * f)       // int → float
+    println(int(f))             // float → int (drops the fraction)
+    println("n is " + str(n))   // int → str
+    println(int("42") + 1)      // str → int
 }
 ```
 
@@ -224,8 +224,8 @@ Both sides must have the same type: `1 + 2.0` is an error, write `float(1) + 2.0
 
 ```kalinga
 fn main() {
-    print(7 / 2, 7 % 2, 7.0 / 2.0)
-    print("Kal" + "inga")
+    println(7 / 2, 7 % 2, 7.0 / 2.0)
+    println("Kal" + "inga")
 }
 ```
 
@@ -248,8 +248,8 @@ Kalinga
 fn main() {
     let age = 20
     let member = true
-    print(age >= 18 && member)
-    print("apple" < "banana", [1, 2] == [1, 2])
+    println(age >= 18 && member)
+    println("apple" < "banana", [1, 2] == [1, 2])
 }
 ```
 
@@ -269,7 +269,7 @@ fn main() {
     var n = 10
     n *= 3
     n -= 5
-    print(s, n)
+    println(s, n)
 }
 ```
 

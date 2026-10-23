@@ -9,5 +9,5 @@ fn main() {
         let r = roll(6)
         if r < 1 || r > 6 { ok = false }
     }
-    print("roll ok:", ok)
+    println("roll ok:", ok)
 }

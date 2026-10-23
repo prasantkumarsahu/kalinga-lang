@@ -12,7 +12,7 @@ Kalinga has its async runtime built in: no libraries to choose or set up.
 ```kalinga
 async fn countdown(name: str, n: int) -> str {
     for i in 0..n {
-        print(name, n - i)
+        println(name, n - i)
         await Time.wait(0.01)
     }
     return name + " done"
@@ -20,7 +20,7 @@ async fn countdown(name: str, n: int) -> str {
 
 async fn main() {
     let result = await countdown("launch", 3)
-    print(result)
+    println(result)
 }
 ```
 
@@ -64,9 +64,9 @@ async fn main() {
     let jobs = [delayed(log, "slow", 0.15), delayed(log, "fast", 0.05), delayed(log, "medium", 0.1)]
     let t0 = Time.now()
     let names = await Async.all(jobs)
-    print(names)
-    print(log.lines)
-    print("concurrent:", Time.now() - t0 < 0.25)
+    println(names)
+    println(log.lines)
+    println("concurrent:", Time.now() - t0 < 0.25)
 }
 ```
 
@@ -95,9 +95,9 @@ async fn load_level(n: int) -> str {
 
 async fn main() {
     let loading = Async.spawn(load_level(2))
-    print("showing the menu while level 2 loads")
+    println("showing the menu while level 2 loads")
     await Time.wait(0.1)
-    print("loaded:", await loading)
+    println("loaded:", await loading)
 }
 ```
 
@@ -133,7 +133,7 @@ async fn main() {
     let task = Thread.spawn(fn() => heavy(3000000))
     let ticker = Async.spawn(tick(5))
     let v = await task
-    print("thread result ok:", v == heavy(3000000), "ticks:", await ticker)
+    println("thread result ok:", v == heavy(3000000), "ticks:", await ticker)
 }
 ```
 
@@ -154,7 +154,7 @@ async fn answer() -> int {
 }
 
 fn main() {
-    print("got", Async.run(answer()))
+    println("got", Async.run(answer()))
 }
 ```
 
@@ -177,7 +177,7 @@ class Loader {
 }
 
 async fn main() {
-    print(await Loader.load(4))
+    println(await Loader.load(4))
 }
 ```
 

@@ -21,7 +21,7 @@ fn main() {
     })]
     var results: [int] = []
     for t in tasks { results.push(t.join()) }
-    print("joined:", results[1], results[0] == work(100000) + 10)
+    println("joined:", results[1], results[0] == work(100000) + 10)
 
     // 2. Producer / consumer
     let jobs: Channel<Job> = Channel()
@@ -39,12 +39,12 @@ fn main() {
     })
     for i in 1..6 { jobs.send(Job(i, 10)) }
     jobs.close()
-    print("worker handled", worker.join(), "jobs")
+    println("worker handled", worker.join(), "jobs")
     var total = 0
     while true {
         if let v = done.try_receive() { total += v } else { break }
     }
-    print("total", total)
+    println("total", total)
 
     // 3. Shared counter
     let counter = Shared(0)
@@ -55,7 +55,7 @@ fn main() {
         }))
     }
     for h in hs { h.join() }
-    print("counter", counter.get())
+    println("counter", counter.get())
 
     // 4. par_map
     let sizes = [200000, 200000, 200000, 200000, 200000, 200000, 200000, 200000]
@@ -64,5 +64,5 @@ fn main() {
     let t1 = Time.now()
     let par = sizes.par_map(fn(n) => work(n))
     let t2 = Time.now()
-    print("par_map equal:", seq == par, "cores:", Thread.cores() >= 1)
+    println("par_map equal:", seq == par, "cores:", Thread.cores() >= 1)
 }

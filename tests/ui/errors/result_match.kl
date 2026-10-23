@@ -3,6 +3,6 @@ fn f() -> Result<int, str> {
 }
 fn main() {
     match f() {
-        Ok(v) => print(v)
+        Ok(v) => println(v)
     }
 }

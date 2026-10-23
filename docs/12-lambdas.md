@@ -31,7 +31,7 @@ fn main() {
         return "non-negative"
     }
 
-    print(double(21), classify(-5))
+    println(double(21), classify(-5))
 }
 ```
 
@@ -48,7 +48,7 @@ fn apply_twice(f: fn(int) -> int, x: int) -> int {
 }
 
 fn main() {
-    print(apply_twice(fn(n) => n + 10, 1))   // `n` is an int: apply_twice says so
+    println(apply_twice(fn(n) => n + 10, 1))   // `n` is an int: apply_twice says so
 }
 ```
 
@@ -68,7 +68,7 @@ fn square(n: int) -> int {
 fn main() {
     let ops: [fn(int) -> int] = [square, fn(n) => n + 1, fn(n) => -n]
     for op in ops {
-        print(op(5))
+        println(op(5))
     }
 }
 ```
@@ -92,12 +92,12 @@ fn make_adder(k: int) -> fn(int) -> int {
 fn main() {
     let add5 = make_adder(5)
     let add10 = make_adder(10)
-    print(add5(1), add10(1))
+    println(add5(1), add10(1))
 
     var greeting = "hello"
     let greet = fn(name: str) => "{greeting}, {name}"
     greeting = "bye"          // the lambda kept its own copy
-    print(greet("Asha"))
+    println(greet("Asha"))
 }
 ```
 
@@ -127,7 +127,7 @@ fn main() {
     }
     bump()
     bump()
-    print(c.n)
+    println(c.n)
 }
 ```
 
@@ -158,10 +158,10 @@ class Button {
 
 fn main() {
     let ok = Button("OK")
-    print(ok.press("Asha"))
+    println(ok.press("Asha"))
     let label = ok.label
     ok.on_click = fn(who) => "{who} pressed {label}"
-    print(ok.press("Asha"))
+    println(ok.press("Asha"))
 }
 ```
 
@@ -187,13 +187,13 @@ fn main() {
     let nums = [5, 3, 8, 1, 9, 2]
     let evens = nums.filter(fn(n) => n % 2 == 0)
     let labels = nums.map(fn(n) => "#{n}")
-    print(evens, labels, nums.find(fn(n) => n > 6))
+    println(evens, labels, nums.find(fn(n) => n > 6))
 
     var words = ["banana", "fig", "cherry", "kiwi"]
     words.sort()
-    print(words)
+    println(words)
     words.sort_by(fn(a, b) => len(a) < len(b))
-    print(words)
+    println(words)
 }
 ```
 

@@ -173,6 +173,7 @@ pub enum Callee {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Builtin {
     Print,
+    Println,
     Len,
     ToStr,
     ToInt,

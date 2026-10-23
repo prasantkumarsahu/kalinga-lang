@@ -7,11 +7,11 @@ like static methods: `Math.sqrt(2.0)`.
 
 ```kalinga
 fn main() {
-    print(Math.sqrt(16), Math.pow(2, 10), Math.hypot(3, 4))
-    print(Math.abs(-7), Math.abs(-2.5), Math.min(3, 9), Math.max(0.5, 1.5))
-    print(Math.clamp(150, 0, 100), Math.lerp(0, 10, 0.25))
-    print(Math.floor(2.7), Math.ceil(2.1), Math.round(2.5))
-    print(Math.round(Math.sin(Math.PI / 2.0) * 100.0))
+    println(Math.sqrt(16), Math.pow(2, 10), Math.hypot(3, 4))
+    println(Math.abs(-7), Math.abs(-2.5), Math.min(3, 9), Math.max(0.5, 1.5))
+    println(Math.clamp(150, 0, 100), Math.lerp(0, 10, 0.25))
+    println(Math.floor(2.7), Math.ceil(2.1), Math.round(2.5))
+    println(Math.round(Math.sin(Math.PI / 2.0) * 100.0))
 }
 ```
 
@@ -44,14 +44,14 @@ fn main() {
     Random.seed(42)                     // optional: makes the sequence repeatable
     let die = Random.int(1, 7)          // 1 to 6 (the upper bound is excluded)
     let unit = Random.float()           // 0.0 up to (not including) 1.0
-    print(die >= 1 && die <= 6, unit >= 0.0 && unit < 1.0)
+    println(die >= 1 && die <= 6, unit >= 0.0 && unit < 1.0)
 
     var deck = [1, 2, 3, 4, 5]
     Random.shuffle(deck)
     if let card = Random.pick(deck) {
-        print("picked a card:", card >= 1 && card <= 5)
+        println("picked a card:", card >= 1 && card <= 5)
     }
-    print(Random.chance(1.0), Random.chance(0.0))
+    println(Random.chance(1.0), Random.chance(0.0))
 }
 ```
 
@@ -80,8 +80,8 @@ fn main() {
     let start = Time.now()
     Time.sleep(0.05)
     let elapsed = Time.now() - start
-    print(elapsed >= 0.05, elapsed < 1.0)
-    print(Time.millis() > 0)
+    println(elapsed >= 0.05, elapsed < 1.0)
+    println(Time.millis() > 0)
 }
 ```
 
@@ -111,7 +111,7 @@ fn main() {
         last = now
         x += speed * dt
     }
-    print(x > 2.0)
+    println(x > 2.0)
 }
 ```
 

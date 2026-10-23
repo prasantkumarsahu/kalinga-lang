@@ -11,9 +11,9 @@ value. When "there might be nothing" is a real possibility, you say so in the ty
 ```kalinga
 fn main() {
     var nickname: str? = none
-    print(nickname)
+    println(nickname)
     nickname = "Kali"          // a plain str is wrapped automatically
-    print(nickname)
+    println(nickname)
 }
 ```
 
@@ -43,13 +43,13 @@ fn main() {
     let colors = ["red", "green", "blue"]
 
     if let i = find_index(colors, "green") {
-        print("green is at", i)
+        println("green is at", i)
     }
 
     if let i = find_index(colors, "pink") {
-        print("pink is at", i)
+        println("pink is at", i)
     } else {
-        print("no pink")
+        println("no pink")
     }
 }
 ```
@@ -71,7 +71,7 @@ fn main() {
     if cache == none {
         cache = 42
     }
-    print(cache != none, cache)
+    println(cache != none, cache)
 }
 ```
 
@@ -93,12 +93,12 @@ fn first(xs: [int]) -> int? {
 
 fn main() {
     let n = first([1, 2])
-    print(n + 1)
+    println(n + 1)
 }
 ```
 
 ```text
-main.kl:10:13: error: cannot apply `+` to `int?` and `int`
+main.kl:10:15: error: cannot apply `+` to `int?` and `int`
 ```
 
 ## Where optionals appear
@@ -127,9 +127,9 @@ fn lookup(id: int) -> User? {
 fn main() {
     for id in 1..3 {
         if let u = lookup(id) {
-            print(id, "->", u.name)
+            println(id, "->", u.name)
         } else {
-            print(id, "-> not found")
+            println(id, "-> not found")
         }
     }
 }

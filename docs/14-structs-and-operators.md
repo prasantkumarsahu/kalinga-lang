@@ -17,7 +17,7 @@ fn main() {
     let a = Vec2(3.0, 4.0)      // the fields, in order
     var b = a                   // a copy
     b.x = 10.0
-    print(a, b, a == Vec2(3.0, 4.0))
+    println(a, b, a == Vec2(3.0, 4.0))
 }
 ```
 
@@ -71,11 +71,11 @@ struct Counter {
 fn main() {
     var c = Counter.starting_at(5)
     c.add(3)
-    print(c.n, c.doubled())
+    println(c.n, c.doubled())
 
     var many = [Counter(1), Counter(2)]
     many[1].add(40)
-    print(many[1].n)
+    println(many[1].n)
 }
 ```
 
@@ -140,7 +140,7 @@ fn main() {
     let vel = Vec2(2.0, -1.0)
     let dt = 0.5
     pos += vel * dt                 // compound assignment uses the operator too
-    print(pos, -pos, pos * Vec2(1.0, 0.0))
+    println(pos, -pos, pos * Vec2(1.0, 0.0))
 }
 ```
 
@@ -188,7 +188,7 @@ fn main() {
         }
     }
     for b in balls {
-        print("ball at ({Math.round(b.pos.x)}, {Math.round(b.pos.y)})")
+        println("ball at ({Math.round(b.pos.x)}, {Math.round(b.pos.y)})")
     }
 }
 ```

@@ -82,21 +82,21 @@ fn main() {
 
     let zoo: [Animal] = [rex, Puppy("Bit"), Bird("Tweety"), Animal("Generic")]
     for a in zoo {
-        print(a.describe())
+        println(a.describe())
     }
 
     let shown: [Show] = [rex, Puppy("Nib")]
     for s in shown {
-        print(s.show())
+        println(s.show())
     }
 
-    if let b = loudest(zoo) { print("fewest legs:", b.name) }
+    if let b = loudest(zoo) { println("fewest legs:", b.name) }
 
     let c = Counter()
     c.tick()
     c.tick()
-    print("counter:", c.tick())
+    println("counter:", c.tick())
 
     rex.name = "Rexy"
-    print(zoo[0].name)
+    println(zoo[0].name)
 }

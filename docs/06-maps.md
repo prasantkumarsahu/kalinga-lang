@@ -8,8 +8,8 @@ fn main() {
     var stock = {"apples": 3, "pears": 5}
     stock["kiwis"] = 12          // add a new key
     stock["apples"] += 10        // change an existing value
-    print(stock)
-    print(stock["pears"], len(stock))
+    println(stock)
+    println(stock["pears"], len(stock))
 }
 ```
 
@@ -37,9 +37,9 @@ When a key may be missing, use `get`, which returns an optional:
 fn main() {
     let ages = {"Asha": 31, "Ravi": 27}
     if let a = ages.get("Asha") {
-        print("Asha is {a}")
+        println("Asha is {a}")
     }
-    print(ages.get("Mira"), ages.has("Mira"))
+    println(ages.get("Mira"), ages.has("Mira"))
 }
 ```
 
@@ -67,9 +67,9 @@ none false
 fn main() {
     let scores = {"b": 2, "a": 1, "c": 3}
     for name in scores {
-        print("{name} = {scores[name]}")
+        println("{name} = {scores[name]}")
     }
-    print(scores.keys(), scores.values())
+    println(scores.keys(), scores.values())
 }
 ```
 
@@ -99,7 +99,7 @@ fn count_words(text: [str]) -> {str: int} {
 
 fn main() {
     let words = ["to", "be", "or", "not", "to", "be"]
-    print(count_words(words))
+    println(count_words(words))
 }
 ```
 
@@ -117,11 +117,11 @@ fn main() {
     groups["fruit"] = ["apple"]
     groups["fruit"].push("mango")
     groups["veg"] = ["leek"]
-    print(groups)
+    println(groups)
     if let removed = groups.remove("veg") {
-        print("removed", removed)
+        println("removed", removed)
     }
-    print(groups)
+    println(groups)
 }
 ```
 

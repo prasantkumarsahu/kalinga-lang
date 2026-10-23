@@ -4,6 +4,7 @@
 #![warn(clippy::unwrap_used)]
 
 mod error;
+pub mod fix;
 mod stdlib;
 
 use std::collections::{BTreeMap, HashMap, HashSet};

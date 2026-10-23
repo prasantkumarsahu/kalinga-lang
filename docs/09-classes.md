@@ -33,8 +33,8 @@ class BankAccount {
 fn main() {
     let acct = BankAccount("Mira")
     acct.deposit(100.0)
-    print(acct.withdraw(30.0), acct.withdraw(500.0))
-    print(acct.summary())
+    println(acct.withdraw(30.0), acct.withdraw(500.0))
+    println(acct.summary())
 }
 ```
 
@@ -69,7 +69,7 @@ class Point {
 
 fn main() {
     let p = Point(3, 4)
-    print(p.x, p.y)
+    println(p.x, p.y)
 }
 ```
 
@@ -102,7 +102,7 @@ class Settings {
 
 fn main() {
     let s = Settings()
-    print(s.volume, s.muted, s.theme, s.tags)
+    println(s.volume, s.muted, s.theme, s.tags)
 }
 ```
 
@@ -138,7 +138,7 @@ fn main() {
     c.tick_many(5)
     c.step = 10
     c.tick()
-    print(c.count)
+    println(c.count)
 }
 ```
 
@@ -170,7 +170,7 @@ fn main() {
     let kid = Node(2)
     root.add(kid)
     if let p = kid.parent {
-        print("parent of", kid.value, "is", p.value)
+        println("parent of", kid.value, "is", p.value)
     }
 }
 ```
@@ -211,7 +211,7 @@ fn main() {
     let a = Account("Ravi")
     a.deposit(50)
     a.deposit(-10)
-    print(a.balance_text())
+    println(a.balance_text())
 }
 ```
 
@@ -251,7 +251,7 @@ class Temperature {
 
 fn main() {
     let t = Temperature.from_fahrenheit(212.0)
-    print(t.celsius, Temperature.freezing().celsius)
+    println(t.celsius, Temperature.freezing().celsius)
 }
 ```
 
@@ -280,7 +280,7 @@ fn main() {
     let a = Lamp()
     let b = a          // b and a are the same lamp
     switch_on(b)
-    print(a.on)
+    println(a.on)
 }
 ```
 
@@ -308,7 +308,7 @@ class Car {
 fn main() {
     let car = Car()
     car.engine.hp = 300
-    print(car.engine.hp, car.trailer == none)
+    println(car.engine.hp, car.trailer == none)
 }
 ```
 
@@ -343,7 +343,7 @@ fn main() {
             cur = n.next
         }
     }
-    print("sum of list:", total)
+    println("sum of list:", total)
 }
 ```
 
