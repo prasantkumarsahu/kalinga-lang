@@ -52,6 +52,19 @@ pub struct FieldDecl {
     pub pos: Span,
 }
 
+/// `const NAME: Type = value` at the top level or in a class or struct (used there as
+/// `Type.NAME`), or `static var name: Type = value` in a class or struct: one variable
+/// shared by all code on a thread.
+#[derive(Debug, Clone)]
+pub struct StaticDecl {
+    pub name: String,
+    pub ty: TypeExpr,
+    pub value: Expr,
+    /// `static var` rather than `const`.
+    pub mutable: bool,
+    pub pos: Span,
+}
+
 #[derive(Debug, Clone)]
 pub struct InitDecl {
     pub params: Vec<Param>,
@@ -69,6 +82,8 @@ pub struct ClassDecl {
     pub fields: Vec<FieldDecl>,
     pub init: Option<InitDecl>,
     pub methods: Vec<FnDecl>,
+    /// `const` and `static var` members, used as `Class.NAME`.
+    pub statics: Vec<StaticDecl>,
     pub is_abstract: bool,
     pub pos: Span,
 }
@@ -111,8 +126,8 @@ pub struct StructDecl {
     pub fields: Vec<FieldDecl>,
     pub methods: Vec<FnDecl>,
     pub ops: Vec<OpDecl>,
-    /// `static NAME: Type = value` constants, used as `Struct.NAME`.
-    pub consts: Vec<FieldDecl>,
+    /// `const` and `static var` members, used as `Struct.NAME`.
+    pub statics: Vec<StaticDecl>,
     pub pos: Span,
 }
 
@@ -180,6 +195,8 @@ pub struct Program {
     pub interfaces: Vec<InterfaceDecl>,
     pub enums: Vec<EnumDecl>,
     pub structs: Vec<StructDecl>,
+    /// Top-level `const NAME: Type = value`.
+    pub consts: Vec<StaticDecl>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -276,6 +293,44 @@ pub enum ExprKind {
         ret: Option<TypeExpr>,
         body: LambdaBody,
     },
+}
+
+impl Expr {
+    /// The expressions directly inside this one, in source order. A lambda's body is left
+    /// out: it runs when the lambda is called, not when this expression is evaluated.
+    pub fn children(&self) -> Vec<&Expr> {
+        match &self.kind {
+            ExprKind::Int(_)
+            | ExprKind::Float(_)
+            | ExprKind::Str(_)
+            | ExprKind::Bool(_)
+            | ExprKind::None
+            | ExprKind::SelfRef
+            | ExprKind::Ident(_)
+            | ExprKind::Lambda { .. } => vec![],
+            ExprKind::Array(xs) | ExprKind::Call(_, _, xs) | ExprKind::SuperInit(xs) | ExprKind::SuperCall(_, xs) => {
+                xs.iter().collect()
+            }
+            ExprKind::Map(entries) => entries.iter().flat_map(|(k, v)| [k, v]).collect(),
+            ExprKind::Interp(parts) => parts
+                .iter()
+                .filter_map(|p| match p {
+                    InterpPart::Expr(e) => Some(e),
+                    InterpPart::Lit(_) => None,
+                })
+                .collect(),
+            ExprKind::Binary(_, a, b) | ExprKind::Index(a, b) => vec![a, b],
+            ExprKind::Unary(_, a)
+            | ExprKind::Field(a, _)
+            | ExprKind::Await(a)
+            | ExprKind::Try(a)
+            | ExprKind::Downcast { value: a, .. } => vec![a],
+            ExprKind::MethodCall(recv, _, args) => std::iter::once(&**recv).chain(args).collect(),
+            ExprKind::Slice(base, from, to) => {
+                std::iter::once(&**base).chain(from.as_deref()).chain(to.as_deref()).collect()
+            }
+        }
+    }
 }
 
 #[derive(Debug, Clone)]

@@ -81,10 +81,12 @@ pub enum TExprKind {
         field: String,
         wrapped: bool,
     },
-    /// `Struct.NAME`.
-    StructConst {
-        strukt: String,
+    /// A top-level `const` (`owner` empty), or `Type.NAME` for a `const` or `static var`
+    /// member.
+    Static {
+        owner: String,
         name: String,
+        mutable: bool,
     },
     /// `Math.PI`, `Math.TAU`, `Math.E`, `Math.INF`.
     MathConst(String),
@@ -309,6 +311,12 @@ pub enum TPlace {
         index: Box<TExpr>,
         ty: Type,
     },
+    /// `Type.name` for a `static var`.
+    Static {
+        owner: String,
+        name: String,
+        ty: Type,
+    },
 }
 
 impl TPlace {
@@ -318,7 +326,8 @@ impl TPlace {
             | TPlace::SelfField { ty, .. }
             | TPlace::StructField { ty, .. }
             | TPlace::ObjectField { ty, .. }
-            | TPlace::Index { ty, .. } => ty,
+            | TPlace::Index { ty, .. }
+            | TPlace::Static { ty, .. } => ty,
         }
     }
 }
@@ -456,8 +465,9 @@ pub struct TypedProgram {
     pub field_defaults: HashMap<(String, String), TExpr>,
     /// (struct, method) → body.
     pub struct_methods: HashMap<(String, String), TBody>,
-    /// (struct, constant) → value.
-    pub struct_consts: HashMap<(String, String), TExpr>,
+    /// (type, name) → initial value of a `const` or `static var`; the type is empty for
+    /// top-level constants.
+    pub static_values: HashMap<(String, String), TExpr>,
     /// (struct, operator index) → body.
     pub struct_ops: HashMap<(String, usize), TBody>,
     /// Classes whose methods use `self` as a value.

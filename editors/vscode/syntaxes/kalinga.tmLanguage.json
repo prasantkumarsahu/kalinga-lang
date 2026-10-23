@@ -156,7 +156,7 @@
         },
         {
           "name": "storage.type.kalinga",
-          "match": "\\b(fn|class|struct|interface|enum|let|var|extern)\\b"
+          "match": "\\b(fn|class|struct|interface|enum|const|let|var|extern)\\b"
         },
         {
           "name": "storage.modifier.kalinga",

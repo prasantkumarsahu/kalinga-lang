@@ -46,7 +46,9 @@ impl Gen<'_> {
                 format!("__unset(self.{}.clone(), {:?})", rid(field), field)
             }
             TExprKind::SelfField { field, .. } => clone_if(format!("self.{}", rid(field)), &e.ty),
-            TExprKind::StructConst { strukt, name } => format!("{}::__c_{}()", strukt, name),
+            TExprKind::Static { owner, name, .. } if owner.is_empty() => format!("__k_{}()", name),
+            TExprKind::Static { owner, name, mutable: true } => format!("{}::__s_{}().borrow().clone()", owner, name),
+            TExprKind::Static { owner, name, mutable: false } => format!("{}::__c_{}()", owner, name),
             TExprKind::MathConst(name) => match name.as_str() {
                 "PI" => "std::f64::consts::PI".into(),
                 "TAU" => "std::f64::consts::TAU".into(),

@@ -13,6 +13,7 @@ impl Checker<'_> {
         // A field of a base-class reference: go through the generated setter.
         if let ExprKind::Field(recv, f) = &target.kind
             && !matches!(recv.kind, ExprKind::SelfRef)
+            && self.static_owner(cx, recv).is_none()
         {
             let recv_t = self.expr(cx, recv, None)?;
             if let Type::Class(c) = &recv_t.ty
@@ -105,6 +106,9 @@ impl Checker<'_> {
                     format!("cannot change `{}`: it was declared with `let` (use `var` for a mutable variable)", name),
                     e.pos,
                 ),
+                None if self.m.consts.contains_key(name) => {
+                    err(format!("`{}` is a constant and cannot be changed", name), e.pos)
+                }
                 None => err(format!("unknown variable `{}`", name), e.pos),
             },
             ExprKind::Field(recv, f) => self.field_place(cx, recv, f, e.pos),
@@ -128,7 +132,22 @@ impl Checker<'_> {
         }
     }
 
+    /// `Type` in `Type.NAME`: a class or struct name that no local variable hides.
+    pub(super) fn static_owner<'e>(&self, cx: &Ctx, recv: &'e Expr) -> Option<&'e String> {
+        match &recv.kind {
+            ExprKind::Ident(n) if cx.lookup(n).is_none() && self.m.static_values_of(n).is_some() => Some(n),
+            _ => None,
+        }
+    }
+
     fn field_place(&self, cx: &mut Ctx, recv: &Expr, f: &str, pos: Span) -> Result<TPlace> {
+        if let Some(n) = self.static_owner(cx, recv) {
+            return match self.m.static_value(n, f) {
+                Some(s) if s.mutable => Ok(TPlace::Static { owner: n.clone(), name: f.to_string(), ty: s.ty.clone() }),
+                Some(_) => err(format!("`{}.{}` is a constant; use `static var` for a value that changes", n, f), pos),
+                None => err(format!("`{}` has no `static var` named `{}`", n, f), pos),
+            };
+        }
         if self.type_receiver(cx, recv).is_some() {
             return err("cannot assign to an enum variant", pos);
         }

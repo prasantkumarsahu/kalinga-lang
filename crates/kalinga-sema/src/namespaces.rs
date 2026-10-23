@@ -61,6 +61,9 @@ pub fn apply(prog: &mut Program, units: &Units) -> Result<DisplayNames> {
     for x in &prog.extern_fns {
         add(&x.name, x.pos);
     }
+    for c in &prog.consts {
+        add(&c.name, c.pos);
+    }
     for (n, p) in &prog.extern_types {
         add(n, *p);
     }
@@ -224,6 +227,7 @@ impl<'a> Resolver<'a> {
             for m in &mut c.methods {
                 self.func(m, &c.tparams)?;
             }
+            self.statics(&mut c.statics)?;
         }
         for i in &mut prog.interfaces {
             i.name = self.final_name(&unit_of(i.pos), &i.name);
@@ -247,7 +251,8 @@ impl<'a> Resolver<'a> {
         }
         for s in &mut prog.structs {
             s.name = self.final_name(&unit_of(s.pos), &s.name);
-            for fd in s.fields.iter_mut().chain(s.consts.iter_mut()) {
+            self.statics(&mut s.statics)?;
+            for fd in &mut s.fields {
                 self.ty(&mut fd.ty, &s.tparams)?;
                 if let Some(d) = &mut fd.default {
                     self.expr(d, &mut Scope(vec![HashSet::new()]))?;
@@ -280,6 +285,18 @@ impl<'a> Resolver<'a> {
         }
         for (n, p) in &mut prog.extern_types {
             *n = self.final_name(&unit_of(*p), n);
+        }
+        for c in &mut prog.consts {
+            c.name = self.final_name(&unit_of(c.pos), &c.name);
+        }
+        self.statics(&mut prog.consts)
+    }
+
+    /// Types and values of `const`s and `static var`s.
+    fn statics(&self, decls: &mut [StaticDecl]) -> Result<()> {
+        for d in decls {
+            self.ty(&mut d.ty, &[])?;
+            self.expr(&mut d.value, &mut Scope(vec![HashSet::new()]))?;
         }
         Ok(())
     }

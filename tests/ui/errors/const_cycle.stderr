@@ -1,0 +1,3 @@
+tests/ui/errors/const_cycle.kl:1:1: error: `A` is defined in terms of itself (A -> B -> A)
+1 | const A: int = B + 1
+  | ^^^^^

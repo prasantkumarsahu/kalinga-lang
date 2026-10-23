@@ -13,7 +13,8 @@ usage:
                                        meant to be imported can be checked (--stdin reads the
                                        source from stdin)
   kalinga fix   <file.kl or folder>...  update code written for an earlier Kalinga version
-                                       (0.4 → 0.5: `print(...)` becomes `println(...)`)
+                                       (0.4 → 0.5: `print(...)` becomes `println(...)`,
+                                       `static NAME: T = v` becomes `const NAME: T = v`)
   kalinga -v | --version               print the installed version";
 
 /// Errors from the compiler and the command's own messages, shown as text.

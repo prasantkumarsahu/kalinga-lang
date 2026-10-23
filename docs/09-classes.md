@@ -262,6 +262,47 @@ fn main() {
 Static methods are handy as named constructors ("factories") and for helpers that do not
 need an object.
 
+## Constants and static variables
+
+A class or struct can hold values that belong to the type rather than to one object:
+
+- `const NAME: Type = value` is a constant, used as `Type.NAME`.
+- `static var name: Type = value` is one variable shared by the whole type, used and
+  changed as `Type.name`.
+
+```kalinga
+class Enemy {
+    const MAX_HP: int = 30
+    static var alive: int = 0
+
+    hp: int = Enemy.MAX_HP
+
+    init() {
+        Enemy.alive += 1
+    }
+}
+
+fn main() {
+    let a = Enemy()
+    let b = Enemy()
+    println(Enemy.alive, a.hp, Enemy.MAX_HP)
+}
+```
+
+```text
+2 30 30
+```
+
+Rules:
+
+- The type is always written out, as for fields.
+- A constant's value is computed each time it is used, so a constant that holds an object
+  gives a new object each time. Use `static var` for one shared object.
+- A `static var` gets its starting value the first time it is used. Each thread has its
+  own copy (see [Threads](20-threads.md)).
+- A value cannot be defined in terms of itself (`const A: int = A + 1`).
+- Generic classes and structs cannot have constants or static variables (yet).
+
 ## Objects are references
 
 A variable of a class type refers to an object; it does not contain a copy. Assigning or

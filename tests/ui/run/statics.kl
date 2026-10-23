@@ -1,0 +1,51 @@
+const MAX_SPEED: float = 300.0
+const TITLE: str = "Space {MAX_SPEED}"
+const LEVELS: [int] = [1, 2, 3]
+
+struct Color {
+    r: float
+    g: float
+    b: float
+
+    const WHITE: Color = Color(1, 1, 1)
+    const RED: Color = Color(1, 0, 0)
+    static var made: int = 0
+
+    static fn gray(v: float) -> Color {
+        Color.made += 1
+        return Color(v, v, v)
+    }
+}
+
+class Enemy {
+    hp: int = 10
+    const MAX: int = 3
+    static var alive: int = 0
+    static var names: [str] = []
+    static var boss: Enemy? = none
+
+    init(name: str) {
+        Enemy.alive += 1
+        Enemy.names.push(name)
+    }
+}
+
+fn main() {
+    println(MAX_SPEED, TITLE, LEVELS)
+    println(Color.WHITE, Color.RED.r)
+    let g = Color.gray(0.5)
+    let h = Color.gray(0.2)
+    println(Color.made, g.r, h.g)
+    for i in 0..Enemy.MAX {
+        let e = Enemy("e{i}")
+    }
+    Enemy.boss = Enemy("boss")
+    Enemy.names[0] = "first"
+    println(Enemy.alive, Enemy.names, Enemy.names.len())
+    if let b = Enemy.boss {
+        b.hp = 99
+    }
+    if let b = Enemy.boss {
+        println(b.hp)
+    }
+}

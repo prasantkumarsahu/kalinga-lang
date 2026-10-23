@@ -143,6 +143,7 @@ impl Gen<'_> {
         match p {
             TPlace::Local { name, .. } => (String::new(), rid(name)),
             TPlace::SelfField { field, .. } => (String::new(), format!("self.{}", rid(field))),
+            TPlace::Static { owner, name, .. } => (String::new(), format!("(*{}::__s_{}().borrow_mut())", owner, name)),
             TPlace::StructField { base, field, .. } => {
                 let (pre, b) = self.place(base, n);
                 (pre, format!("{}.{}", b, rid(field)))

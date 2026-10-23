@@ -1153,6 +1153,8 @@ function complete(text, offset, options = {}) {
         kw("fn", "method (reads self)", "fn ${1:name}(${2}) -> ${3:float} {\n\t$0\n}"),
         kw("mut fn", "method that changes self", "mut fn ${1:name}(${2}) {\n\t$0\n}"),
         kw("static fn", "function on the struct type", `static fn \${1:name}(\${2}) -> ${cls.name} {\n\t$0\n}`),
+        kw("const", "constant, used as Type.NAME", "const ${1:NAME}: ${2:int} = $0"),
+        kw("static var", "variable shared by the type", "static var ${1:name}: ${2:int} = $0"),
         kw("op +", "operator", `op +(other: ${cls.name}) -> ${cls.name} {\n\treturn $0\n}`),
         kw("private", "only usable inside this struct", "private "),
       ];
@@ -1162,6 +1164,8 @@ function complete(text, offset, options = {}) {
       kw("init", "constructor", "init(${1}) {\n\t$0\n}"),
       kw("private", "only usable inside this class", "private "),
       kw("static fn", "method called on the class", "static fn ${1:name}(${2}) -> ${3:void} {\n\t$0\n}"),
+      kw("const", "constant, used as Class.NAME", "const ${1:NAME}: ${2:int} = $0"),
+      kw("static var", "variable shared by the class", "static var ${1:name}: ${2:int} = $0"),
       kw("static async fn", "async function on the class", "static async fn ${1:name}(${2}) -> ${3:int} {\n\t$0\n}")
     );
     if (cls.abstract) items.push(kw("abstract fn", "method subclasses must implement", "abstract fn ${1:name}(${2}) -> ${3:void}"));
@@ -1213,6 +1217,7 @@ function complete(text, offset, options = {}) {
       struct: "struct",
       interface: "interface",
       enum: "enum",
+      const: "const ${1:NAME}: ${2:int} = $0",
       import: 'import "${1:file.kl}"',
       "import as": 'import "${1:package}" as ${2:name}',
       "use rust": 'use rust "${1:native/file.rs}"',

@@ -3,6 +3,7 @@
 //!
 //! Migrations:
 //! - 0.5: `print(...)` no longer ends the line, so 0.4's `print(...)` becomes `println(...)`.
+//! - 0.5: member constants are `const NAME: Type = value`, no longer `static NAME: ...`.
 
 use std::path::{Path, PathBuf};
 
@@ -15,24 +16,28 @@ use crate::error::{DriverError, Result, SourceMap};
 /// `source` with every migration applied, and how many places changed.
 pub fn fix_source(source: &str) -> std::result::Result<(String, usize), Diagnostic> {
     let tokens = lexer::lex(source, 0)?;
-    // Calls of the built-in `print`: the name, then `(`; not a method (`x.print(`) and not a
-    // declaration (`fn print(`).
-    let mut at = vec![];
+    // (line, column, old word, new word), in source order.
+    let mut edits: Vec<(usize, usize, &str, &str)> = vec![];
     for (i, t) in tokens.iter().enumerate() {
-        let is_print = t.tok == Tok::Ident("print".into());
-        let called = tokens.get(i + 1).is_some_and(|n| n.tok == Tok::LParen);
+        let next = |k: usize| tokens.get(i + k).map(|n| &n.tok);
         let after = |tok: Tok| i > 0 && tokens[i - 1].tok == tok;
-        if is_print && called && !after(Tok::Dot) && !after(Tok::Fn) {
-            at.push((t.pos.line, t.pos.col));
+        // Calls of the built-in `print`: the name, then `(`; not a method (`x.print(`) and
+        // not a declaration (`fn print(`).
+        if t.tok == Tok::Ident("print".into()) && next(1) == Some(&Tok::LParen) && !after(Tok::Dot) && !after(Tok::Fn) {
+            edits.push((t.pos.line, t.pos.col, "print", "println"));
+        }
+        // `static NAME: Type = value`
+        if t.tok == Tok::Static && matches!(next(1), Some(Tok::Ident(_))) && next(2) == Some(&Tok::Colon) {
+            edits.push((t.pos.line, t.pos.col, "static", "const"));
         }
     }
     let mut out = source.to_string();
-    for (line, col) in at.iter().rev() {
+    for (line, col, old, new) in edits.iter().rev() {
         if let Some(offset) = byte_offset(source, *line, *col) {
-            out.insert_str(offset + "print".len(), "ln");
+            out.replace_range(offset..offset + old.len(), new);
         }
     }
-    Ok((out, at.len()))
+    Ok((out, edits.len()))
 }
 
 /// Byte offset of a 1-based line and character column.
@@ -110,6 +115,14 @@ mod tests {
         let (out, n) = fix_source(source).unwrap();
         assert_eq!(n, 0);
         assert_eq!(out, source);
+    }
+
+    #[test]
+    fn static_constants_become_const() {
+        let source = "struct C {\n    static RED: int = 1\n    static var n: int = 0\n    static fn f() {}\n}\n";
+        let (out, n) = fix_source(source).unwrap();
+        assert_eq!(out, "struct C {\n    const RED: int = 1\n    static var n: int = 0\n    static fn f() {}\n}\n");
+        assert_eq!(n, 1);
     }
 
     #[test]

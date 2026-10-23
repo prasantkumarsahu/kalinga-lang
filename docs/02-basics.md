@@ -163,6 +163,29 @@ inner
 - Class and interface names must start with an uppercase letter (`Animal`, `Show`).
 - By convention, variables, functions and methods use `snake_case`.
 
+## Constants
+
+`const` at the top level of a file names a value the whole program can use. Its type is
+written out, like a field's:
+
+```kalinga
+const MAX_LIVES: int = 3
+const GRAVITY: float = 9.81
+const TITLE: str = "Space Rocks"
+
+fn main() {
+    println(TITLE, MAX_LIVES, GRAVITY * 2)
+}
+```
+
+```text
+Space Rocks 3 19.62
+```
+
+A constant cannot be changed, and constants are written in `UPPER_CASE` by convention.
+Classes and structs can have their own constants, and variables shared by the whole type
+(see [Classes](09-classes.md#constants-and-static-variables)).
+
 ## Types
 
 | Type | Meaning | Examples |

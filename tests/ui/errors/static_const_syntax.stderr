@@ -1,0 +1,4 @@
+tests/ui/errors/static_const_syntax.kl:3:5: error: constants are written `const NAME: Type = value`
+3 |     static Z: int = 0
+  |     ^^^^^^
+  = help: `kalinga fix` rewrites `static NAME: Type = value` to `const`

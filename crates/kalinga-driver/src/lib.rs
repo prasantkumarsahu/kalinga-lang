@@ -143,6 +143,7 @@ impl Loader {
         p.interfaces.extend(parsed.interfaces);
         p.enums.extend(parsed.enums);
         p.structs.extend(parsed.structs);
+        p.consts.extend(parsed.consts);
         Ok(())
     }
 

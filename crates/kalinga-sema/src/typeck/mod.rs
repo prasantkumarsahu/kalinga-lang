@@ -33,6 +33,7 @@ pub fn check(prog: &Program, m: &Model) -> std::result::Result<TypedProgram, Vec
     for sname in &m.struct_order {
         c.struct_bodies(sname, &mut out, &mut errors);
     }
+    c.static_values(prog, &mut out, &mut errors);
     for f in &prog.functions {
         let sig = m.functions[&f.name].clone();
         let mut cx = Ctx::new(None, sig.ret.clone(), false);
@@ -197,6 +198,34 @@ impl Checker<'_> {
         }
     }
 
+    /// Initial values of `const`s and `static var`s, checked like the body of a `static fn`
+    /// of their type.
+    fn static_values(&self, prog: &Program, out: &mut TypedProgram, errors: &mut Vec<Diagnostic>) {
+        let owned = prog
+            .classes
+            .iter()
+            .map(|c| (c.name.as_str(), &c.statics))
+            .chain(prog.structs.iter().map(|s| (s.name.as_str(), &s.statics)))
+            .chain(std::iter::once(("", &prog.consts)));
+        for (owner, decls) in owned {
+            for d in decls {
+                let ty = match self.m.static_value(owner, &d.name) {
+                    Some(s) => s.ty.clone(),
+                    None => self.m.consts[&d.name].clone(),
+                };
+                let mut cx = Ctx::new(self.m.classes.get(owner).map(|_| owner.to_string()), Type::Void, false);
+                cx.strukt = self.m.structs.get(owner).map(|_| owner.to_string());
+                cx.is_static = true;
+                match self.expr_to(&mut cx, &d.value, &ty) {
+                    Ok(v) => {
+                        out.static_values.insert((owner.to_string(), d.name.clone()), v);
+                    }
+                    Err(e) => errors.push(e),
+                }
+            }
+        }
+    }
+
     fn struct_bodies(&self, name: &str, out: &mut TypedProgram, errors: &mut Vec<Diagnostic>) {
         let info = &self.m.structs[name];
         let struct_cx = |ret: Type| {
@@ -214,17 +243,6 @@ impl Checker<'_> {
             match self.body(&mut cx, m.sig.clone(), &meth.body, meth.pos, &meth.name, m.is_async) {
                 Ok(b) => {
                     out.struct_methods.insert((name.to_string(), meth.name.clone()), b);
-                }
-                Err(e) => errors.push(e),
-            }
-        }
-        for ((cname, ty), decl) in info.consts.iter().zip(&info.decl.consts) {
-            let Some(value) = &decl.default else { continue };
-            let mut cx = struct_cx(Type::Void);
-            cx.is_static = true;
-            match self.expr_to(&mut cx, value, ty) {
-                Ok(v) => {
-                    out.struct_consts.insert((name.to_string(), cname.clone()), v);
                 }
                 Err(e) => errors.push(e),
             }

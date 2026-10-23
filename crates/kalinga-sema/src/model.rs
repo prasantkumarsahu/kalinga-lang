@@ -28,6 +28,16 @@ pub struct ClassInfo {
     pub children: Vec<String>,
     /// Type parameters of a generic class (empty otherwise).
     pub tparams: Vec<String>,
+    /// `const` and `static var` members, in declaration order.
+    pub static_values: Vec<(String, StaticInfo)>,
+}
+
+/// A `const` or `static var` member, used as `Type.NAME`.
+#[derive(Debug, Clone)]
+pub struct StaticInfo {
+    pub ty: Type,
+    /// `static var` rather than `const`.
+    pub mutable: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -83,8 +93,8 @@ pub struct StructInfo {
     pub private_fields: HashSet<String>,
     pub methods: HashMap<String, StructMethod>,
     pub ops: Vec<StructOp>,
-    /// `static NAME: Type = value` constants.
-    pub consts: Vec<(String, Type)>,
+    /// `const` and `static var` members, in declaration order.
+    pub static_values: Vec<(String, StaticInfo)>,
 }
 
 impl StructInfo {
@@ -138,6 +148,8 @@ pub struct Model {
     pub enum_order: Vec<String>,
     /// Enums whose payloads can all be printed and compared.
     pub plain_enums: HashSet<String>,
+    /// Top-level `const`s and their types.
+    pub consts: HashMap<String, Type>,
     pub structs: HashMap<String, StructInfo>,
     pub struct_order: Vec<String>,
     /// Structs whose fields can all be printed and compared.
@@ -385,6 +397,20 @@ impl Model {
             }
             other => self.is_plain(other),
         }
+    }
+
+    /// The `const` and `static var` members of the class or struct `owner`.
+    pub fn static_values_of(&self, owner: &str) -> Option<&[(String, StaticInfo)]> {
+        match (self.classes.get(owner), self.structs.get(owner)) {
+            (Some(c), _) => Some(&c.static_values),
+            (_, Some(s)) => Some(&s.static_values),
+            _ => None,
+        }
+    }
+
+    /// `owner.name` as a `const` or `static var` member.
+    pub fn static_value(&self, owner: &str, name: &str) -> Option<&StaticInfo> {
+        self.static_values_of(owner)?.iter().find(|(n, _)| n == name).map(|(_, s)| s)
     }
 
     /// A struct's type parameters mapped to `args` (empty for non-generic structs).

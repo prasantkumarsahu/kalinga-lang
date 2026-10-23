@@ -21,18 +21,18 @@ struct Color {
     b: float
     a: float = 1.0
 
-    static WHITE: Color = Color(1.0, 1.0, 1.0)
-    static BLACK: Color = Color(0.0, 0.0, 0.0)
-    static GRAY: Color = Color(0.5, 0.5, 0.5)
-    static DARK_GRAY: Color = Color(0.2, 0.2, 0.2)
-    static RED: Color = Color(0.9, 0.2, 0.2)
-    static GREEN: Color = Color(0.2, 0.8, 0.3)
-    static BLUE: Color = Color(0.2, 0.4, 0.9)
-    static YELLOW: Color = Color(1.0, 0.85, 0.1)
-    static ORANGE: Color = Color(1.0, 0.55, 0.1)
-    static PURPLE: Color = Color(0.6, 0.3, 0.8)
-    static SKY: Color = Color(0.4, 0.7, 1.0)
-    static CLEAR: Color = Color(0.0, 0.0, 0.0, 0.0)
+    const WHITE: Color = Color(1.0, 1.0, 1.0)
+    const BLACK: Color = Color(0.0, 0.0, 0.0)
+    const GRAY: Color = Color(0.5, 0.5, 0.5)
+    const DARK_GRAY: Color = Color(0.2, 0.2, 0.2)
+    const RED: Color = Color(0.9, 0.2, 0.2)
+    const GREEN: Color = Color(0.2, 0.8, 0.3)
+    const BLUE: Color = Color(0.2, 0.4, 0.9)
+    const YELLOW: Color = Color(1.0, 0.85, 0.1)
+    const ORANGE: Color = Color(1.0, 0.55, 0.1)
+    const PURPLE: Color = Color(0.6, 0.3, 0.8)
+    const SKY: Color = Color(0.4, 0.7, 1.0)
+    const CLEAR: Color = Color(0.0, 0.0, 0.0, 0.0)
 
     /// A colour from 0-255 values, e.g. `Color.rgb(255, 128, 0)`.
     static fn rgb(r: int, g: int, b: int) -> Color {

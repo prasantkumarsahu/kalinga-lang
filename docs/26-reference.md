@@ -29,7 +29,7 @@ A newline does **not** end a statement when it follows an operator, `,`, `.`, `:
 ## Keywords
 
 ```text
-fn  class  struct  interface  enum  import  use  extern  init  override  private  static  abstract
+fn  class  struct  interface  enum  const  import  use  extern  init  override  private  static  abstract
 let  var  if  else  while  for  in  match  return  break  continue  async  await
 true  false  none  self  super  as  is
 ```
@@ -125,6 +125,7 @@ EXPR                           usually a call
 fn NAME(PARAM, ...) [-> TYPE] { ... }
     PARAM = NAME: TYPE
 async fn NAME(PARAM, ...) [-> TYPE] { ... }          calling it gives Async<TYPE>
+const NAME: TYPE = EXPR                              a constant
 
 import "FILE.kl"                                     a file, relative to this one
 import "std/MODULE"                                  a standard module
@@ -132,6 +133,8 @@ import "PACKAGE[/FILE]" [as ALIAS]                   a utkal package; ALIAS.Name
 
 [abstract] class NAME[<T, ...>] [: BASE_OR_INTERFACE, ...] {
     [private] FIELD: TYPE [= EXPR]
+    const NAME: TYPE = EXPR                          a constant, used as Class.NAME
+    static var NAME: TYPE = EXPR                     one variable for the class, Class.NAME
     init(PARAM, ...) { ... }                         at most one
     [private] [static] fn NAME(PARAM, ...) [-> TYPE] { ... }
     [private] static async fn NAME(PARAM, ...) [-> TYPE] { ... }
@@ -141,7 +144,8 @@ import "PACKAGE[/FILE]" [as ALIAS]                   a utkal package; ALIAS.Name
 
 struct NAME[<T, ...>] {
     [private] FIELD: TYPE [= EXPR]
-    static NAME: TYPE = EXPR                         a constant, used as Struct.NAME
+    const NAME: TYPE = EXPR                          a constant, used as Struct.NAME
+    static var NAME: TYPE = EXPR                     one variable for the struct, Struct.NAME
     [private] [static] fn NAME(PARAM, ...) [-> TYPE] { ... }
     [private] mut fn NAME(PARAM, ...) [-> TYPE] { ... }     may change `self`
     op OPERATOR(PARAM) -> TYPE { ... }               + - * / %; `op -()` is unary minus

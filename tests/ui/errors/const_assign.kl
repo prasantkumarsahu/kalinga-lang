@@ -1,0 +1,14 @@
+const N: int = 3
+
+struct P {
+    x: int
+    const Z: int = 0
+}
+
+fn main() {
+    N = 4
+}
+
+fn other() {
+    P.Z = 1
+}

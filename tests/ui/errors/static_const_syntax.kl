@@ -1,0 +1,6 @@
+struct P {
+    x: int
+    static Z: int = 0
+}
+
+fn main() {}

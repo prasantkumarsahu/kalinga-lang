@@ -112,6 +112,10 @@ impl Checker<'_> {
             let ty = Type::Func(sig.params.iter().map(|(_, t)| t.clone()).collect(), Box::new(sig.ret.clone()));
             return Ok(texpr(TExprKind::FnRef(name.to_string()), ty, pos));
         }
+        if let Some(ty) = self.m.consts.get(name) {
+            let kind = TExprKind::Static { owner: String::new(), name: name.to_string(), mutable: false };
+            return Ok(texpr(kind, ty.clone(), pos));
+        }
         if self.m.classes.contains_key(name) {
             return err(format!("`{}` is a class; create one with `{}(...)`", name, name), pos);
         }
@@ -382,17 +386,12 @@ impl Checker<'_> {
         if let Some(t) = self.type_receiver(cx, recv) {
             return self.variant_value(cx, &t, f, None, pos);
         }
-        if let ExprKind::Ident(n) = &recv.kind
-            && cx.lookup(n).is_none()
-            && let Some(info) = self.m.structs.get(n)
-        {
-            if let Some((_, t)) = info.consts.iter().find(|(c, _)| c == f) {
-                return Ok(texpr(TExprKind::StructConst { strukt: n.clone(), name: f.to_string() }, t.clone(), pos));
-            }
-            return err(
-                format!("`{}` has no constant `{}` (constants are declared `static {}: Type = value`)", n, f, f),
-                pos,
-            );
+        if let Some(n) = self.static_owner(cx, recv) {
+            let Some(s) = self.m.static_value(n, f) else {
+                return err(format!("`{}` has no `const` or `static var` named `{}`", n, f), pos);
+            };
+            let kind = TExprKind::Static { owner: n.clone(), name: f.to_string(), mutable: s.mutable };
+            return Ok(texpr(kind, s.ty.clone(), pos));
         }
         if let Some(ns) = self.library_receiver(cx, recv) {
             return self.library_value(&ns, f, pos);

@@ -59,6 +59,7 @@ impl Gen<'_> {
                 self.body(b, 1)
             );
         }
+        self.statics(&mut out, prog);
         self.main_fn(&mut out, prog.main_thread);
         out
     }
@@ -168,6 +169,36 @@ impl Gen<'_> {
         out.push_str("        }\n    }\n}\n");
     }
 
+    /// Top-level `const`s as functions computing the value; `const` members likewise, and
+    /// `static var` members as one value per thread, in an `impl` of their type.
+    fn statics(&self, out: &mut String, prog: &Program) {
+        for c in &prog.consts {
+            let Some(v) = self.t.static_values.get(&(String::new(), c.name.clone())) else { continue };
+            let _ =
+                writeln!(out, "\nfn __k_{}() -> {} {{ {} }}", c.name, self.rty(&self.m.consts[&c.name]), self.expr(v));
+        }
+        for owner in self.m.struct_order.iter().chain(&self.m.class_order) {
+            let values = self.m.static_values_of(owner).unwrap_or_default();
+            if values.is_empty() {
+                continue;
+            }
+            let _ = writeln!(out, "\nimpl {} {{", owner);
+            for (name, s) in values {
+                let Some(v) = self.t.static_values.get(&(owner.clone(), name.clone())) else { continue };
+                let (t, v) = (self.rty(&s.ty), self.expr(v));
+                if s.mutable {
+                    let _ = writeln!(
+                        out,
+                        "    fn __s_{name}() -> &'static RefCell<{t}> {{\n        thread_local! {{ static V: &'static RefCell<{t}> = Box::leak(Box::new(RefCell::new({v}))); }}\n        V.with(|v| *v)\n    }}"
+                    );
+                } else {
+                    let _ = writeln!(out, "    fn __c_{}() -> {} {{ {} }}", name, t, v);
+                }
+            }
+            out.push_str("}\n");
+        }
+    }
+
     /// A struct: definition, methods, constants, operators and printing.
     fn struct_decl(&self, out: &mut String, name: &str) {
         let info = &self.m.structs[name];
@@ -210,10 +241,6 @@ impl Gen<'_> {
                     body
                 );
             }
-        }
-        for (c, t) in &info.consts {
-            let Some(v) = self.t.struct_consts.get(&(name.to_string(), c.clone())) else { continue };
-            let _ = writeln!(out, "    fn __c_{}() -> {} {{ {} }}", c, self.rty(t), self.expr(v));
         }
         for o in &info.ops {
             let Some(b) = self.t.struct_ops.get(&(name.to_string(), o.index)) else { continue };

@@ -22,12 +22,14 @@ impl Model {
         m.check_value_types(prog)?;
         m.declare_interfaces(prog)?;
         m.declare_functions(prog)?;
+        m.declare_consts(prog)?;
         m.check_main(prog, require_main)?;
         m.declare_classes(prog)?;
         m.order_classes(prog)?;
         for n in m.class_order.clone() {
             m.check_class(&n)?;
         }
+        m.check_static_cycles(prog)?;
         Ok(m)
     }
 
@@ -44,6 +46,7 @@ impl Model {
             enums: HashMap::new(),
             enum_order: vec![],
             plain_enums: HashSet::new(),
+            consts: HashMap::new(),
             structs: HashMap::new(),
             struct_order: vec![],
             plain_structs: HashSet::new(),
@@ -220,6 +223,20 @@ impl Model {
                 }
                 seen.insert(mname.clone(), (s.clone(), sig.clone()));
             }
+        }
+        Ok(())
+    }
+
+    fn declare_consts(&mut self, prog: &Program) -> Result<()> {
+        for c in &prog.consts {
+            if self.consts.contains_key(&c.name) {
+                return err(format!("constant `{}` declared twice", c.name), c.pos);
+            }
+            if self.names.contains(&c.name) || self.functions.contains_key(&c.name) {
+                return err(format!("`{}` is already the name of a type or function", c.name), c.pos);
+            }
+            let ty = resolve_type(&c.ty, &self.names, &[]).map_err(|e| at_pos(e, c.pos))?;
+            self.consts.insert(c.name.clone(), ty);
         }
         Ok(())
     }
@@ -502,19 +519,8 @@ fn struct_info(st: &StructDecl, names: &TypeNames) -> Result<StructInfo> {
     }
     let methods = struct_methods(st, &fields, &resolve)?;
     let ops = struct_ops(st, &resolve)?;
-    let mut consts: Vec<(String, Type)> = Vec::new();
-    for c in &st.consts {
-        if !st.tparams.is_empty() {
-            return err("generic structs cannot have `static` constants (yet)", c.pos);
-        }
-        if consts.iter().any(|(n, _)| n == &c.name)
-            || fields.iter().any(|(n, _)| n == &c.name)
-            || methods.contains_key(&c.name)
-        {
-            return err(format!("`{}` is defined twice in `{}`", c.name, st.name), c.pos);
-        }
-        consts.push((c.name.clone(), resolve(&c.ty).map_err(|e| at_pos(e, c.pos))?));
-    }
+    let taken = |n: &str| fields.iter().any(|(f, _)| f == n) || methods.contains_key(n);
+    let static_values = static_values(&st.name, &st.statics, &st.tparams, &taken, &resolve)?;
     Ok(StructInfo {
         decl: st.clone(),
         tparams: st.tparams.clone(),
@@ -522,7 +528,7 @@ fn struct_info(st: &StructDecl, names: &TypeNames) -> Result<StructInfo> {
         private_fields: st.fields.iter().filter(|f| f.is_private).map(|f| f.name.clone()).collect(),
         methods,
         ops,
-        consts,
+        static_values,
     })
 }
 
@@ -607,6 +613,8 @@ fn class_info(c: &ClassDecl, names: &TypeNames) -> Result<ClassInfo> {
         Some(i) => Some(signature(&i.params, &TypeExpr::Void, &resolve)?),
         None => None,
     };
+    let taken = |n: &str| fields.iter().any(|(f, _)| f == n) || methods.contains_key(n) || statics.contains_key(n);
+    let static_values = static_values(&c.name, &c.statics, &c.tparams, &taken, &resolve)?;
     let names_where = |p: fn(&FnDecl) -> bool| c.methods.iter().filter(|m| p(m)).map(|m| m.name.clone()).collect();
     Ok(ClassInfo {
         decl: c.clone(),
@@ -622,6 +630,7 @@ fn class_info(c: &ClassDecl, names: &TypeNames) -> Result<ClassInfo> {
         init,
         children: vec![],
         tparams: c.tparams.clone(),
+        static_values,
     })
 }
 
@@ -732,4 +741,107 @@ fn signature(params: &[Param], ret: &TypeExpr, resolve: &dyn Fn(&TypeExpr) -> Re
         ps.push((p.name.clone(), t));
     }
     Ok(Signature { params: ps, ret: resolve(ret)? })
+}
+
+/// The `const` and `static var` members of `owner`; `taken` says which names its other
+/// members use.
+fn static_values(
+    owner: &str,
+    decls: &[StaticDecl],
+    tparams: &[String],
+    taken: &dyn Fn(&str) -> bool,
+    resolve: &dyn Fn(&TypeExpr) -> Result<Type>,
+) -> Result<Vec<(String, StaticInfo)>> {
+    let mut out: Vec<(String, StaticInfo)> = Vec::new();
+    for d in decls {
+        if !tparams.is_empty() {
+            return err(format!("generic types cannot have `const` or `static var` members (yet): `{}`", owner), d.pos);
+        }
+        if taken(&d.name) || out.iter().any(|(n, _)| n == &d.name) {
+            return err(format!("`{}` is defined twice in `{}`", d.name, owner), d.pos);
+        }
+        let ty = resolve(&d.ty).map_err(|e| at_pos(e, d.pos))?;
+        out.push((d.name.clone(), StaticInfo { ty, mutable: d.mutable }));
+    }
+    Ok(out)
+}
+
+/// A `const` or `static var`: (owning type, or empty at the top level; name).
+type StaticKey = (String, String);
+
+impl Model {
+    /// The initial value of a `const` or `static var` must not depend on itself, directly
+    /// or through other ones (`const A: int = B + 1` with `const B: int = A`).
+    fn check_static_cycles(&self, prog: &Program) -> Result<()> {
+        let owned = prog
+            .classes
+            .iter()
+            .map(|c| (c.name.as_str(), &c.statics))
+            .chain(prog.structs.iter().map(|s| (s.name.as_str(), &s.statics)))
+            .chain(std::iter::once(("", &prog.consts)));
+        let mut decls: Vec<(StaticKey, &StaticDecl)> = vec![];
+        for (owner, list) in owned {
+            decls.extend(list.iter().map(|d| ((owner.to_string(), d.name.clone()), d)));
+        }
+        let deps: HashMap<StaticKey, Vec<StaticKey>> = decls
+            .iter()
+            .map(|(key, d)| {
+                let mut refs = vec![];
+                self.static_refs(&d.value, &mut refs);
+                (key.clone(), refs)
+            })
+            .collect();
+        for (key, d) in &decls {
+            let mut path = vec![key.clone()];
+            if leads_back(&deps, key, &mut path, &mut HashSet::new()) {
+                let names: Vec<String> = path.iter().map(show_static).collect();
+                return err(
+                    format!("`{}` is defined in terms of itself ({})", show_static(key), names.join(" -> ")),
+                    d.pos,
+                );
+            }
+        }
+        Ok(())
+    }
+
+    /// The `const`s and `static var`s that evaluating `e` reads.
+    fn static_refs(&self, e: &Expr, out: &mut Vec<StaticKey>) {
+        match &e.kind {
+            ExprKind::Ident(n) if self.consts.contains_key(n) => out.push((String::new(), n.clone())),
+            ExprKind::Field(recv, f) => {
+                if let ExprKind::Ident(owner) = &recv.kind
+                    && self.static_value(owner, f).is_some()
+                {
+                    out.push((owner.clone(), f.clone()));
+                }
+            }
+            _ => {}
+        }
+        for c in e.children() {
+            self.static_refs(c, out);
+        }
+    }
+}
+
+/// Does following `deps` from the last key of `path` reach `path[0]` again? On `true`,
+/// `path` ends with it.
+fn leads_back(
+    deps: &HashMap<StaticKey, Vec<StaticKey>>,
+    start: &StaticKey,
+    path: &mut Vec<StaticKey>,
+    seen: &mut HashSet<StaticKey>,
+) -> bool {
+    let Some(at) = path.last().cloned() else { return false };
+    for next in deps.get(&at).into_iter().flatten() {
+        path.push(next.clone());
+        if next == start || (seen.insert(next.clone()) && leads_back(deps, start, path, seen)) {
+            return true;
+        }
+        path.pop();
+    }
+    false
+}
+
+fn show_static((owner, name): &StaticKey) -> String {
+    if owner.is_empty() { name.clone() } else { format!("{}.{}", owner, name) }
 }

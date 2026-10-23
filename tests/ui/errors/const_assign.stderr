@@ -1,0 +1,6 @@
+tests/ui/errors/const_assign.kl:9:5: error: `N` is a constant and cannot be changed
+9 |     N = 4
+  |     ^
+tests/ui/errors/const_assign.kl:13:6: error: `P.Z` is a constant; use `static var` for a value that changes
+13 |     P.Z = 1
+   |      ^

@@ -131,6 +131,7 @@ impl Parser {
                     | Tok::Interface
                     | Tok::Enum
                     | Tok::Struct
+                    | Tok::Const
                     | Tok::Use
                     | Tok::Extern
                     | Tok::Import
@@ -164,6 +165,10 @@ impl Parser {
             Tok::Interface => prog.interfaces.push(self.interface()?),
             Tok::Enum => prog.enums.push(self.enum_decl()?),
             Tok::Struct => prog.structs.push(self.struct_decl()?),
+            Tok::Const => {
+                let pos = self.advance().pos;
+                prog.consts.push(self.static_decl(false, pos)?);
+            }
             Tok::Use => self.use_decl(prog)?,
             Tok::Extern => self.extern_decl(prog)?,
             Tok::Import => {
@@ -185,7 +190,7 @@ impl Parser {
             other => {
                 return err(
                     format!(
-                        "expected `fn`, `class`, `struct`, `interface`, `enum` or `import` at top level, found {}",
+                        "expected `fn`, `class`, `struct`, `interface`, `enum`, `const` or `import` at top level, found {}",
                         other.describe()
                     ),
                     self.pos(),
@@ -400,12 +405,25 @@ impl Parser {
             }
         }
         self.expect(Tok::LBrace, "`{` to start class body")?;
-        let mut class =
-            ClassDecl { name, tparams, bases, fields: vec![], init: None, methods: vec![], is_abstract, pos };
+        let mut class = ClassDecl {
+            name,
+            tparams,
+            bases,
+            fields: vec![],
+            init: None,
+            methods: vec![],
+            statics: vec![],
+            is_abstract,
+            pos,
+        };
         self.skip_newlines();
         while !self.check(&Tok::RBrace) {
             let mpos = self.pos();
             let mods = self.modifiers()?;
+            if let Some(st) = self.static_member(&mods, mpos)? {
+                class.statics.push(st);
+                continue;
+            }
             match self.peek().clone() {
                 Tok::Ident(fname) => {
                     if mods.is_static || mods.is_abstract || mods.is_override {
@@ -437,7 +455,7 @@ impl Parser {
                 }
                 other => {
                     return err(
-                        format!("expected field, `init` or `fn` in class body, found {}", other.describe()),
+                        format!("expected field, `init`, `fn` or `const` in class body, found {}", other.describe()),
                         self.pos(),
                     );
                 }
@@ -445,6 +463,45 @@ impl Parser {
         }
         self.expect(Tok::RBrace, "`}`")?;
         Ok(class)
+    }
+
+    /// `const NAME: Type = value` or `static var name: Type = value` in a class or struct
+    /// body, after the modifiers; `None` when the member is something else.
+    fn static_member(&mut self, mods: &Mods, pos: Span) -> Result<Option<StaticDecl>> {
+        let mutable = match self.peek() {
+            Tok::Const if *mods == Mods::default() => false,
+            Tok::Var if *mods == Mods { is_static: true, ..Mods::default() } => true,
+            Tok::Const => return err("`const` cannot have modifiers", pos),
+            Tok::Var => return err("write `static var name: Type = value` for a variable shared by the type", pos),
+            Tok::Ident(_)
+                if mods.is_static
+                    && !mods.is_async
+                    && self.tokens.get(self.i + 1).is_some_and(|t| t.tok == Tok::Colon) =>
+            {
+                return Err(Diagnostic::error("constants are written `const NAME: Type = value`".to_string(), pos)
+                    .with_help("`kalinga fix` rewrites `static NAME: Type = value` to `const`"));
+            }
+            _ => return Ok(None),
+        };
+        let at = self.advance().pos;
+        Ok(Some(self.static_decl(mutable, at)?))
+    }
+
+    /// The rest of `const NAME: Type = value` / `static var name: Type = value`, after
+    /// `const` / `var`.
+    fn static_decl(&mut self, mutable: bool, pos: Span) -> Result<StaticDecl> {
+        let (kw, what) = if mutable { ("static var", "variable") } else { ("const", "constant") };
+        let (name, _) = self.ident(&format!("a {} name after `{}`", what, kw))?;
+        if !self.eat(&Tok::Colon) {
+            return err(format!("a {} needs a type: `{} {}: Type = value`", what, kw, name), self.pos());
+        }
+        let ty = self.ty()?;
+        if !self.eat(&Tok::Assign) {
+            return err(format!("a {} needs a value: `{} {}: Type = value`", what, kw, name), self.pos());
+        }
+        let value = self.expr()?;
+        self.end_of_statement()?;
+        Ok(StaticDecl { name, ty, value, mutable, pos })
     }
 
     fn interface(&mut self) -> Result<InterfaceDecl> {
@@ -482,7 +539,7 @@ impl Parser {
             return err("structs cannot extend classes or implement interfaces (use a class for that)", self.pos());
         }
         self.expect(Tok::LBrace, "`{` to start struct body")?;
-        let mut s = StructDecl { name, tparams, fields: vec![], methods: vec![], ops: vec![], consts: vec![], pos };
+        let mut s = StructDecl { name, tparams, fields: vec![], methods: vec![], ops: vec![], statics: vec![], pos };
         self.skip_newlines();
         while !self.check(&Tok::RBrace) {
             let mpos = self.pos();
@@ -517,23 +574,20 @@ impl Parser {
             }
             let mut mods = self.modifiers()?;
             mods.is_mut = is_mut;
+            if !is_mut && let Some(st) = self.static_member(&mods, mpos)? {
+                s.statics.push(st);
+                continue;
+            }
             match self.peek().clone() {
                 Tok::Ident(fname) if !is_mut => {
-                    if mods.is_abstract || mods.is_override || mods.is_async {
-                        return err("fields can only be marked `private` (or `static` for a constant)", mpos);
+                    if mods.is_static || mods.is_abstract || mods.is_override || mods.is_async {
+                        return err("fields can only be marked `private`", mpos);
                     }
                     let fpos = self.advance().pos;
                     self.expect(Tok::Colon, "`:` and a type after field name")?;
                     let ty = self.ty()?;
                     let default = if self.eat(&Tok::Assign) { Some(self.expr()?) } else { None };
-                    if mods.is_static {
-                        if default.is_none() {
-                            return err("a `static` constant needs a value: `static NAME: Type = value`", fpos);
-                        }
-                        s.consts.push(FieldDecl { name: fname, ty, default, is_private: mods.is_private, pos: fpos });
-                    } else {
-                        s.fields.push(FieldDecl { name: fname, ty, default, is_private: mods.is_private, pos: fpos });
-                    }
+                    s.fields.push(FieldDecl { name: fname, ty, default, is_private: mods.is_private, pos: fpos });
                     self.end_of_statement()?;
                 }
                 Tok::Fn => {
