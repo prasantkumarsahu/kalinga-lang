@@ -7,7 +7,7 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use kalinga_sema::{checker, namespaces};
+use kalinga_sema::namespaces;
 use kalinga_syntax::ast::{CrateDep, Import, Program};
 use kalinga_syntax::error::Diagnostic;
 use kalinga_syntax::{lexer, parser};
@@ -242,7 +242,7 @@ pub fn check(file: &str, source: &str) -> Result<()> {
 
 fn compile(file: &str, source: &str, require_main: bool) -> Result<(String, Native)> {
     let (program, map) = load(file, source)?;
-    let rust = match checker::Model::build(&program, require_main)
+    let rust = match kalinga_sema::Model::build(&program, require_main)
         .and_then(|model| kalinga_codegen::generate(&program, &model))
     {
         Ok(rust) => rust,

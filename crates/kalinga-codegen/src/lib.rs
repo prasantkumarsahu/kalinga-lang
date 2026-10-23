@@ -8,7 +8,7 @@ use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::fmt::Write as _;
 
-use kalinga_sema::checker::{
+use kalinga_sema::{
     BUILTINS, Model, Signature, StructOp, Type, at_pos, class_trait, has_params, is_map_key, subst, subst_sig, unify,
 };
 use kalinga_syntax::ast::*;
@@ -1376,7 +1376,7 @@ impl<'a> Gen<'a> {
                 let ok = if **t == Type::Void { vec![] } else { vec![("value".to_string(), (**t).clone())] };
                 let variants =
                     vec![("Ok".to_string(), ok), ("Err".to_string(), vec![("error".to_string(), (**e).clone())])];
-                Some(("Result".to_string(), kalinga_sema::checker::EnumInfo { variants }))
+                Some(("Result".to_string(), kalinga_sema::EnumInfo { variants }))
             }
             Type::Int | Type::Str | Type::Bool => None,
             other => {
@@ -1433,7 +1433,7 @@ impl<'a> Gen<'a> {
         cx: &mut Ctx,
         arm: &MatchArm,
         ty: &Type,
-        enum_info: &Option<(String, kalinga_sema::checker::EnumInfo)>,
+        enum_info: &Option<(String, kalinga_sema::EnumInfo)>,
         covered: &mut Vec<String>,
         wildcard: &mut bool,
         saw_true: &mut bool,
