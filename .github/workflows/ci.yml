@@ -19,6 +19,8 @@ jobs:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
       - run: cargo fmt --all --check
+      - name: Runtime files (included, so not reached by cargo fmt)
+        run: rustfmt --check --edition 2024 --config-path rustfmt.toml crates/kalinga-codegen/runtime/*.rs
       - run: cargo clippy --workspace --all-targets -- -D warnings
 
   test:
