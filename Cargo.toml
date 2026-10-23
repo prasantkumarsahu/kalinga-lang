@@ -29,11 +29,13 @@ license.workspace = true
 
 [dependencies]
 kalinga-driver = { path = "crates/kalinga-driver" }
+kalinga-lsp = { path = "crates/kalinga-lsp" }
 kalinga-project = { path = "crates/kalinga-project" }
 toml = { workspace = true }
 
 [dev-dependencies]
 kalinga-sema = { path = "crates/kalinga-sema" }
+serde_json = "1"
 
 [lints]
 workspace = true

@@ -20,6 +20,7 @@ impl Checker<'_> {
                 && self.m.has_subclasses(c)
             {
                 let ft = self.field_type(cx, c, f, target.pos)?;
+                self.note_field(target.pos, &recv_t.ty, f, &ft);
                 let value = self.assign_value(cx, op, &ft, value)?;
                 return Ok(TStmt::SetField { recv: recv_t, field: f.clone(), op, value });
             }
@@ -92,6 +93,12 @@ impl Checker<'_> {
 
     /// Where an assignment (or a method that changes its receiver) stores into.
     pub(super) fn place(&self, cx: &mut Ctx, e: &Expr) -> Result<TPlace> {
+        let p = self.place_kind(cx, e)?;
+        self.note_place(cx, e, &p);
+        Ok(p)
+    }
+
+    fn place_kind(&self, cx: &mut Ctx, e: &Expr) -> Result<TPlace> {
         match &e.kind {
             ExprKind::Ident(name) => match cx.lookup(name) {
                 Some(v) if v.mutable => Ok(TPlace::Local { name: name.clone(), ty: v.ty }),

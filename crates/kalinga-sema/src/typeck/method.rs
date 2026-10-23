@@ -5,11 +5,15 @@ use kalinga_syntax::ast::*;
 use kalinga_syntax::error::{Result, Span, err};
 
 use super::{Checker, Ctx, texpr};
+use crate::index::PROBE;
 use crate::tast::*;
 use crate::types::{Type, subst_sig};
 
 impl Checker<'_> {
     pub(super) fn method_call(&self, cx: &mut Ctx, recv: &Expr, name: &str, args: &[Expr], pos: Span) -> Result<TExpr> {
+        if name == PROBE {
+            return self.probe_members(cx, recv, pos);
+        }
         if let Some(t) = self.type_receiver(cx, recv) {
             return self.variant_value(cx, &t, name, Some(args), pos);
         }

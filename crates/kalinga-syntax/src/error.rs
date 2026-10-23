@@ -4,7 +4,7 @@ use std::fmt;
 
 /// Where something is in the source: a 1-based line and column (in characters), and how
 /// many characters it covers on that line.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub struct Span {
     pub line: usize,
     pub col: usize,

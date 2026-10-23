@@ -10,6 +10,7 @@ mod expr;
 mod lambda;
 mod library;
 mod method;
+mod note;
 mod place;
 mod stmt;
 
@@ -19,13 +20,24 @@ use std::collections::{HashMap, HashSet};
 use kalinga_syntax::ast::*;
 use kalinga_syntax::error::{Diagnostic, Result, Span, err};
 
+use crate::index::Index;
 use crate::model::Model;
 use crate::tast::*;
 use crate::types::{Signature, Type};
 
 /// Checks every body in `prog`, which `m` describes.
 pub fn check(prog: &Program, m: &Model) -> std::result::Result<TypedProgram, Vec<Diagnostic>> {
-    let c = Checker { m, self_values: RefCell::new(HashSet::new()), cast_targets: RefCell::new(HashSet::new()) };
+    analyze(prog, m).0
+}
+
+/// Like [`check`], and also returns what every name refers to, for editors.
+pub fn analyze(prog: &Program, m: &Model) -> (std::result::Result<TypedProgram, Vec<Diagnostic>>, Index) {
+    let c = Checker {
+        m,
+        self_values: RefCell::new(HashSet::new()),
+        cast_targets: RefCell::new(HashSet::new()),
+        index: RefCell::new(Index::default()),
+    };
     let mut out = TypedProgram::default();
     let mut errors = vec![];
     for cname in &m.class_order {
@@ -40,7 +52,7 @@ pub fn check(prog: &Program, m: &Model) -> std::result::Result<TypedProgram, Vec
         let mut cx = Ctx::new(None, sig.ret.clone(), false);
         cx.tparams = f.tparams.clone();
         cx.is_async = f.is_async;
-        match c.body(&mut cx, sig, &f.body, f.pos, &f.name, f.is_async) {
+        match c.body(&mut cx, sig, BodyDecl::of_fn(f)) {
             Ok(b) => {
                 out.functions.insert(f.name.clone(), b);
             }
@@ -49,7 +61,24 @@ pub fn check(prog: &Program, m: &Model) -> std::result::Result<TypedProgram, Vec
     }
     out.self_values = c.self_values.into_inner();
     out.cast_targets = c.cast_targets.into_inner();
-    if errors.is_empty() { Ok(out) } else { Err(errors) }
+    let index = c.index.into_inner();
+    (if errors.is_empty() { Ok(out) } else { Err(errors) }, index)
+}
+
+/// What checking a body needs from its declaration.
+struct BodyDecl<'a> {
+    params: &'a [Param],
+    stmts: &'a [Stmt],
+    pos: Span,
+    /// For messages: the function's name, `init` or `op +`.
+    name: String,
+    is_async: bool,
+}
+
+impl<'a> BodyDecl<'a> {
+    fn of_fn(f: &'a FnDecl) -> Self {
+        BodyDecl { params: &f.params, stmts: &f.body, pos: f.pos, name: f.name.clone(), is_async: f.is_async }
+    }
 }
 
 #[derive(Clone)]
@@ -58,6 +87,8 @@ struct Var {
     mutable: bool,
     /// Seen from inside a lambda that captured it.
     captured: bool,
+    /// Where it is declared.
+    decl: Span,
 }
 
 /// Variables from outside a lambda that its body uses.
@@ -129,8 +160,27 @@ impl Ctx {
         if scope.contains_key(name) {
             return err(format!("`{}` is already declared in this scope", name), pos);
         }
-        scope.insert(name.to_string(), Var { ty, mutable, captured: false });
+        scope.insert(name.to_string(), Var { ty, mutable, captured: false, decl: pos });
         Ok(())
+    }
+
+    /// Finds a variable without recording it as a lambda capture.
+    fn peek(&self, name: &str) -> Option<&Var> {
+        self.scopes.iter().rev().find_map(|s| s.get(name))
+    }
+
+    /// Every variable in scope (inner ones hide outer ones of the same name), sorted.
+    fn visible(&self) -> Vec<(String, Type)> {
+        let mut out: Vec<(String, Type)> = vec![];
+        for scope in self.scopes.iter().rev() {
+            for (n, v) in scope {
+                if !out.iter().any(|(o, _)| o == n) {
+                    out.push((n.clone(), v.ty.clone()));
+                }
+            }
+        }
+        out.sort_by(|a, b| a.0.cmp(&b.0));
+        out
     }
 
     /// Runs `f` in a new innermost scope.
@@ -148,6 +198,8 @@ struct Checker<'a> {
     self_values: RefCell<HashSet<String>>,
     /// Classes used as the target of `as` / `is`.
     cast_targets: RefCell<HashSet<String>>,
+    /// What names refer to, for editors.
+    index: RefCell<Index>,
 }
 
 impl Checker<'_> {
@@ -177,7 +229,7 @@ impl Checker<'_> {
             cx.tparams = info.tparams.clone();
             cx.is_static = meth.is_static;
             cx.is_async = meth.is_async;
-            match self.body(&mut cx, sig, &meth.body, meth.pos, &meth.name, meth.is_async) {
+            match self.body(&mut cx, sig, BodyDecl::of_fn(meth)) {
                 Ok(b) if meth.is_static => {
                     out.statics.insert(key, b);
                 }
@@ -190,7 +242,14 @@ impl Checker<'_> {
         if let (Some(init), Some(sig)) = (&info.decl.init, &info.init) {
             let mut cx = Ctx::new(Some(cname.to_string()), Type::Void, true);
             cx.tparams = info.tparams.clone();
-            match self.body(&mut cx, sig.clone(), &init.body, init.pos, "init", false) {
+            let decl = BodyDecl {
+                params: &init.params,
+                stmts: &init.body,
+                pos: init.pos,
+                name: "init".into(),
+                is_async: false,
+            };
+            match self.body(&mut cx, sig.clone(), decl) {
                 Ok(b) => {
                     out.inits.insert(cname.to_string(), b);
                 }
@@ -241,7 +300,7 @@ impl Checker<'_> {
             cx.self_mut = m.is_mut;
             cx.is_static = m.is_static;
             cx.is_async = m.is_async;
-            match self.body(&mut cx, m.sig.clone(), &meth.body, meth.pos, &meth.name, m.is_async) {
+            match self.body(&mut cx, m.sig.clone(), BodyDecl::of_fn(meth)) {
                 Ok(b) => {
                     out.struct_methods.insert((name.to_string(), meth.name.clone()), b);
                 }
@@ -254,7 +313,14 @@ impl Checker<'_> {
                 ret: o.ret.clone(),
             };
             let mut cx = struct_cx(o.ret.clone());
-            match self.body(&mut cx, sig, &decl.body, decl.pos, &format!("op {}", o.op.rust()), false) {
+            let body = BodyDecl {
+                params: &decl.params,
+                stmts: &decl.body,
+                pos: decl.pos,
+                name: format!("op {}", o.op.rust()),
+                is_async: false,
+            };
+            match self.body(&mut cx, sig, body) {
                 Ok(b) => {
                     out.struct_ops.insert((name.to_string(), o.index), b);
                 }
@@ -264,23 +330,15 @@ impl Checker<'_> {
     }
 
     /// Checks a function, method, operator or init body.
-    fn body(
-        &self,
-        cx: &mut Ctx,
-        sig: Signature,
-        stmts: &[Stmt],
-        pos: Span,
-        name: &str,
-        is_async: bool,
-    ) -> Result<TBody> {
-        for (p, t) in &sig.params {
-            cx.declare(p, t.clone(), false, pos)?;
+    fn body(&self, cx: &mut Ctx, sig: Signature, decl: BodyDecl) -> Result<TBody> {
+        for ((p, t), param) in sig.params.iter().zip(decl.params) {
+            self.declare(cx, p, t.clone(), false, param.pos)?;
         }
-        if sig.ret != Type::Void && !always_returns(stmts) {
-            return err(format!("`{}` must return a `{}` on every path", name, sig.ret), pos);
+        if sig.ret != Type::Void && !always_returns(decl.stmts) {
+            return err(format!("`{}` must return a `{}` on every path", decl.name, sig.ret), decl.pos);
         }
-        let stmts = self.stmts(cx, stmts)?;
-        Ok(TBody { sig, stmts, is_async })
+        let stmts = self.stmts(cx, decl.stmts)?;
+        Ok(TBody { sig, stmts, is_async: decl.is_async })
     }
 
     /// Type of `self` inside a class (generic classes use their own parameters).

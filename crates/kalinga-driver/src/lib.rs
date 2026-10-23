@@ -11,7 +11,8 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use kalinga_sema::namespaces;
+use kalinga_sema::index::Index;
+use kalinga_sema::{Model, namespaces};
 use kalinga_syntax::ast::{CrateDep, Import, Program};
 use kalinga_syntax::error::Diagnostic;
 use kalinga_syntax::{lexer, parser};
@@ -61,9 +62,13 @@ impl From<DriverError> for Failure {
 }
 
 /// The files of one compilation, as they are loaded.
-struct Loader {
+struct Loader<'a> {
     pkgs: Packages,
     map: SourceMap,
+    /// Canonical path of each file in `map` (by id), when it has one.
+    paths: Vec<Option<PathBuf>>,
+    /// Text of files open in an editor, by canonical path; read instead of the disk.
+    open: &'a HashMap<PathBuf, String>,
     units: namespaces::Units,
     program: Program,
     /// Canonical paths of files already queued.
@@ -77,16 +82,8 @@ struct Loader {
 /// Parses `root` and, transitively, every file it imports, into one program.
 /// Each file is loaded once, so import cycles are harmless.
 fn load(root_name: &str, root_source: &str) -> Result<(Program, SourceMap)> {
-    let root_path = PathBuf::from(root_name);
-    let mut l = Loader {
-        pkgs: packages_for(root_name)?,
-        map: SourceMap::default(),
-        units: namespaces::Units::default(),
-        program: Program::default(),
-        seen: HashSet::from([std::fs::canonicalize(&root_path).unwrap_or_else(|_| root_path.clone())]),
-        file_units: HashMap::new(),
-        queue: vec![(root_path, root_name.to_string(), root_source.to_string(), String::new())],
-    };
+    let no_open_files = HashMap::new();
+    let mut l = Loader::new(root_name, root_source, &no_open_files)?;
     match l.load_all() {
         Ok(()) => Ok((l.program, l.map)),
         Err(Failure::Program(ds)) => Err(DriverError::compile_all(l.map, ds)),
@@ -94,7 +91,88 @@ fn load(root_name: &str, root_source: &str) -> Result<(Program, SourceMap)> {
     }
 }
 
-impl Loader {
+/// Everything an editor needs to know about a file and the files it imports.
+pub struct Analysis {
+    /// The files read, by id (`Span::file`); 0 is the analysed file.
+    pub sources: SourceMap,
+    /// Canonical path of each file (by id), when it has one.
+    pub paths: Vec<Option<PathBuf>>,
+    /// The package (unit) of each file and what each unit imports.
+    pub units: namespaces::Units,
+    /// The program, when every file parsed.
+    pub program: Option<Program>,
+    /// The declarations, when they follow the rules.
+    pub model: Option<Model>,
+    /// What names refer to, and what the completion probe saw.
+    pub index: Index,
+    /// Every problem found, in all files.
+    pub diagnostics: Vec<Diagnostic>,
+}
+
+/// Analyses `file` with the text `source` (and its imports, reading files open in the
+/// editor from `open`, by canonical path). Like `kalinga check`, `fn main()` is optional.
+pub fn analyze(file: &str, source: &str, open: &HashMap<PathBuf, String>) -> Analysis {
+    let mut out = Analysis {
+        sources: SourceMap::default(),
+        paths: vec![],
+        units: namespaces::Units::default(),
+        program: None,
+        model: None,
+        index: Index::default(),
+        diagnostics: vec![],
+    };
+    let mut l = match Loader::new(file, source, open) {
+        Ok(l) => l,
+        Err(e) => {
+            out.sources.files.push((file.to_string(), source.to_string()));
+            out.diagnostics.push(Diagnostic::error(e.to_string(), Default::default()));
+            return out;
+        }
+    };
+    let loaded = l.load_all();
+    (out.sources, out.paths, out.units) = (l.map, l.paths, l.units);
+    match loaded {
+        Ok(()) => {}
+        Err(Failure::Program(ds)) => {
+            out.diagnostics = ds;
+            return out;
+        }
+        Err(Failure::Other(e)) => {
+            out.diagnostics.push(Diagnostic::error(e.to_string(), Default::default()));
+            return out;
+        }
+    }
+    let program = l.program;
+    // Broken rules about classes still leave the declarations complete, so bodies are
+    // checked too and every problem is shown.
+    let (model, rules) = Model::build_all(&program, false);
+    out.diagnostics = rules;
+    if let Some(model) = model {
+        let (typed, index) = kalinga_sema::typeck::analyze(&program, &model);
+        out.diagnostics.extend(typed.err().unwrap_or_default());
+        out.index = index;
+        out.model = Some(model);
+    }
+    out.program = Some(program);
+    out
+}
+
+impl<'a> Loader<'a> {
+    fn new(root_name: &str, root_source: &str, open: &'a HashMap<PathBuf, String>) -> Result<Self> {
+        let root_path = PathBuf::from(root_name);
+        Ok(Loader {
+            pkgs: packages_for(root_name)?,
+            map: SourceMap::default(),
+            paths: vec![],
+            open,
+            units: namespaces::Units::default(),
+            program: Program::default(),
+            seen: HashSet::from([canonical(&root_path)]),
+            file_units: HashMap::new(),
+            queue: vec![(root_path, root_name.to_string(), root_source.to_string(), String::new())],
+        })
+    }
+
     fn load_all(&mut self) -> std::result::Result<(), Failure> {
         for c in &self.pkgs.rust_deps {
             kalinga_project::merge_crate(&mut self.program.crates, c).map_err(DriverError::from)?;
@@ -116,6 +194,7 @@ impl Loader {
     ) -> std::result::Result<(), Failure> {
         let id = self.map.files.len() as u32;
         self.map.files.push((name, source));
+        self.paths.push(std::fs::canonicalize(path).ok());
         self.units.file_unit.push(unit.clone());
         self.units.file_aliases.push(Default::default());
         let tokens = lexer::lex(&self.map.files[id as usize].1, id)?;
@@ -221,13 +300,26 @@ impl Loader {
             self.units.imports.entry(unit.to_string()).or_default().insert(target_unit.clone());
         }
         if self.seen.insert(canonical.clone()) {
-            let text = std::fs::read_to_string(&canonical)
-                .map_err(|err| fail(format!("cannot read `{}`: {}", import.path, err)))?;
+            let text = match self.open.get(&canonical) {
+                Some(text) => text.clone(),
+                None => std::fs::read_to_string(&canonical)
+                    .map_err(|err| fail(format!("cannot read `{}`: {}", import.path, err)))?,
+            };
             self.file_units.insert(canonical, target_unit.clone());
             self.queue.push((target.clone(), target.display().to_string(), text, target_unit));
         }
         Ok(())
     }
+}
+
+/// The standard modules, as imported after `std/`.
+pub fn std_modules() -> Vec<&'static str> {
+    stdlib::modules()
+}
+
+/// `path` made absolute and canonical when it exists, as is otherwise.
+fn canonical(path: &Path) -> PathBuf {
+    std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
 }
 
 /// Compiles Kalinga source (plus its imports) to Rust source.

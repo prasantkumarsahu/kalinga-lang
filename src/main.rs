@@ -15,6 +15,7 @@ usage:
   kalinga fix   <file.kl or folder>...  update code written for an earlier Kalinga version
                                        (0.4 → 0.5: `print(...)` becomes `println(...)`,
                                        `static NAME: T = v` becomes `const NAME: T = v`)
+  kalinga lsp                          run the language server (editors start it)
   kalinga -v | --version               print the installed version";
 
 /// Errors from the compiler and the command's own messages, shown as text.
@@ -42,6 +43,13 @@ fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
     if let Some("-v" | "-version" | "--version" | "version") = args.first().map(String::as_str) {
         println!("kalinga {}", env!("CARGO_PKG_VERSION"));
+        return;
+    }
+    if args.first().map(String::as_str) == Some("lsp") {
+        if let Err(e) = kalinga_lsp::run() {
+            eprintln!("kalinga lsp: {}", e);
+            exit(1);
+        }
         return;
     }
     let (cmd, file) = match (args.first(), args.get(1)) {

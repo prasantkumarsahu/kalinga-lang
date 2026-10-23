@@ -5,6 +5,7 @@ use kalinga_syntax::ast::*;
 use kalinga_syntax::error::{Result, Span, err};
 
 use super::{Checker, Ctx, texpr};
+use crate::index::PROBE;
 use crate::model::class_trait;
 use crate::tast::*;
 use crate::types::{Type, is_map_key, subst};
@@ -13,6 +14,15 @@ impl Checker<'_> {
     /// Checks `e`; `expected` is the type the context wants, which decides the type of
     /// `none`, `[]`, `{}`, lambdas, `Ok(...)`, generic calls and more.
     pub(super) fn expr(&self, cx: &mut Ctx, e: &Expr, expected: Option<&Type>) -> Result<TExpr> {
+        if matches!(&e.kind, ExprKind::Ident(n) if n == PROBE) {
+            return self.probe_scope(cx, expected, e.pos);
+        }
+        let t = self.expr_kind(cx, e, expected)?;
+        self.note_expr(cx, e, &t);
+        Ok(t)
+    }
+
+    fn expr_kind(&self, cx: &mut Ctx, e: &Expr, expected: Option<&Type>) -> Result<TExpr> {
         let pos = e.pos;
         let lit = |kind, ty| Ok(texpr(kind, ty, pos));
         match &e.kind {
@@ -91,7 +101,7 @@ impl Checker<'_> {
         }
     }
 
-    fn self_value(&self, cx: &mut Ctx, pos: Span) -> Result<TExpr> {
+    pub(super) fn self_value(&self, cx: &mut Ctx, pos: Span) -> Result<TExpr> {
         if let Some(st) = cx.strukt.clone() {
             if cx.is_static {
                 return err("`self` is not available in a `static fn`", pos);
@@ -392,6 +402,9 @@ impl Checker<'_> {
     }
 
     fn field(&self, cx: &mut Ctx, recv: &Expr, f: &str, pos: Span) -> Result<TExpr> {
+        if f == PROBE {
+            return self.probe_members(cx, recv, pos);
+        }
         if let Some(t) = self.type_receiver(cx, recv) {
             return self.variant_value(cx, &t, f, None, pos);
         }

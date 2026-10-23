@@ -7,6 +7,7 @@
 
 pub mod builtins;
 mod declare;
+pub mod index;
 pub mod model;
 pub mod namespaces;
 pub mod tast;

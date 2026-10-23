@@ -70,7 +70,8 @@ impl Source {
 
 /// The folder holding `utkal.toml` for `start` (a file or folder), searching upwards.
 pub fn find_project(start: &Path) -> Option<PathBuf> {
-    let start = std::fs::canonicalize(start).ok()?;
+    // A file not saved yet is looked for from its folder.
+    let start = std::fs::canonicalize(start).ok().or_else(|| std::fs::canonicalize(start.parent()?).ok())?;
     let mut dir = if start.is_dir() { start.as_path() } else { start.parent()? };
     loop {
         if dir.join(MANIFEST).is_file() {
