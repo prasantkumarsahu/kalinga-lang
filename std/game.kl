@@ -14,7 +14,7 @@ use rust "game_glue.rs"
 
 // ---------------------------------------------------------------- colours
 
-// A colour with red, green, blue and alpha (opacity) from 0.0 to 1.0.
+/// A colour with red, green, blue and alpha (opacity) from 0.0 to 1.0.
 struct Color {
     r: float
     g: float
@@ -34,7 +34,7 @@ struct Color {
     static SKY: Color = Color(0.4, 0.7, 1.0)
     static CLEAR: Color = Color(0.0, 0.0, 0.0, 0.0)
 
-    // A colour from 0-255 values, e.g. `Color.rgb(255, 128, 0)`.
+    /// A colour from 0-255 values, e.g. `Color.rgb(255, 128, 0)`.
     static fn rgb(r: int, g: int, b: int) -> Color {
         return Color(float(r) / 255.0, float(g) / 255.0, float(b) / 255.0)
     }
@@ -46,16 +46,16 @@ struct Color {
 
 // ---------------------------------------------------------------- the game
 
-// Implement this interface and pass the object to `Window.run`.
+/// Implement this interface and pass the object to `Window.run`.
 interface Game {
-    // Called once per frame before drawing; `dt` is the time since the last frame in seconds.
+    /// Called once per frame before drawing; `dt` is the time since the last frame in seconds.
     fn update(input: Input, dt: float)
-    // Called once per frame to draw everything.
+    /// Called once per frame to draw everything.
     fn draw(screen: Screen)
 }
 
 class Window {
-    // Opens a window and runs `game` until the window is closed or `input.quit()` is called.
+    /// Opens a window and runs `game` until the window is closed or `input.quit()` is called.
     static fn run(title: str, width: int, height: int, game: Game) {
         gk_run(title, width, height, game)
     }
@@ -63,25 +63,25 @@ class Window {
 
 // ---------------------------------------------------------------- input
 
-// Keyboard and mouse. Key names: "a".."z", "0".."9", "left", "right", "up", "down",
-// "space", "enter", "escape", "shift", "ctrl", "tab", "backspace".
+/// Keyboard and mouse. Key names: "a".."z", "0".."9", "left", "right", "up", "down",
+/// "space", "enter", "escape", "shift", "ctrl", "tab", "backspace".
 class Input {
-    // Is the key held down right now?
+    /// Is the key held down right now?
     fn key_down(key: str) -> bool {
         return gk_key_down(key)
     }
 
-    // Was the key pressed during this frame?
+    /// Was the key pressed during this frame?
     fn key_pressed(key: str) -> bool {
         return gk_key_pressed(key)
     }
 
-    // The mouse position in window pixels.
+    /// The mouse position in window pixels.
     fn mouse() -> Vec2 {
         return Vec2(gk_mouse_x(), gk_mouse_y())
     }
 
-    // Mouse buttons: "left", "right", "middle".
+    /// Mouse buttons: "left", "right", "middle".
     fn mouse_down(button: str) -> bool {
         return gk_mouse_down(button)
     }
@@ -90,7 +90,7 @@ class Input {
         return gk_mouse_pressed(button)
     }
 
-    // Closes the window after this frame.
+    /// Closes the window after this frame.
     fn quit() {
         gk_quit()
     }
@@ -139,32 +139,32 @@ class Screen {
         gk_triangle(a, b, c, color)
     }
 
-    // Text with its baseline starting at `pos`; `size` is in pixels.
+    /// Text with its baseline starting at `pos`; `size` is in pixels.
     fn text(s: str, pos: Vec2, size: float, c: Color) {
         gk_text(s, pos, size, c)
     }
 
-    // Width in pixels of `s` drawn at `size` (for centring text).
+    /// Width in pixels of `s` drawn at `size` (for centring text).
     fn text_width(s: str, size: float) -> float {
         return gk_text_width(s, size)
     }
 
-    // Draws an image with its top-left corner at `pos`, at its own size.
+    /// Draws an image with its top-left corner at `pos`, at its own size.
     fn image(img: Image, pos: Vec2) {
         gk_image(img.handle, Rect(pos.x, pos.y, img.width(), img.height()), 0.0)
     }
 
-    // Draws an image stretched into `dest`, rotated by `rotation` radians around its centre.
+    /// Draws an image stretched into `dest`, rotated by `rotation` radians around its centre.
     fn image_in(img: Image, dest: Rect, rotation: float) {
         gk_image(img.handle, dest, rotation)
     }
 
-    // Frames per second.
+    /// Frames per second.
     fn fps() -> int {
         return gk_fps()
     }
 
-    // Saves what has been drawn so far this frame as a PNG file.
+    /// Saves what has been drawn so far this frame as a PNG file.
     fn screenshot(path: str) {
         gk_screenshot(path)
     }
@@ -175,7 +175,7 @@ class Screen {
 extern type GkImage
 extern type GkSound
 
-// An image loaded from a PNG or JPEG file.
+/// An image loaded from a PNG or JPEG file.
 struct Image {
     handle: GkImage
 
@@ -193,7 +193,7 @@ struct Image {
     }
 }
 
-// A sound loaded from a WAV or OGG file.
+/// A sound loaded from a WAV or OGG file.
 struct Sound {
     handle: GkSound
 
@@ -206,7 +206,7 @@ struct Sound {
         gk_sound_play(self.handle, false, 1.0)
     }
 
-    // Plays over and over at `volume` (0.0 to 1.0), e.g. for music.
+    /// Plays over and over at `volume` (0.0 to 1.0), e.g. for music.
     fn play_looped(volume: float) {
         gk_sound_play(self.handle, true, volume)
     }

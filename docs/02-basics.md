@@ -13,6 +13,41 @@ fn main() {
 }
 ```
 
+## Doc comments
+
+A comment that starts with `///`, written directly above a function, class, struct, field,
+method, interface or enum, is that declaration's **documentation**. VS Code shows it when
+you hover over the name, in the completion list and in parameter hints. It is Markdown, so
+`` `code` ``, **bold**, lists and indented code examples work:
+
+```kalinga
+/// A 2D point.
+struct Point {
+    /// Distance from the left edge, in pixels.
+    x: int
+    y: int
+}
+
+/// Moves `p` by `dx` pixels to the right.
+///
+///     shift(Point(1, 2), 3) == Point(4, 2)
+fn shift(p: Point, dx: int) -> Point {
+    // An ordinary comment: a note for whoever reads this code.
+    return Point(p.x + dx, p.y)
+}
+
+fn main() {
+    print(shift(Point(1, 2), 3))
+}
+```
+
+```text
+Point(x: 4, y: 2)
+```
+
+Ordinary `//` comments are never documentation, even above a declaration. Use them for
+notes; use `///` for what someone *calling* the code needs to know.
+
 ## Statements and lines
 
 A statement ends at the end of the line. Semicolons are allowed but never needed:

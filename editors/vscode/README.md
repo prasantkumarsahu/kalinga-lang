@@ -21,7 +21,9 @@ Language support for Kalinga `.kl` files, a simple object-oriented language that
     built-in `Math`, `Random`, `Time`, `Thread` and `Async` libraries
   - methods of `Result`, `Channel`, `Shared`, `Task` and `async fn` results (`Async<T>`),
     and `par_map` on arrays
-  - documentation from `//` comments written above a declaration
+  - documentation from `///` doc comments written above a declaration (Markdown)
+- Hover: the type of a variable, or the signature of a function, method, class, struct,
+  field, enum variant or library function, with its `///` documentation
 - Signature help: parameter hints for functions, generic functions, constructors, methods,
   static methods, enum variants and function-typed variables
 - Live error checking while you type, using the compiler's own checker (`kalinga check`);

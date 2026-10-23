@@ -15,6 +15,7 @@ chapters linked from the [docs index](README.md).
 | Element | Form |
 |---|---|
 | Line comment | `// ...` |
+| Doc comment | `/// ...` directly above a declaration; Markdown; shown by editors |
 | Block comment | `/* ... */` (not nested) |
 | Identifier | letter or `_`, then letters, digits, `_`; must not start with `__` |
 | Integer | `123`, `1_000_000` (64-bit; `_` ignored) |

@@ -303,14 +303,18 @@ function splitTop(src, sep) {
 }
 
 /** `// comment` lines directly above `index`, joined. */
+/**
+ * The `///` doc comment written just above a declaration, as Markdown. Plain `//` comments
+ * are notes for the code's readers and are not documentation.
+ */
 function docAbove(text, index) {
   const lines = text.slice(0, index).split("\n");
   lines.pop(); // the declaration's own line
   const doc = [];
   while (lines.length) {
-    const l = lines[lines.length - 1].trim();
-    if (!l.startsWith("//")) break;
-    doc.unshift(l.replace(/^\/\/\s?/, ""));
+    const l = lines[lines.length - 1].trimStart();
+    if (!l.startsWith("///") || l.startsWith("////")) break;
+    doc.unshift(l.slice(3).replace(/^ /, "").trimEnd());
     lines.pop();
   }
   return doc.join("\n");
@@ -1395,4 +1399,171 @@ function signatureHelp(text, offset, options = {}) {
   };
 }
 
-module.exports = { analyze, complete, signatureHelp, scopeAt, chainType };
+// ---------------------------------------------------------------- hover
+
+const PRIMITIVE_DOCS = {
+  int: "64-bit whole number.",
+  float: "64-bit floating-point number.",
+  bool: "`true` or `false`.",
+  str: "Text (UTF-8).",
+  void: "No value.",
+};
+
+/** `fn name<T>(params) -> ret` */
+function fnHeader(f, prefix = "fn") {
+  const tp = f.tparams && f.tparams.length ? `<${f.tparams.join(", ")}>` : "";
+  const ret = f.async ? f.ret.replace(/^Async<(.*)>$/, "$1") : f.ret;
+  return `${f.async ? "async " : ""}${prefix} ${f.name}${tp}${sigText(f.params, ret)}`;
+}
+
+function methodHeader(m) {
+  const mods = [m.private && "private", m.static && "static", m.abstract && "abstract", m.override && "override", m.mut && "mut"].filter(Boolean);
+  return [...mods, "fn"].join(" ") + ` ${m.name}${sigText(m.params, m.ret)}`;
+}
+
+function classHeader(model, c) {
+  const tp = c.tparams.length ? `<${c.tparams.join(", ")}>` : "";
+  const bases = c.bases.length ? ` : ${c.bases.join(", ")}` : "";
+  const kind = c.struct ? "struct" : (c.abstract ? "abstract class" : "class");
+  let out = `${kind} ${c.name}${tp}${bases}`;
+  if (c.struct) {
+    out += `(${c.fields.map((x) => `${x.name}: ${x.type}`).join(", ")})`;
+  } else if (!c.abstract) {
+    const init = findInit(model, c.name);
+    if (init) out += sigText(init.params, "");
+  }
+  return out;
+}
+
+function md(code, doc, note) {
+  let out = "```kalinga\n" + code + "\n```";
+  if (note) out += "\n\n" + note;
+  if (doc) out += "\n\n---\n\n" + doc;
+  return out;
+}
+
+/** Hover text for a top-level name (`model` may be a package namespace). */
+function declHover(model, name, scope) {
+  if (model.functions.has(name)) {
+    const f = model.functions.get(name);
+    return md(fnHeader(f, f.extern ? "extern fn" : "fn"), f.doc);
+  }
+  if (model.classes.has(name)) {
+    const c = model.classes.get(name);
+    return md(classHeader(model, c), c.doc);
+  }
+  if (model.interfaces.has(name)) {
+    const i = model.interfaces.get(name);
+    const supers = i.supers.length ? ` : ${i.supers.join(", ")}` : "";
+    const body = i.methods.map((m) => `    fn ${m.name}${sigText(m.params, m.ret)}`).join("\n");
+    return md(`interface ${i.name}${supers} {\n${body}\n}`, i.doc);
+  }
+  if (model.enums.has(name)) {
+    const e = model.enums.get(name);
+    const body = e.variants.map((v) => `    ${v.name}${v.params.length ? sigText(v.params, "") : ""}`).join("\n");
+    return md(`enum ${e.name} {\n${body}\n}`, e.doc);
+  }
+  if (model.externTypes.has(name)) return md(`extern type ${name}`, "", "A Rust type, used through `extern fn`s.");
+  if (LIBRARY[name] && !(scope && scope.locals.has(name))) {
+    const names = Object.keys(LIBRARY[name].values).concat(LIBRARY[name].fns.map((f) => f.name + "()"));
+    return md(name, "", `Built-in library: ${names.map((n) => "`" + n + "`").join(", ")}.`);
+  }
+  if (BUILTIN_TYPES[name]) return md(`${name}<${BUILTIN_TYPES[name].params.join(", ")}>`, BUILTIN_TYPES[name].doc);
+  if (BUILTINS[name]) {
+    const b = BUILTINS[name];
+    return md(`fn ${name}(${b.params.join(", ")})${b.ret !== "void" ? " -> " + b.ret : ""}`, b.doc);
+  }
+  if (PRIMITIVE_DOCS[name]) return md(name, PRIMITIVE_DOCS[name]);
+  if (name === "Ok" || name === "Err") return md(`${name}(${name === "Ok" ? "value" : "error"})`, `A${name === "Ok" ? " successful" : " failed"} \`Result\`.`);
+  const variant = findVariant(model, name);
+  if (variant) return md(`${variant.en.name}.${variant.v.name}${variant.v.params.length ? sigText(variant.v.params, "") : ""}`, "");
+  return null;
+}
+
+/** Hover text for `name` after `recv.`. */
+function memberHover(model, scope, recv, name) {
+  const ns = !scope.locals.has(recv) && model.namespaces && model.namespaces.get(recv);
+  if (ns) return declHover(ns, name, null);
+  const qualified = /^([A-Za-z_]\w*)\.([A-Z]\w*)$/.exec(recv);
+  if (qualified && model.namespaces.has(qualified[1]) && !scope.locals.has(qualified[1])) {
+    return memberHover(model.namespaces.get(qualified[1]), { locals: new Map() }, qualified[2], name);
+  }
+  if (/^[A-Z]\w*$/.test(recv) && !scope.locals.has(recv)) {
+    if (LIBRARY[recv] && !model.classes.has(recv)) {
+      const lib = LIBRARY[recv];
+      if (lib.values[name]) return md(`${recv}.${name}: ${lib.values[name]}`, "");
+      const f = lib.fns.find((x) => x.name === name);
+      return f ? md(`fn ${recv}.${f.name}${sigText(f.params, f.ret)}`, f.doc) : null;
+    }
+    if (model.enums.has(recv)) {
+      const v = model.enums.get(recv).variants.find((x) => x.name === name);
+      return v ? md(`${recv}.${v.name}${v.params.length ? sigText(v.params, "") : ""}`, model.enums.get(recv).doc) : null;
+    }
+    if (model.classes.has(recv)) {
+      const m = staticMethods(model, recv).find((x) => x.name === name);
+      return m ? md(methodHeader(m), m.doc, `in \`${m.owner}\``) : null;
+    }
+  }
+  const type = chainType(model, scope, recv);
+  if (!type) return null;
+  const [cname] = splitGeneric(type);
+  if (model.classes.has(cname)) {
+    const f = classFields(model, cname).find((x) => x.name === name);
+    if (f) return md(`${f.private ? "private " : ""}${f.name}: ${substitute(model, type, f.type)}`, f.doc, `field of \`${f.owner}\``);
+  }
+  const m = methodsOf(model, type).find((x) => x.name === name);
+  if (!m) return null;
+  const note = m.owner ? `in \`${m.owner}\`` : `on \`${type}\``;
+  return md(m.owner ? methodHeader(m) : `fn ${m.name}${sigText(m.params, m.ret)}`, m.doc, note);
+}
+
+/**
+ * Hover for the word at `offset`: `{ contents: markdown, start, end }` or null.
+ * `options.load(path, dir)` lets declarations from imported files and packages take part.
+ */
+function hover(text, offset, options = {}) {
+  const model = withImports(analyze(text, options.dir), options.load);
+  const { code, hidden } = model;
+  if (hidden[offset] && hidden[Math.max(0, offset - 1)]) return null; // a comment or string
+  let start = offset;
+  let end = offset;
+  while (start > 0 && /\w/.test(code[start - 1])) start--;
+  while (end < code.length && /\w/.test(code[end])) end++;
+  if (start === end || /^\d/.test(code.slice(start, end))) return null;
+  const name = code.slice(start, end);
+  const scope = scopeAt(model, end);
+  const result = (contents) => (contents ? { contents, start, end } : null);
+
+  let before = start - 1;
+  while (before >= 0 && /[ \t]/.test(code[before])) before--;
+  if (code[before] === "." && code[before - 1] !== ".") {
+    const recv = receiverBefore(code, before);
+    return recv ? result(memberHover(model, scope, recv, name)) : null;
+  }
+
+  if (name === "self" && scope.cls) return result(md(`self: ${scope.cls}`, ""));
+  const local = scope.locals.get(name);
+  if (local) {
+    const what = { param: "parameter", for: "loop variable", let: "let", var: "var" }[local.kind] || "variable";
+    return result(md(`${local.kind === "var" ? "var" : "let"} ${name}${local.type ? ": " + local.type : ""}`, "", what === "let" || what === "var" ? "" : what));
+  }
+  if (model.namespaces.has(name)) return result(md(`import "${model.aliases.get(name)}" as ${name}`, "", `Package; use \`${name}.Name\`.`));
+
+  // A member's own declaration, inside its class or struct.
+  const cls = enclosing(model.classes, start);
+  if (cls) {
+    const m = cls.methods.find((x) => x.name === name);
+    const header = code.slice(code.lastIndexOf("\n", start) + 1, start);
+    if (m && /\bfn\s*$/.test(header)) return result(md(methodHeader(m), m.doc, `in \`${cls.name}\``));
+    const f = cls.fields.find((x) => x.name === name);
+    if (f && /^\s*(private\s+)?$/.test(header)) return result(md(`${f.private ? "private " : ""}${f.name}: ${f.type}`, f.doc, `field of \`${cls.name}\``));
+  }
+  const iface = enclosing(model.interfaces, start);
+  if (iface) {
+    const m = iface.methods.find((x) => x.name === name);
+    if (m) return result(md(`fn ${m.name}${sigText(m.params, m.ret)}`, m.doc, `in interface \`${iface.name}\``));
+  }
+  return result(declHover(model, name, scope));
+}
+
+module.exports = { analyze, complete, signatureHelp, hover, scopeAt, chainType };

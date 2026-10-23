@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- **Doc comments**: `///` above a declaration is its documentation, written in Markdown.
+  Plain `//` comments no longer count as documentation. `std/game`, `std/math2d` and the
+  examples use `///`.
+- **Hover in VS Code**: types of variables, and signatures plus `///` docs of functions,
+  methods, classes, structs, fields, interfaces, enum variants, library functions and
+  package names.
+
 - **`override fn` for interface methods too.** A method that comes from anything after `:`
   in `class C : Base, Iface`, whether a base class or an interface, must be marked
   `override fn`; the compiler says what to add (`method `update` implements `Game.update`;

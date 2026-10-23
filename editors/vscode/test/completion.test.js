@@ -9,7 +9,7 @@ interface Show {
     fn show() -> str
 }
 
-// A living creature.
+/// A living creature.
 class Animal {
     name: str
     legs: int = 4
@@ -19,7 +19,7 @@ class Animal {
         self.name = name
     }
 
-    // What the animal says.
+    /// What the animal says.
     fn speak() -> str {
         return self.name
     }
@@ -428,4 +428,95 @@ test("class body offers override stubs for interface methods", () => {
   assert.ok(stub, labels(items).join(", "));
   assert.strictEqual(stub.insertText, "override fn update(dt: float) {\n\t$0\n}");
   assert.ok(!items.some((i) => i.label === "override fn draw"), "already written");
+});
+
+// ---------------------------------------------------------------- hover and /// docs
+
+const { hover } = require("../completion");
+
+const HOVER = `
+/// A point on the **map**.
+struct Point {
+    /// Distance from the left edge.
+    x: int
+    y: int
+
+    /// Sum of both coordinates.
+    fn sum() -> int { return self.x + self.y }
+}
+
+// Just a note for readers: not documentation.
+fn helper() -> int { return 1 }
+
+/// Doubles \`n\`.
+///
+///     double(2) == 4
+fn double(n: int) -> int { return n * 2 }
+
+interface Shape {
+    /// Area in square units.
+    fn area() -> float
+}
+
+enum Dir {
+    Left
+    Right(steps: int)
+}
+
+fn main() {
+    let p = Point(1, 2)
+    var total = double(p.x) + p.sum()
+    print(Math.sqrt(2.0), len("a"), Dir.Right(1), helper())
+}
+`;
+
+function hoverAt(word, nth = 0, src = HOVER, options) {
+  let i = -1;
+  for (let k = 0; k <= nth; k++) i = src.indexOf(word, i + 1);
+  assert.ok(i >= 0, word);
+  return hover(src, i + 1, options);
+}
+
+test("hover: functions, with /// docs as Markdown and // notes ignored", () => {
+  const h = hoverAt("double(p.x)");
+  assert.ok(h.contents.includes("fn double(n: int) -> int"), h.contents);
+  assert.ok(h.contents.includes("Doubles `n`.\n\n    double(2) == 4"), h.contents);
+  const note = hoverAt("helper()", 1);
+  assert.ok(note.contents.includes("fn helper() -> int"));
+  assert.ok(!note.contents.includes("Just a note"), "plain // is not documentation");
+  assert.strictEqual(h.end - h.start, "double".length);
+});
+
+test("hover: structs, fields, methods and variables", () => {
+  assert.ok(hoverAt("Point(1, 2)").contents.includes("struct Point(x: int, y: int)"));
+  assert.ok(hoverAt("Point(1, 2)").contents.includes("A point on the **map**."));
+  const field = hoverAt("p.x").contents;
+  assert.ok(hoverAt("x)", 0).contents.includes("x: int"), "field after a dot");
+  assert.ok(field.includes("let p: Point"), field);
+  const sum = hoverAt("sum()", 1).contents;
+  assert.ok(sum.includes("fn sum() -> int") && sum.includes("Sum of both coordinates.") && sum.includes("in `Point`"), sum);
+  assert.ok(hoverAt("total").contents.includes("var total: int"));
+  assert.ok(hoverAt("x: int").contents.includes("Distance from the left edge."), "field at its declaration");
+  assert.ok(hoverAt("sum() -> int").contents.includes("Sum of both"), "method at its declaration");
+});
+
+test("hover: interfaces, enums, library and built-ins", () => {
+  assert.ok(hoverAt("Shape").contents.includes("fn area() -> float"));
+  assert.ok(hoverAt("area").contents.includes("Area in square units."));
+  assert.ok(hoverAt("Right(1)").contents.includes("Dir.Right(steps: int)"));
+  assert.ok(hoverAt("sqrt").contents.includes("fn Math.sqrt(x: float) -> float"));
+  assert.ok(hoverAt("Math").contents.includes("Built-in library"));
+  assert.ok(hoverAt("len(").contents.includes("Number of elements"));
+  assert.strictEqual(hoverAt("Just a note"), null, "nothing inside comments");
+  assert.strictEqual(hoverAt("2.0"), null, "nothing on numbers");
+});
+
+test("hover: package aliases and their members", () => {
+  const lib = "/// A 2D vector.\nstruct Vec2 {\n    x: float\n    y: float\n}\n/// Dot product.\nfn dot(a: Vec2, b: Vec2) -> float { return a.x * b.x }\n";
+  const load = (p) => (p === "mathx" ? { text: lib, dir: "", key: "mathx" } : null);
+  const src = 'import "mathx" as mx\nfn main() {\n    let v = mx.Vec2(1.0, 2.0)\n    print(mx.dot(v, v), v.x)\n}\n';
+  assert.ok(hoverAt("mx.Vec2", 0, src, { load }).contents.includes('import "mathx" as mx'));
+  assert.ok(hoverAt("dot", 0, src, { load }).contents.includes("Dot product."));
+  assert.ok(hoverAt("Vec2(1.0", 0, src, { load }).contents.includes("A 2D vector."));
+  assert.ok(hoverAt("v.x", 0, src, { load }).contents.includes("let v: mx.Vec2"));
 });

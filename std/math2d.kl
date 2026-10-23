@@ -1,6 +1,6 @@
 // 2D math for games: vectors and rectangles. Use with `import "std/math2d"`.
 
-// A 2D vector (position, velocity, direction...).
+/// A 2D vector (position, velocity, direction...).
 struct Vec2 {
     x: float
     y: float
@@ -9,7 +9,7 @@ struct Vec2 {
         return Vec2(0.0, 0.0)
     }
 
-    // A vector of the given length pointing at `radians`.
+    /// A vector of the given length pointing at `radians`.
     static fn from_angle(radians: float, length: float) -> Vec2 {
         return Vec2(Math.cos(radians) * length, Math.sin(radians) * length)
     }
@@ -26,7 +26,7 @@ struct Vec2 {
         return Math.hypot(self.x - o.x, self.y - o.y)
     }
 
-    // The same direction with length 1 (or zero for the zero vector).
+    /// The same direction with length 1 (or zero for the zero vector).
     fn normalized() -> Vec2 {
         let len = self.length()
         if len == 0.0 {
@@ -64,7 +64,7 @@ struct Vec2 {
     }
 }
 
-// An axis-aligned rectangle: top-left corner plus size.
+/// An axis-aligned rectangle: top-left corner plus size.
 struct Rect {
     x: float
     y: float

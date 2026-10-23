@@ -1,7 +1,7 @@
 // Asteroids: turn with A / D (or arrows), thrust with W, fire with space.
 import "std/game"
 
-// Keeps a position on screen by wrapping around the edges.
+/// Keeps a position on screen by wrapping around the edges.
 fn wrap(p: Vec2, w: float, h: float) -> Vec2 {
     var q = p
     if q.x < 0.0 { q.x += w }
@@ -22,7 +22,7 @@ struct Rock {
     vel: Vec2
     radius: float
 
-    // Two smaller rocks flying apart, or none if this one was already small.
+    /// Two smaller rocks flying apart, or none if this one was already small.
     fn split() -> [Rock] {
         var parts: [Rock] = []
         if self.radius > 15.0 {
@@ -107,7 +107,7 @@ class Asteroids : Game {
         self.step(dt)
     }
 
-    // Everything that moves on its own, separate from input so it can be tested.
+    /// Everything that moves on its own, separate from input so it can be tested.
     fn step(dt: float) {
         self.ship.cooldown -= dt
         self.ship.vel = self.ship.vel * (1.0 - 0.6 * dt)

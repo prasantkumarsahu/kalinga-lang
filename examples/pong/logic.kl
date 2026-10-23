@@ -11,7 +11,7 @@ struct Ball {
     }
 }
 
-// Moves the ball and bounces it off the top and bottom walls.
+/// Moves the ball and bounces it off the top and bottom walls.
 fn move_ball(b: Ball, dt: float, height: float) -> Ball {
     var next = b
     next.pos += b.vel * dt
@@ -26,8 +26,8 @@ fn move_ball(b: Ball, dt: float, height: float) -> Ball {
     return next
 }
 
-// Sends the ball back from a paddle. Hitting near the paddle's ends gives a steeper
-// angle, and every hit makes the ball a little faster.
+/// Sends the ball back from a paddle. Hitting near the paddle's ends gives a steeper
+/// angle, and every hit makes the ball a little faster.
 fn bounce_off(b: Ball, paddle: Rect, to_right: bool) -> Ball {
     var next = b
     let offset = Math.clamp((b.pos.y - paddle.center().y) / (paddle.h / 2.0), -1.0, 1.0)
@@ -47,7 +47,7 @@ fn bounce_off(b: Ball, paddle: Rect, to_right: bool) -> Ball {
     return next
 }
 
-// A computer paddle that follows `target_y` at a limited speed.
+/// A computer paddle that follows `target_y` at a limited speed.
 fn follow(paddle: Rect, target_y: float, speed: float, dt: float, height: float) -> Rect {
     let center = paddle.center().y
     let step = Math.clamp(target_y - center, -speed * dt, speed * dt)
@@ -55,7 +55,7 @@ fn follow(paddle: Rect, target_y: float, speed: float, dt: float, height: float)
     return Rect(paddle.x, y, paddle.w, paddle.h)
 }
 
-// A new ball in the middle, heading towards the player who lost the last point.
+/// A new ball in the middle, heading towards the player who lost the last point.
 fn serve(width: float, height: float, to_right: bool) -> Ball {
     let angle = (Random.float() - 0.5) * Math.PI / 3.0
     var vel = Vec2.from_angle(angle, 360.0)

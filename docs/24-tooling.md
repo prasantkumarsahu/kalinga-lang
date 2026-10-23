@@ -86,8 +86,11 @@ The extension lives in [`editors/vscode`](../editors/vscode/README.md).
   `->` and `<`, `match` arm patterns, `override fn` stubs in a class body, and declarations
   from imported files, `std/` modules and utkal packages (`alias.` after
   `import "pkg" as alias` too). Built-ins: `Math`, `Random`, `Time`, `Thread`, `Async`, and
-  the methods of `Result`, `Channel`, `Shared` and `Task`. `//` comments above a
+  the methods of `Result`, `Channel`, `Shared` and `Task`. `///` doc comments above a
   declaration appear as its documentation.
+- Hover over a name to see its type or signature and its `///` documentation
+  (variables, functions, classes, structs, fields, methods, enum variants, library
+  functions and package names)
 - Parameter hints while typing the arguments of a call (functions, generic functions,
   constructors, methods, static methods, enum variants and function-typed variables)
 - Errors underlined as you type (runs `kalinga check --stdin` about 0.4 s after you stop);

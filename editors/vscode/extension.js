@@ -241,6 +241,14 @@ const signatureProvider = {
   },
 };
 
+const hoverProvider = {
+  provideHover(document, position) {
+    const h = completion.hover(document.getText(), document.offsetAt(position), importLoader(document));
+    if (!h) return null;
+    return new vscode.Hover(new vscode.MarkdownString(h.contents), new vscode.Range(document.positionAt(h.start), document.positionAt(h.end)));
+  },
+};
+
 function activate(context) {
   diagnostics = vscode.languages.createDiagnosticCollection(LANG);
   context.subscriptions.push(
@@ -250,6 +258,7 @@ function activate(context) {
     vscode.commands.registerCommand("kalinga.emit", emitRust),
     vscode.languages.registerCompletionItemProvider(LANG, completionProvider, "."),
     vscode.languages.registerSignatureHelpProvider(LANG, signatureProvider, "(", ","),
+    vscode.languages.registerHoverProvider(LANG, hoverProvider),
     vscode.workspace.onDidOpenTextDocument(check),
     vscode.workspace.onDidSaveTextDocument(check),
     vscode.workspace.onDidChangeTextDocument((e) => {
