@@ -1,0 +1,3 @@
+tests/ui/errors/interp_obj.kl:4:13: error: cannot put a `A` value into a string
+4 |     print("{a}")
+  |             ^

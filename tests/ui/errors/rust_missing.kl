@@ -1,0 +1,2 @@
+use rust "nope.rs"
+fn main() {}

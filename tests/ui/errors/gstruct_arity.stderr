@@ -1,0 +1,3 @@
+tests/ui/errors/gstruct_arity.kl:2:20: error: `B` needs 1 type argument(s), e.g. `B<int>`
+2 | fn main() { let b: B = B(1) }
+  |                    ^

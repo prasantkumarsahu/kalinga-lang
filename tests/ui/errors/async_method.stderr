@@ -1,0 +1,3 @@
+tests/ui/errors/async_method.kl:2:11: error: only `static async fn` is supported in classes (yet); use an `async fn` that takes the object
+2 |     async fn m() {}
+  |           ^

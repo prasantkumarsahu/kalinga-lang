@@ -1,0 +1,9 @@
+Rex says woof and has 4 legs
+Bit says yip (tiny) and has 4 legs
+Tweety says tweet and has 2 legs
+Generic says ... and has 4 legs
+Dog(Rex, tricks=[sit, roll])
+Dog(Nib, tricks=[])
+fewest legs: Tweety
+counter: 3
+Rexy

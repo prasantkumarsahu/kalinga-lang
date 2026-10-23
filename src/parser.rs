@@ -1,5 +1,5 @@
 use crate::ast::*;
-use crate::error::{err, Pos, Result};
+use crate::error::{Pos, Result, err};
 use crate::token::{StrPart, Tok, Token};
 
 pub fn parse(tokens: Vec<Token>) -> Result<Program> {
@@ -136,7 +136,12 @@ impl Parser {
                             self.expect(Tok::Assign, "`=` and a version, e.g. `use crate \"rand\" = \"0.8\"`")?;
                             let version = match self.advance().tok {
                                 Tok::Str(v) => v,
-                                other => return err(format!("expected a version in quotes, found {}", other.describe()), pos),
+                                other => {
+                                    return err(
+                                        format!("expected a version in quotes, found {}", other.describe()),
+                                        pos,
+                                    );
+                                }
                             };
                             let mut features = Vec::new();
                             if self.peek() == &Tok::Ident("features".into()) {
@@ -145,7 +150,15 @@ impl Parser {
                                 while !self.check(&Tok::RBracket) {
                                     match self.advance().tok {
                                         Tok::Str(f) => features.push(f),
-                                        other => return err(format!("expected a feature name in quotes, found {}", other.describe()), pos),
+                                        other => {
+                                            return err(
+                                                format!(
+                                                    "expected a feature name in quotes, found {}",
+                                                    other.describe()
+                                                ),
+                                                pos,
+                                            );
+                                        }
                                     }
                                     if !self.eat(&Tok::Comma) {
                                         break;
@@ -155,7 +168,15 @@ impl Parser {
                             }
                             prog.crates.push(CrateDep { name: what, version, features, pos });
                         }
-                        other => return err(format!("expected `use rust \"file.rs\"` or `use crate \"name\" = \"version\"`, found `use {}`", other), pos),
+                        other => {
+                            return err(
+                                format!(
+                                    "expected `use rust \"file.rs\"` or `use crate \"name\" = \"version\"`, found `use {}`",
+                                    other
+                                ),
+                                pos,
+                            );
+                        }
                     }
                     self.end_of_statement()?;
                 }
@@ -173,9 +194,12 @@ impl Parser {
                                 Tok::RustBlock(b) => body = Some(b),
                                 other => {
                                     return err(
-                                        format!("expected a Rust path in quotes or `rust {{ ... }}`, found {}", other.describe()),
+                                        format!(
+                                            "expected a Rust path in quotes or `rust {{ ... }}`, found {}",
+                                            other.describe()
+                                        ),
                                         pos,
-                                    )
+                                    );
                                 }
                             }
                         }
@@ -193,18 +217,27 @@ impl Parser {
                     let pos = self.advance().pos;
                     match self.advance().tok {
                         Tok::Str(path) => {
-                            let alias = if self.eat(&Tok::As) { Some(self.ident("a name after `as`")?.0) } else { None };
+                            let alias =
+                                if self.eat(&Tok::As) { Some(self.ident("a name after `as`")?.0) } else { None };
                             prog.imports.push(Import { path, alias, pos });
                         }
-                        other => return err(format!("expected a file name in quotes after `import`, found {}", other.describe()), pos),
+                        other => {
+                            return err(
+                                format!("expected a file name in quotes after `import`, found {}", other.describe()),
+                                pos,
+                            );
+                        }
                     }
                     self.end_of_statement()?;
                 }
                 other => {
                     return err(
-                        format!("expected `fn`, `class`, `struct`, `interface`, `enum` or `import` at top level, found {}", other.describe()),
+                        format!(
+                            "expected `fn`, `class`, `struct`, `interface`, `enum` or `import` at top level, found {}",
+                            other.describe()
+                        ),
                         self.pos(),
-                    )
+                    );
                 }
             }
             self.skip_newlines();
@@ -330,7 +363,8 @@ impl Parser {
             }
         }
         self.expect(Tok::LBrace, "`{` to start class body")?;
-        let mut class = ClassDecl { name, tparams, bases, fields: vec![], init: None, methods: vec![], is_abstract, pos };
+        let mut class =
+            ClassDecl { name, tparams, bases, fields: vec![], init: None, methods: vec![], is_abstract, pos };
         self.skip_newlines();
         while !self.check(&Tok::RBrace) {
             let mpos = self.pos();
@@ -368,7 +402,7 @@ impl Parser {
                     return err(
                         format!("expected field, `init` or `fn` in class body, found {}", other.describe()),
                         self.pos(),
-                    )
+                    );
                 }
             }
         }
@@ -439,7 +473,8 @@ impl Parser {
             }
             // `mut fn` (a method that changes `self`)
             let mut is_mut = false;
-            if self.peek() == &Tok::Ident("mut".into()) && self.tokens.get(self.i + 1).is_some_and(|t| t.tok == Tok::Fn) {
+            if self.peek() == &Tok::Ident("mut".into()) && self.tokens.get(self.i + 1).is_some_and(|t| t.tok == Tok::Fn)
+            {
                 self.advance();
                 is_mut = true;
             }
@@ -466,7 +501,10 @@ impl Parser {
                 }
                 Tok::Fn => {
                     if mods.is_abstract || mods.is_override {
-                        return err("struct methods cannot be `abstract` or `override` (structs have no inheritance)", mpos);
+                        return err(
+                            "struct methods cannot be `abstract` or `override` (structs have no inheritance)",
+                            mpos,
+                        );
                     }
                     if mods.is_mut && mods.is_static {
                         return err("a `static fn` has no `self`, so it cannot be `mut`", mpos);
@@ -474,9 +512,17 @@ impl Parser {
                     s.methods.push(self.function(mods)?);
                     self.skip_newlines();
                 }
-                Tok::Init => return err("structs have no `init`: `Name(a, b)` sets the fields in order; use a `static fn` for other constructors", mpos),
+                Tok::Init => {
+                    return err(
+                        "structs have no `init`: `Name(a, b)` sets the fields in order; use a `static fn` for other constructors",
+                        mpos,
+                    );
+                }
                 other => {
-                    return err(format!("expected field, `fn`, `mut fn` or `op` in struct body, found {}", other.describe()), self.pos())
+                    return err(
+                        format!("expected field, `fn`, `mut fn` or `op` in struct body, found {}", other.describe()),
+                        self.pos(),
+                    );
                 }
             }
         }
@@ -531,7 +577,9 @@ impl Parser {
             Tok::Str(s) => Pattern::Str(s),
             Tok::True => Pattern::Bool(true),
             Tok::False => Pattern::Bool(false),
-            other => return err(format!("expected a pattern (a variant, literal or `_`), found {}", other.describe()), pos),
+            other => {
+                return err(format!("expected a pattern (a variant, literal or `_`), found {}", other.describe()), pos);
+            }
         })
     }
 
@@ -570,7 +618,11 @@ impl Parser {
                 "void" => TypeExpr::Void,
                 _ => {
                     // `alias.Name` for a type from `import "pkg" as alias`.
-                    let n = if self.eat(&Tok::Dot) { format!("{}.{}", n, self.ident("a type name after `.`")?.0) } else { n };
+                    let n = if self.eat(&Tok::Dot) {
+                        format!("{}.{}", n, self.ident("a type name after `.`")?.0)
+                    } else {
+                        n
+                    };
                     let args = if self.check(&Tok::Lt) { self.targs()? } else { vec![] };
                     TypeExpr::Named(n, args, pos)
                 }
@@ -653,11 +705,8 @@ impl Parser {
                 let (var, _) = self.ident("loop variable name")?;
                 self.expect(Tok::In, "`in`")?;
                 let first = self.expr()?;
-                let iter = if self.eat(&Tok::DotDot) {
-                    ForIter::Range(first, self.expr()?)
-                } else {
-                    ForIter::Each(first)
-                };
+                let iter =
+                    if self.eat(&Tok::DotDot) { ForIter::Range(first, self.expr()?) } else { ForIter::Each(first) };
                 let body = self.block()?;
                 self.skip_newlines();
                 return Ok(Stmt { kind: StmtKind::For { var, iter, body }, pos });
@@ -730,11 +779,7 @@ impl Parser {
             self.i = save;
             return Ok(None);
         }
-        if self.check(&Tok::If) {
-            Ok(Some(vec![self.if_stmt()?]))
-        } else {
-            Ok(Some(self.block()?))
-        }
+        if self.check(&Tok::If) { Ok(Some(vec![self.if_stmt()?])) } else { Ok(Some(self.block()?)) }
     }
 
     // ---- expressions, lowest precedence first ----
@@ -743,11 +788,7 @@ impl Parser {
         self.or()
     }
 
-    fn binary_level(
-        &mut self,
-        next: fn(&mut Self) -> Result<Expr>,
-        ops: &[(Tok, BinOp)],
-    ) -> Result<Expr> {
+    fn binary_level(&mut self, next: fn(&mut Self) -> Result<Expr>, ops: &[(Tok, BinOp)]) -> Result<Expr> {
         let mut left = next(self)?;
         'outer: loop {
             for (tok, op) in ops {
@@ -786,10 +827,7 @@ impl Parser {
     }
 
     fn multiplicative(&mut self) -> Result<Expr> {
-        self.binary_level(
-            Self::unary,
-            &[(Tok::Star, BinOp::Mul), (Tok::Slash, BinOp::Div), (Tok::Percent, BinOp::Rem)],
-        )
+        self.binary_level(Self::unary, &[(Tok::Star, BinOp::Mul), (Tok::Slash, BinOp::Div), (Tok::Percent, BinOp::Rem)])
     }
 
     fn unary(&mut self) -> Result<Expr> {
@@ -923,11 +961,7 @@ impl Parser {
                         _ => self.i = save,
                     }
                 }
-                if self.check(&Tok::LParen) {
-                    ExprKind::Call(name, targs, self.args()?)
-                } else {
-                    ExprKind::Ident(name)
-                }
+                if self.check(&Tok::LParen) { ExprKind::Call(name, targs, self.args()?) } else { ExprKind::Ident(name) }
             }
             Tok::Super => {
                 if self.check(&Tok::LParen) {

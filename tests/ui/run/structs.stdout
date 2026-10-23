@@ -1,0 +1,6 @@
+Vec2(x: 1.0, y: 2.0) Vec2(x: 10.0, y: 2.0) true
+Vec2(x: 11.0, y: 4.0) Vec2(x: -9.0, y: 0.0) Vec2(x: 2.0, y: 4.0) Vec2(x: -1.0, y: -2.0) Vec2(x: 0.0, y: 0.0)
+Vec2(x: 7.0, y: 9.0) 7.0 Vec2(x: 7.0, y: 9.0)
+false true
+true false
+Vec2(x: 5.0, y: 0.0) Vec2(x: 3.0, y: 3.0) 1

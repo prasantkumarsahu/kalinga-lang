@@ -1,0 +1,7 @@
+struct W {
+    x: int
+    fn bad() {
+        self.x = 1
+    }
+}
+fn main() {}

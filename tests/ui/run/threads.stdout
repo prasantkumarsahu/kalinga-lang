@@ -1,0 +1,5 @@
+joined: 5050 true
+worker handled 5 jobs
+total 150
+counter 8000
+par_map equal: true cores: true

@@ -1,0 +1,4 @@
+class C {
+    fn f() {}
+}
+fn main() { C.f() }

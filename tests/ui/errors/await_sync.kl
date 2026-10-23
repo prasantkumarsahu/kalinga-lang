@@ -1,0 +1,4 @@
+async fn job() -> int {
+    return 1
+}
+fn main() { let x = await job() }

@@ -1,0 +1,3 @@
+tests/ui/errors/map_key.kl:1:13: error: map keys must be `int`, `str` or `bool`, not `float`
+1 | fn main() { let m: {float: int} = {} }
+  |             ^

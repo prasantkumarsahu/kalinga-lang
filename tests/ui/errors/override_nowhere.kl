@@ -1,0 +1,4 @@
+class A {
+    override fn show() -> str { return "a" }
+}
+fn main() {}

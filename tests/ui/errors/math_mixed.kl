@@ -1,0 +1,1 @@
+fn main() { print(Math.min(1, 2.0)) }

@@ -1,0 +1,9 @@
+class Holder<T> {
+    value: T
+    fn get() -> T {
+        return self.value
+    }
+}
+fn main() {
+    print(Holder<int>().get())
+}

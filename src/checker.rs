@@ -6,7 +6,7 @@ use std::collections::{HashMap, HashSet};
 use std::fmt;
 
 use crate::ast::*;
-use crate::error::{err, Pos, Result};
+use crate::error::{Pos, Result, err};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Type {
@@ -237,8 +237,9 @@ pub struct Model {
 
 pub const BUILTINS: &[&str] = &["print", "len", "str", "int", "float", "input"];
 const RESERVED_TYPES: &[&str] = &[
-    "Rc", "RefCell", "String", "Vec", "BTreeMap", "Result", "Ok", "Err", "Thread", "Channel", "Shared", "Task", "Async", "Math", "Random", "Time", "Option", "Some", "None", "Box", "Self", "std", "main",
-    "int", "float", "bool", "str", "void",
+    "Rc", "RefCell", "String", "Vec", "BTreeMap", "Result", "Ok", "Err", "Thread", "Channel", "Shared", "Task",
+    "Async", "Math", "Random", "Time", "Option", "Some", "None", "Box", "Self", "std", "main", "int", "float", "bool",
+    "str", "void",
 ];
 
 impl Model {
@@ -300,9 +301,19 @@ impl Model {
             ifaces: prog.interfaces.iter().map(|i| i.name.clone()).collect(),
             enums: prog.enums.iter().map(|e| e.name.clone()).collect(),
             structs: prog.structs.iter().map(|s| s.name.clone()).collect(),
-            struct_arity: prog.structs.iter().filter(|s| !s.tparams.is_empty()).map(|s| (s.name.clone(), s.tparams.len())).collect(),
+            struct_arity: prog
+                .structs
+                .iter()
+                .filter(|s| !s.tparams.is_empty())
+                .map(|s| (s.name.clone(), s.tparams.len()))
+                .collect(),
             externs: prog.extern_types.iter().map(|(n, _)| n.clone()).collect(),
-            generic: prog.classes.iter().filter(|c| !c.tparams.is_empty()).map(|c| (c.name.clone(), c.tparams.len())).collect(),
+            generic: prog
+                .classes
+                .iter()
+                .filter(|c| !c.tparams.is_empty())
+                .map(|c| (c.name.clone(), c.tparams.len()))
+                .collect(),
         };
         let check_tparams = |tps: &[String], pos: Pos| -> Result<()> {
             for (i, t) in tps.iter().enumerate() {
@@ -371,7 +382,13 @@ impl Model {
                 let sig = signature(&meth.params, &meth.ret, &resolve)?;
                 methods.insert(
                     meth.name.clone(),
-                    StructMethod { sig, is_mut: meth.is_mut, is_async: meth.is_async, is_static: meth.is_static, is_private: meth.is_private },
+                    StructMethod {
+                        sig,
+                        is_mut: meth.is_mut,
+                        is_async: meth.is_async,
+                        is_static: meth.is_static,
+                        is_private: meth.is_private,
+                    },
                 );
             }
             let mut ops: Vec<StructOp> = Vec::new();
@@ -382,9 +399,12 @@ impl Model {
                     (1, _) => Some(sig.params[0].1.clone()),
                     _ => {
                         return err(
-                            format!("`op {}` takes one parameter (the right-hand side); only `op -()` may take none", o.op.rust()),
+                            format!(
+                                "`op {}` takes one parameter (the right-hand side); only `op -()` may take none",
+                                o.op.rust()
+                            ),
                             o.pos,
-                        )
+                        );
                     }
                 };
                 if sig.ret == Type::Void {
@@ -400,7 +420,10 @@ impl Model {
                 if !st.tparams.is_empty() {
                     return err("generic structs cannot have `static` constants (yet)", c.pos);
                 }
-                if consts.iter().any(|(n, _)| n == &c.name) || fields.iter().any(|(n, _)| n == &c.name) || methods.contains_key(&c.name) {
+                if consts.iter().any(|(n, _)| n == &c.name)
+                    || fields.iter().any(|(n, _)| n == &c.name)
+                    || methods.contains_key(&c.name)
+                {
                     return err(format!("`{}` is defined twice in `{}`", c.name, st.name), c.pos);
                 }
                 consts.push((c.name.clone(), resolve(&c.ty).map_err(|e| at_pos(e, c.pos))?));
@@ -408,14 +431,25 @@ impl Model {
             let private_fields = st.fields.iter().filter(|f| f.is_private).map(|f| f.name.clone()).collect();
             m.structs.insert(
                 st.name.clone(),
-                StructInfo { decl: st.clone(), tparams: st.tparams.clone(), fields, private_fields, methods, ops, consts },
+                StructInfo {
+                    decl: st.clone(),
+                    tparams: st.tparams.clone(),
+                    fields,
+                    private_fields,
+                    methods,
+                    ops,
+                    consts,
+                },
             );
             m.struct_order.push(st.name.clone());
         }
         for e in &prog.enums {
             if m.value_contains(&e.name, &e.name, &mut HashSet::new()) {
                 return err(
-                    format!("enum `{}` contains itself; put the recursive part in an array (`[{}]`) or use a class", e.name, e.name),
+                    format!(
+                        "enum `{}` contains itself; put the recursive part in an array (`[{}]`) or use a class",
+                        e.name, e.name
+                    ),
                     e.pos,
                 );
             }
@@ -423,7 +457,10 @@ impl Model {
         for st in &prog.structs {
             if m.value_contains(&st.name, &st.name, &mut HashSet::new()) {
                 return err(
-                    format!("struct `{}` contains itself; put the recursive part in an array (`[{}]`) or use a class", st.name, st.name),
+                    format!(
+                        "struct `{}` contains itself; put the recursive part in an array (`[{}]`) or use a class",
+                        st.name, st.name
+                    ),
                     st.pos,
                 );
             }
@@ -442,8 +479,12 @@ impl Model {
                 .collect();
             // For generic structs, type parameters count as plain here; uses then also need
             // plain type arguments (see `is_plain`).
-            let bad_structs: Vec<String> =
-                m.plain_structs.iter().filter(|n| m.structs[*n].fields.iter().any(|(_, t)| !m.is_plain_params_ok(t))).cloned().collect();
+            let bad_structs: Vec<String> = m
+                .plain_structs
+                .iter()
+                .filter(|n| m.structs[*n].fields.iter().any(|(_, t)| !m.is_plain_params_ok(t)))
+                .cloned()
+                .collect();
             for b in bad_enums {
                 m.plain_enums.remove(&b);
             }
@@ -484,13 +525,17 @@ impl Model {
             let mut seen: HashMap<String, (String, Signature)> = HashMap::new();
             for s in m.iface_closure(&i.name) {
                 for (mname, sig) in &m.interfaces[&s].methods {
-                    if let Some((other, osig)) = seen.get(mname) {
-                        if other != &s && osig != sig {
-                            return err(
-                                format!("`{}` gets method `{}` from both `{}` and `{}` with different signatures", i.name, mname, other, s),
-                                i.pos,
-                            );
-                        }
+                    if let Some((other, osig)) = seen.get(mname)
+                        && other != &s
+                        && osig != sig
+                    {
+                        return err(
+                            format!(
+                                "`{}` gets method `{}` from both `{}` and `{}` with different signatures",
+                                i.name, mname, other, s
+                            ),
+                            i.pos,
+                        );
                     }
                     seen.insert(mname.clone(), (s.clone(), sig.clone()));
                 }
@@ -549,7 +594,10 @@ impl Model {
                         && !matches!(&sig.ret, Type::Result(t, e) if **t == Type::Void && m.is_plain(e)) =>
             {
                 let pos = prog.functions.iter().find(|f| f.name == "main").unwrap().pos;
-                return err("`main` must take no parameters and return nothing (or `Result<void, E>` with a printable `E`)", pos);
+                return err(
+                    "`main` must take no parameters and return nothing (or `Result<void, E>` with a printable `E`)",
+                    pos,
+                );
             }
             _ => {}
         }
@@ -578,7 +626,10 @@ impl Model {
                 if class_names.contains(b) {
                     if parent.is_some() {
                         return err(
-                            format!("`{}` already has a base class; a class can extend only one class (but any number of interfaces)", c.name),
+                            format!(
+                                "`{}` already has a base class; a class can extend only one class (but any number of interfaces)",
+                                c.name
+                            ),
                             *pos,
                         );
                     }
@@ -605,11 +656,22 @@ impl Model {
                     return err("fields cannot have type void", f.pos);
                 }
                 if (ty.is_object()
-                    || matches!(ty, Type::Enum(_) | Type::Func(..) | Type::Struct(..) | Type::Extern(_) | Type::Result(..) | Type::Task(_)))
+                    || matches!(
+                        ty,
+                        Type::Enum(_)
+                            | Type::Func(..)
+                            | Type::Struct(..)
+                            | Type::Extern(_)
+                            | Type::Result(..)
+                            | Type::Task(_)
+                    ))
                     && f.default.is_none()
                 {
                     return err(
-                        format!("field `{}` of type `{}` needs a default value (or make it optional: `{}?`)", f.name, ty, ty),
+                        format!(
+                            "field `{}` of type `{}` needs a default value (or make it optional: `{}?`)",
+                            f.name, ty, ty
+                        ),
                         f.pos,
                     );
                 }
@@ -625,7 +687,10 @@ impl Model {
                 }
                 if meth.is_abstract && !c.is_abstract {
                     return err(
-                        format!("`{}` has an abstract method, so it must be declared `abstract class {}`", c.name, c.name),
+                        format!(
+                            "`{}` has an abstract method, so it must be declared `abstract class {}`",
+                            c.name, c.name
+                        ),
                         meth.pos,
                     );
                 }
@@ -636,7 +701,10 @@ impl Model {
                     return err("a `static fn` cannot override", meth.pos);
                 }
                 if meth.is_async && !meth.is_static {
-                    return err("only `static async fn` is supported in classes (yet); use an `async fn` that takes the object", meth.pos);
+                    return err(
+                        "only `static async fn` is supported in classes (yet); use an `async fn` that takes the object",
+                        meth.pos,
+                    );
                 }
                 let sig = signature(&meth.params, &meth.ret, &resolve)?;
                 if meth.is_private {
@@ -651,7 +719,8 @@ impl Model {
                     methods.insert(meth.name.clone(), sig);
                 }
             }
-            let private_fields: HashSet<String> = c.fields.iter().filter(|f| f.is_private).map(|f| f.name.clone()).collect();
+            let private_fields: HashSet<String> =
+                c.fields.iter().filter(|f| f.is_private).map(|f| f.name.clone()).collect();
             let init = match &c.init {
                 Some(i) => Some(signature(&i.params, &TypeExpr::Void, &resolve)?),
                 None => None,
@@ -725,16 +794,17 @@ impl Model {
         for meth in info.decl.methods.iter().filter(|m| !m.is_static) {
             let sig = &info.methods[&meth.name];
             let inherited = info.parent.as_ref().and_then(|p| self.find_method(p, &meth.name));
-            if inherited.is_none() {
-                if let Some(iname) = interfaces.iter().find(|i| self.interfaces[*i].methods.iter().any(|(n, _)| n == &meth.name)) {
-                    if !meth.is_override && !meth.is_abstract {
-                        return err(
-                            format!("method `{}` implements `{}.{}`; mark it `override fn`", meth.name, iname, meth.name),
-                            meth.pos,
-                        );
-                    }
-                    continue;
+            if inherited.is_none()
+                && let Some(iname) =
+                    interfaces.iter().find(|i| self.interfaces[*i].methods.iter().any(|(n, _)| n == &meth.name))
+            {
+                if !meth.is_override && !meth.is_abstract {
+                    return err(
+                        format!("method `{}` implements `{}.{}`; mark it `override fn`", meth.name, iname, meth.name),
+                        meth.pos,
+                    );
                 }
+                continue;
             }
             match (inherited, meth.is_override) {
                 (Some((owner, psig)), true) => {
@@ -755,10 +825,13 @@ impl Model {
                     return err(
                         format!("method `{}` overrides `{}.{}`; mark it `override fn`", meth.name, owner, meth.name),
                         meth.pos,
-                    )
+                    );
                 }
                 (None, true) => {
-                    return err(format!("`{}` is marked override but no base class or interface has this method", meth.name), meth.pos)
+                    return err(
+                        format!("`{}` is marked override but no base class or interface has this method", meth.name),
+                        meth.pos,
+                    );
                 }
                 (None, false) => {}
             }
@@ -772,19 +845,19 @@ impl Model {
                             return err(
                                 format!("`{}` does not implement `{}.{}{}`", name, iname, mname, isig.describe()),
                                 info.decl.pos,
-                            )
+                            );
                         }
                         Some((_, sig)) if !sig.same_shape(isig) => {
                             return err(
                                 format!("`{}.{}` must match `{}.{}{}`", name, mname, iname, mname, isig.describe()),
                                 info.decl.pos,
-                            )
+                            );
                         }
                         Some((owner, _)) if self.classes[&owner].private_methods.contains(mname) => {
                             return err(
                                 format!("`{}.{}` implements `{}` so it cannot be `private`", owner, mname, iname),
                                 info.decl.pos,
-                            )
+                            );
                         }
                         _ => {}
                     }
@@ -808,11 +881,12 @@ impl Model {
         // Constructor chaining.
         if let Some(init) = &info.decl.init {
             let parent_init = info.parent.as_ref().and_then(|p| self.find_init(p));
-            let calls_super = init.body.iter().any(|s| matches!(&s.kind, StmtKind::Expr(Expr { kind: ExprKind::SuperInit(_), .. })));
-            if let Some((pname, _)) = parent_init {
-                if !calls_super {
-                    return err(format!("`init` must call `super(...)` to initialize base class `{}`", pname), init.pos);
-                }
+            let calls_super =
+                init.body.iter().any(|s| matches!(&s.kind, StmtKind::Expr(Expr { kind: ExprKind::SuperInit(_), .. })));
+            if let Some((pname, _)) = parent_init
+                && !calls_super
+            {
+                return err(format!("`init` must call `super(...)` to initialize base class `{}`", pname), init.pos);
             }
         }
         Ok(())
@@ -1045,7 +1119,9 @@ impl Model {
             Type::Param(_) => true,
             Type::Array(i) | Type::Optional(i) => self.is_plain_params_ok(i),
             Type::Map(k, v) => self.is_plain_params_ok(k) && self.is_plain_params_ok(v),
-            Type::Struct(st, args) => self.plain_structs.contains(st) && args.iter().all(|a| self.is_plain_params_ok(a)),
+            Type::Struct(st, args) => {
+                self.plain_structs.contains(st) && args.iter().all(|a| self.is_plain_params_ok(a))
+            }
             other => self.is_plain(other),
         }
     }
@@ -1150,7 +1226,10 @@ pub fn subst(t: &Type, map: &HashMap<String, Type>) -> Type {
 }
 
 pub fn subst_sig(sig: &Signature, map: &HashMap<String, Type>) -> Signature {
-    Signature { params: sig.params.iter().map(|(n, t)| (n.clone(), subst(t, map))).collect(), ret: subst(&sig.ret, map) }
+    Signature {
+        params: sig.params.iter().map(|(n, t)| (n.clone(), subst(t, map))).collect(),
+        ret: subst(&sig.ret, map),
+    }
 }
 
 /// Learns type-parameter bindings by matching `pattern` (may contain `T`) against `actual`.
@@ -1314,11 +1393,7 @@ fn resolve_type(t: &TypeExpr, names: &TypeNames, tparams: &[String]) -> Result<T
     })
 }
 
-fn signature(
-    params: &[Param],
-    ret: &TypeExpr,
-    resolve: &dyn Fn(&TypeExpr) -> Result<Type>,
-) -> Result<Signature> {
+fn signature(params: &[Param], ret: &TypeExpr, resolve: &dyn Fn(&TypeExpr) -> Result<Type>) -> Result<Signature> {
     let mut ps: Vec<(String, Type)> = Vec::new();
     for p in params {
         if ps.iter().any(|(n, _)| n == &p.name) {

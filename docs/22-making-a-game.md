@@ -190,7 +190,7 @@ examples/pong/
 └── logic.kl    struct Ball, move_ball, bounce_off, follow, serve: pure game rules
 ```
 
-`tests/game/pong_logic.kl` checks the rules (does the ball bounce off the top wall? does the
+`tests/ui/game/pong_logic.kl` checks the rules (does the ball bounce off the top wall? does the
 computer paddle stay on screen?) with ordinary `print`s, and runs in the normal test suite.
 
 There is also `examples/asteroids/`: a ship with thrust and wrap-around, bullets with a

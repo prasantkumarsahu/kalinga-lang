@@ -1,0 +1,14 @@
+abstract class A {
+    private x: int = 1
+    abstract fn f() -> int
+    private fn g() {}
+    static fn make() -> int {
+        return 1
+    }
+}
+class B : A {
+    override fn f() -> int {
+        return self.x
+    }
+}
+fn main() {}

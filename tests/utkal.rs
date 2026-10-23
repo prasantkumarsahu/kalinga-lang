@@ -18,11 +18,21 @@ fn home(dir: &Path) -> PathBuf {
 }
 
 fn utkal(dir: &Path, args: &[&str]) -> Output {
-    Command::new(env!("CARGO_BIN_EXE_utkal")).args(args).current_dir(dir).env("UTKAL_HOME", home(dir)).output().expect("failed to run utkal")
+    Command::new(env!("CARGO_BIN_EXE_utkal"))
+        .args(args)
+        .current_dir(dir)
+        .env("UTKAL_HOME", home(dir))
+        .output()
+        .expect("failed to run utkal")
 }
 
 fn kalinga(dir: &Path, args: &[&str]) -> Output {
-    Command::new(env!("CARGO_BIN_EXE_kalinga")).args(args).current_dir(dir).env("UTKAL_HOME", home(dir)).output().expect("failed to run kalinga")
+    Command::new(env!("CARGO_BIN_EXE_kalinga"))
+        .args(args)
+        .current_dir(dir)
+        .env("UTKAL_HOME", home(dir))
+        .output()
+        .expect("failed to run kalinga")
 }
 
 fn ok(out: &Output) -> String {
@@ -80,7 +90,10 @@ fn path_packages_and_namespaces() {
     );
     write(&ws.join("geo/src/extra.kl"), "fn extra() -> str {\n    return \"extra\"\n}\n");
     ok(&utkal(&ws, &["new", "pixels", "--lib"]));
-    write(&ws.join("pixels/src/lib.kl"), "struct Point {\n    px: float\n}\n\nfn describe(p: Point) -> str {\n    return \"pixel {p.px}\"\n}\n");
+    write(
+        &ws.join("pixels/src/lib.kl"),
+        "struct Point {\n    px: float\n}\n\nfn describe(p: Point) -> str {\n    return \"pixel {p.px}\"\n}\n",
+    );
     ok(&utkal(&ws, &["new", "app"]));
     let app = ws.join("app");
     ok(&utkal(&app, &["add", "geo", "--path", "../geo"]));
@@ -116,13 +129,19 @@ fn main() {
     ok(&kalinga(&app, &["check", "src/main.kl"]));
 
     // A name two plain imports both define is an error that suggests `as`.
-    write(&app.join("src/main.kl"), "import \"geo\"\nimport \"pixels\"\n\nfn main() {\n    print(describe(origin()))\n}\n");
+    write(
+        &app.join("src/main.kl"),
+        "import \"geo\"\nimport \"pixels\"\n\nfn main() {\n    print(describe(origin()))\n}\n",
+    );
     let err = fails(&utkal(&app, &["build"]));
     assert!(err.contains("`describe` is defined in both `geo` and `pixels`"), "{}", err);
     assert!(err.contains("import \"...\" as name"), "{}", err);
 
     // Error messages name package types as `package.Name`.
-    write(&app.join("src/main.kl"), "import \"geo\"\nimport \"pixels\" as px\n\nfn main() {\n    let p: Point = px.Point(1.0)\n}\n");
+    write(
+        &app.join("src/main.kl"),
+        "import \"geo\"\nimport \"pixels\" as px\n\nfn main() {\n    let p: Point = px.Point(1.0)\n}\n",
+    );
     let err = fails(&utkal(&app, &["build"]));
     assert!(err.contains("pixels.Point"), "{}", err);
 
@@ -179,7 +198,11 @@ fn git_packages_versions_and_lock() {
     let helper = ws.join("helper");
     ok(&utkal(&helper, &["add", "mathx", "--git", &url, "--version", "0.1"]));
     let err = fails(&utkal(&app, &["add", "helper", "--path", "../helper"]));
-    assert!(err.contains("package `mathx` is required as") && err.contains("by `app`") && err.contains("by `helper`"), "{}", err);
+    assert!(
+        err.contains("package `mathx` is required as") && err.contains("by `app`") && err.contains("by `helper`"),
+        "{}",
+        err
+    );
     assert!(!std::fs::read_to_string(app.join("utkal.toml")).unwrap().contains("helper"), "a failed add is undone");
     // ...and compatible ones: tag v0.1.5 satisfies helper's "0.1".
     ok(&utkal(&app, &["add", "mathx", "--git", &url, "--tag", "v0.1.5"]));

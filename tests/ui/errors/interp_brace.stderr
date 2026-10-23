@@ -1,0 +1,3 @@
+tests/ui/errors/interp_brace.kl:1:23: error: unmatched `}` in string (write `}}` for a literal brace)
+1 | fn main() { print("a } b") }
+  |                       ^

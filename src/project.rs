@@ -30,7 +30,10 @@ pub struct Dep {
 pub enum Source {
     /// A folder, relative to the package that names it.
     Path(String),
-    Git { url: String, pin: GitPin },
+    Git {
+        url: String,
+        pin: GitPin,
+    },
 }
 
 pub enum GitPin {
@@ -88,7 +91,10 @@ pub fn parse_manifest(text: &str) -> Result<Manifest, String> {
     let package = doc.get("package").and_then(|p| p.as_table()).ok_or("missing a [package] section")?;
     let name = package.get("name").and_then(|n| n.as_str()).ok_or("[package] needs a `name`")?.to_string();
     if !valid_package_name(&name) {
-        return Err(format!("`{}` is not a valid package name (use letters, digits, `-` and `_`, starting with a letter)", name));
+        return Err(format!(
+            "`{}` is not a valid package name (use letters, digits, `-` and `_`, starting with a letter)",
+            name
+        ));
     }
     let version = package.get("version").and_then(|v| v.as_str()).unwrap_or("0.1.0").to_string();
 
@@ -99,7 +105,9 @@ pub fn parse_manifest(text: &str) -> Result<Manifest, String> {
             if !valid_package_name(dname) {
                 return Err(format!("`{}` is not a valid package name", dname));
             }
-            let spec = spec.as_table().ok_or_else(|| format!("dependency `{}` needs `git = \"...\"` or `path = \"...\"`", dname))?;
+            let spec = spec
+                .as_table()
+                .ok_or_else(|| format!("dependency `{}` needs `git = \"...\"` or `path = \"...\"`", dname))?;
             let get = |k: &str| spec.get(k).and_then(|v| v.as_str()).map(str::to_string);
             let source = match (get("path"), get("git")) {
                 (Some(p), None) => Source::Path(p),
@@ -114,14 +122,23 @@ pub fn parse_manifest(text: &str) -> Result<Manifest, String> {
                     .flatten()
                     .collect();
                     if pins.len() > 1 {
-                        return Err(format!("dependency `{}`: use only one of `tag`, `branch`, `rev` and `version`", dname));
+                        return Err(format!(
+                            "dependency `{}`: use only one of `tag`, `branch`, `rev` and `version`",
+                            dname
+                        ));
                     }
                     if let Some(GitPin::Version(v)) = pins.first() {
-                        Req::parse(v).ok_or_else(|| format!("dependency `{}`: `{}` is not a version requirement", dname, v))?;
+                        Req::parse(v)
+                            .ok_or_else(|| format!("dependency `{}`: `{}` is not a version requirement", dname, v))?;
                     }
                     Source::Git { url, pin: pins.into_iter().next().unwrap_or(GitPin::Head) }
                 }
-                _ => return Err(format!("dependency `{}` needs exactly one of `git = \"...\"` and `path = \"...\"`", dname)),
+                _ => {
+                    return Err(format!(
+                        "dependency `{}` needs exactly one of `git = \"...\"` and `path = \"...\"`",
+                        dname
+                    ));
+                }
             };
             deps.push(Dep { name: dname.clone(), source });
         }
@@ -134,7 +151,10 @@ pub fn parse_manifest(text: &str) -> Result<Manifest, String> {
             let (version, features) = match spec {
                 toml::Value::String(v) => (v.clone(), vec![]),
                 toml::Value::Table(t) => {
-                    let v = t.get("version").and_then(|v| v.as_str()).ok_or_else(|| format!("crate `{}` needs a `version`", cname))?;
+                    let v = t
+                        .get("version")
+                        .and_then(|v| v.as_str())
+                        .ok_or_else(|| format!("crate `{}` needs a `version`", cname))?;
                     let fs = match t.get("features") {
                         None => vec![],
                         Some(f) => f
@@ -153,7 +173,8 @@ pub fn parse_manifest(text: &str) -> Result<Manifest, String> {
 }
 
 pub fn valid_package_name(n: &str) -> bool {
-    n.starts_with(|c: char| c.is_ascii_alphabetic()) && n.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+    n.starts_with(|c: char| c.is_ascii_alphabetic())
+        && n.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
 }
 
 /// The namespace (unit) name of a package: `my-lib` → `my_lib`.
@@ -180,7 +201,7 @@ pub fn merge_crate(list: &mut Vec<CrateDep>, dep: &CrateDep) -> Result<(), Strin
                 return Err(format!(
                     "crate `{}` is used with two versions: \"{}\" and \"{}\"",
                     dep.name, existing.version, dep.version
-                ))
+                ));
             }
         }
     }
@@ -353,8 +374,14 @@ pub fn resolve(project: &Path, mode: Mode) -> Result<Resolved, String> {
         let (dep, base, requirer) = queue.remove(0);
         let desc = match &dep.source {
             Source::Path(p) => {
-                let dir = std::fs::canonicalize(base.join(p))
-                    .map_err(|_| format!("package `{}` (required by {}): folder {} not found", dep.name, requirer, base.join(p).display()))?;
+                let dir = std::fs::canonicalize(base.join(p)).map_err(|_| {
+                    format!(
+                        "package `{}` (required by {}): folder {} not found",
+                        dep.name,
+                        requirer,
+                        base.join(p).display()
+                    )
+                })?;
                 format!("path {}", strip_verbatim(&dir).display())
             }
             Source::Git { .. } => dep.source.describe(),
@@ -363,7 +390,8 @@ pub fn resolve(project: &Path, mode: Mode) -> Result<Resolved, String> {
             let compatible = *first_desc == desc
                 || match (&dep.source, version) {
                     (Source::Git { url, pin: GitPin::Version(req) }, Some(v)) => {
-                        first_desc.starts_with(&format!("git {} ", url)) && Req::parse(req).is_some_and(|r| r.matches(*v))
+                        first_desc.starts_with(&format!("git {} ", url))
+                            && Req::parse(req).is_some_and(|r| r.matches(*v))
                     }
                     _ => false,
                 };
@@ -386,7 +414,8 @@ pub fn resolve(project: &Path, mode: Mode) -> Result<Resolved, String> {
                 (dir, version)
             }
         };
-        let manifest = read_manifest(&dir).map_err(|e| format!("package `{}` (required by {}): {}", dep.name, requirer, e))?;
+        let manifest =
+            read_manifest(&dir).map_err(|e| format!("package `{}` (required by {}): {}", dep.name, requirer, e))?;
         if manifest.name != dep.name {
             return Err(format!(
                 "{} asks for package `{}`, but {} is named `{}`",
@@ -442,7 +471,13 @@ fn git(dir: Option<&Path>, args: &[&str]) -> Result<String, String> {
 }
 
 /// Returns the checkout folder, its commit and (when tagged) its version.
-fn fetch_git(name: &str, url: &str, pin: &GitPin, locked: Option<String>, mode: Mode) -> Result<(PathBuf, String, Option<Version>), String> {
+fn fetch_git(
+    name: &str,
+    url: &str,
+    pin: &GitPin,
+    locked: Option<String>,
+    mode: Mode,
+) -> Result<(PathBuf, String, Option<Version>), String> {
     use std::hash::{Hash, Hasher};
     let mut h = std::collections::hash_map::DefaultHasher::new();
     url.hash(&mut h);
@@ -488,7 +523,8 @@ fn fetch_git(name: &str, url: &str, pin: &GitPin, locked: Option<String>, mode: 
     if !checkout.join(MANIFEST).exists() {
         let tmp = cache.join("src").join(format!("{}-{}.tmp", name, short(&commit)));
         let _ = std::fs::remove_dir_all(&tmp);
-        std::fs::create_dir_all(tmp.parent().unwrap()).map_err(|e| format!("cannot create {}: {}", tmp.display(), e))?;
+        std::fs::create_dir_all(tmp.parent().unwrap())
+            .map_err(|e| format!("cannot create {}: {}", tmp.display(), e))?;
         git(None, &["clone", "--quiet", "--no-checkout", &db.display().to_string(), &tmp.display().to_string()])?;
         git(Some(&tmp), &["-c", "advice.detachedHead=false", "checkout", "--quiet", "--detach", &commit])?;
         let _ = std::fs::remove_dir_all(&checkout);

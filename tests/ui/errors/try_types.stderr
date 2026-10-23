@@ -1,0 +1,3 @@
+tests/ui/errors/try_types.kl:5:16: error: `?` passes on a `str` error, but this function returns `int` errors
+5 |     let x = f()?
+  |                ^

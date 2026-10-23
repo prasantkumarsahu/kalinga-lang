@@ -1,0 +1,3 @@
+tests/ui/errors/private_field.kl:11:20: error: field `x` is private to `A`
+11 |         return self.x
+   |                    ^

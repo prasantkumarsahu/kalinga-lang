@@ -1,0 +1,3 @@
+tests/ui/errors/try_void.kl:5:16: error: `?` can only be used in a function that returns a `Result`; this one returns `void`
+5 |     let x = f()?
+  |                ^

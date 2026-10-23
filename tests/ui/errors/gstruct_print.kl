@@ -1,0 +1,3 @@
+struct B<T> { v: T }
+class C {}
+fn main() { print(B(C())) }

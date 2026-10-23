@@ -1,0 +1,5 @@
+# . 6 Grid(w: 3, h: 2, cells: [., ., ., ., #, .])
+[5, 0, 0, 0] true
+Pair(first: 3, second: x) 4
+Vec2(x: 2.0, y: 4.0) Vec2(x: 3.0, y: 6.0) Vec2(x: 1.0, y: 2.0)
+e

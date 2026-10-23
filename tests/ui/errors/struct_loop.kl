@@ -1,0 +1,2 @@
+struct L { next: L? }
+fn main() {}

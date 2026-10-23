@@ -1,0 +1,3 @@
+tests/ui/errors/override_nowhere.kl:2:14: error: `show` is marked override but no base class or interface has this method
+2 |     override fn show() -> str { return "a" }
+  |              ^

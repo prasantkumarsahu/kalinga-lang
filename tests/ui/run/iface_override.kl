@@ -1,0 +1,14 @@
+interface S { fn show() -> str }
+class Base : S {
+    override fn show() -> str { return "base" }
+}
+class A : Base {
+    override fn show() -> str { return "a" }
+}
+class B : A {
+    override fn show() -> str { return "b" }
+}
+fn main() {
+    let xs: [S] = [A(), B()]
+    for x in xs { print(x.show()) }
+}

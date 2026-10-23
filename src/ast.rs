@@ -259,13 +259,21 @@ pub enum ExprKind {
     /// `super.name(args)`
     SuperCall(String, Vec<Expr>),
     /// `x as Dog` (an optional) or `x is Dog` (a bool)
-    Downcast { value: Box<Expr>, class: String, test_only: bool },
+    Downcast {
+        value: Box<Expr>,
+        class: String,
+        test_only: bool,
+    },
     /// `await expr`
     Await(Box<Expr>),
     /// `expr?`: unwrap an `Ok` / non-`none` value or return the error / `none` early.
     Try(Box<Expr>),
     /// `fn(x: int) -> int { ... }` or `fn(x) => x * 2`
-    Lambda { params: Vec<(String, Option<TypeExpr>, Pos)>, ret: Option<TypeExpr>, body: LambdaBody },
+    Lambda {
+        params: Vec<(String, Option<TypeExpr>, Pos)>,
+        ret: Option<TypeExpr>,
+        body: LambdaBody,
+    },
 }
 
 #[derive(Debug, Clone)]

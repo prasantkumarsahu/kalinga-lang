@@ -1,0 +1,11 @@
+fn main() {
+    var m: {str: int} = {}
+    m["b"] = 2
+    m["a"] = 1
+    m["a"] += 5
+    var lists = {1: [10]}
+    lists[1].push(20)
+    print(m, m["a"], m.get("z"), m.has("b"), len(m))
+    print(m.keys(), m.values(), lists, m.remove("b"), m)
+    for k in lists { print(k) }
+}

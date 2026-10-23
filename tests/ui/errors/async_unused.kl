@@ -1,0 +1,6 @@
+async fn job() -> int {
+    return 1
+}
+async fn main() {
+    job()
+}

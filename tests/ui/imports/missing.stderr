@@ -1,0 +1,3 @@
+tests/ui/imports/missing.kl:1:1: error: cannot find `nope.kl` (looked for tests/ui/imports/nope.kl)
+1 | import "nope.kl"
+  | ^

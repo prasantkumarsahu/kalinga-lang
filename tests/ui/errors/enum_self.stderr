@@ -1,0 +1,3 @@
+tests/ui/errors/enum_self.kl:1:1: error: enum `T` contains itself; put the recursive part in an array (`[T]`) or use a class
+1 | enum T { Leaf, Node(l: T) }
+  | ^

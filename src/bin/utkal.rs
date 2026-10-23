@@ -60,22 +60,30 @@ fn main() {
 /// The project folder: the nearest one above the current folder holding `utkal.toml`.
 fn project_dir() -> Result<PathBuf, String> {
     let cwd = std::env::current_dir().map_err(|e| format!("cannot read the current folder: {}", e))?;
-    project::find_project(&cwd).ok_or_else(|| format!("no {} here or in any parent folder (create a project with `utkal new <name>`)", MANIFEST))
+    project::find_project(&cwd).ok_or_else(|| {
+        format!("no {} here or in any parent folder (create a project with `utkal new <name>`)", MANIFEST)
+    })
 }
 
 fn new(args: &[&str]) -> Result<i32, String> {
-    let Some(name) = args.first().filter(|a| !a.starts_with('-')) else { return Err("usage: utkal new <name> [--lib]".into()) };
+    let Some(name) = args.first().filter(|a| !a.starts_with('-')) else {
+        return Err("usage: utkal new <name> [--lib]".into());
+    };
     let lib = args.contains(&"--lib");
     let dir = PathBuf::from(name);
     let pkg = dir.file_name().and_then(|n| n.to_str()).unwrap_or(name).to_string();
     if !project::valid_package_name(&pkg) {
-        return Err(format!("`{}` is not a valid package name (use letters, digits, `-` and `_`, starting with a letter)", pkg));
+        return Err(format!(
+            "`{}` is not a valid package name (use letters, digits, `-` and `_`, starting with a letter)",
+            pkg
+        ));
     }
     if dir.exists() {
         return Err(format!("{} already exists", dir.display()));
     }
     let src = dir.join("src");
-    let write = |p: PathBuf, text: &str| std::fs::write(&p, text).map_err(|e| format!("cannot write {}: {}", p.display(), e));
+    let write =
+        |p: PathBuf, text: &str| std::fs::write(&p, text).map_err(|e| format!("cannot write {}: {}", p.display(), e));
     std::fs::create_dir_all(&src).map_err(|e| format!("cannot create {}: {}", src.display(), e))?;
     write(
         dir.join(MANIFEST),
@@ -188,7 +196,10 @@ fn set_entry(text: &str, section: &str, name: &str, line: Option<&str>) -> Strin
     };
     match lines.iter().position(|l| l.trim() == header) {
         Some(start) => {
-            let end = lines[start + 1..].iter().position(|l| l.trim_start().starts_with('[')).map_or(lines.len(), |i| start + 1 + i);
+            let end = lines[start + 1..]
+                .iter()
+                .position(|l| l.trim_start().starts_with('['))
+                .map_or(lines.len(), |i| start + 1 + i);
             match (lines[start + 1..end].iter().position(|l| is_entry(l)), line) {
                 (Some(i), Some(new)) => lines[start + 1 + i] = new.to_string(),
                 (Some(i), None) => {
@@ -226,7 +237,10 @@ fn build(dir: &Path) -> Result<PathBuf, String> {
     project::resolve(dir, Mode::Fetch)?;
     let main = dir.join("src").join("main.kl");
     if !main.is_file() {
-        return Err(format!("{} not found (a library has only src/lib.kl: use `utkal check` or `utkal test`)", main.display()));
+        return Err(format!(
+            "{} not found (a library has only src/lib.kl: use `utkal check` or `utkal test`)",
+            main.display()
+        ));
     }
     let target = dir.join("target");
     std::fs::create_dir_all(&target).map_err(|e| format!("cannot create {}: {}", target.display(), e))?;
@@ -248,7 +262,8 @@ fn check() -> Result<i32, String> {
     for file in ["main.kl", "lib.kl"] {
         let path = dir.join("src").join(file);
         if path.is_file() {
-            let source = std::fs::read_to_string(&path).map_err(|e| format!("cannot read {}: {}", path.display(), e))?;
+            let source =
+                std::fs::read_to_string(&path).map_err(|e| format!("cannot read {}: {}", path.display(), e))?;
             driver::check(&path.display().to_string(), &source)?;
             checked += 1;
         }
@@ -264,7 +279,9 @@ fn test() -> Result<i32, String> {
     let dir = project_dir()?;
     project::resolve(&dir, Mode::Fetch)?;
     let mut tests: Vec<PathBuf> = std::fs::read_dir(dir.join("tests"))
-        .map(|rd| rd.filter_map(|e| e.ok().map(|e| e.path())).filter(|p| p.extension().is_some_and(|x| x == "kl")).collect())
+        .map(|rd| {
+            rd.filter_map(|e| e.ok().map(|e| e.path())).filter(|p| p.extension().is_some_and(|x| x == "kl")).collect()
+        })
         .unwrap_or_default();
     tests.sort();
     if tests.is_empty() {
@@ -276,7 +293,10 @@ fn test() -> Result<i32, String> {
         let name = t.file_name().unwrap().to_string_lossy().to_string();
         let ok = match driver::build(t, None) {
             Ok(exe) => {
-                let out = Command::new(&exe).current_dir(&dir).output().map_err(|e| format!("cannot run {}: {}", exe.display(), e))?;
+                let out = Command::new(&exe)
+                    .current_dir(&dir)
+                    .output()
+                    .map_err(|e| format!("cannot run {}: {}", exe.display(), e))?;
                 if !out.status.success() {
                     eprint!("{}", String::from_utf8_lossy(&out.stderr));
                 }

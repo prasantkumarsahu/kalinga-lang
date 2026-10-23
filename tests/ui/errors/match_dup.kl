@@ -1,0 +1,8 @@
+enum C { R, G, B }
+fn main() {
+    match C.R {
+        R => print(1)
+        R => print(2)
+        _ => print(3)
+    }
+}

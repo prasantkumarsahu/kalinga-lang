@@ -1,0 +1,6 @@
+class D {
+    init() {
+        let s = self
+    }
+}
+fn main() {}

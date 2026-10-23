@@ -1,0 +1,26 @@
+enum Shape {
+    Circle(r: float)
+    Rect(w: float, h: float)
+    Empty
+}
+
+fn area(s: Shape) -> float {
+    match s {
+        Circle(r) => return 3.0 * r * r
+        Rect(w, h) => {
+            return w * h
+        }
+        Empty => return 0.0
+    }
+}
+
+fn main() {
+    for s in [Shape.Circle(1.0), Shape.Rect(2.0, 3.0), Shape.Empty] {
+        print(s, area(s))
+    }
+    print(Shape.Empty == Shape.Empty)
+    match "b" {
+        "a" => print(1)
+        _ => print(2)
+    }
+}

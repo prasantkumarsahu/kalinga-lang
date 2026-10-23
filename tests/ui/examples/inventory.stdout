@@ -1,0 +1,6 @@
+sold 12 apples: true
+sold 9 pears: false
+sold 1 kiwi: false
+  apple: 3 at 0.5  (low!)
+  pear: 3 at 0.75  (low!)
+stock value: 3.75

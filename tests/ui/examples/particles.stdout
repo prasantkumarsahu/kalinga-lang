@@ -1,0 +1,5 @@
+frame 0: 10000 particles, highest at 8 cm
+frame 30: 10000 particles, highest at 122 cm
+frame 60: 9841 particles, highest at -8 cm
+frame 90: 4776 particles, highest at -384 cm
+120 frames of 10000 particles took under a second: true

@@ -1,0 +1,5 @@
+import "std/game"
+class G : Game {
+    override fn draw(screen: Screen) {}
+}
+fn main() {}

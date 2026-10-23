@@ -1,0 +1,3 @@
+tests/ui/errors/struct_mut.kl:4:13: error: this method changes `self`; declare it `mut fn`
+4 |         self.x = 1
+  |             ^

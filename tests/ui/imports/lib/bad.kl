@@ -1,0 +1,3 @@
+fn oops() {
+    let x: int = "s"
+}

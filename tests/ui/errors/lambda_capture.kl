@@ -1,0 +1,6 @@
+fn main() {
+    var n = 0
+    let f = fn() {
+        n += 1
+    }
+}

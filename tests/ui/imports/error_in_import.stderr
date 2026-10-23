@@ -1,0 +1,3 @@
+tests/ui/imports/lib/bad.kl:2:18: error: expected `int`, found `str`
+2 |     let x: int = "s"
+  |                  ^

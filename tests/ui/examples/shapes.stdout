@@ -1,0 +1,6 @@
+circle: area 3.14159, round
+rect: area 6.0, 4 corners
+rect: area 16.0, 4 corners
+largest is the rect
+a rect of 2.0 x 3.0
+a rect of 4.0 x 4.0

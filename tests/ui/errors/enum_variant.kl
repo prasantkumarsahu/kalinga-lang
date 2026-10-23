@@ -1,0 +1,2 @@
+enum C { R, G, B }
+fn main() { print(C.X) }

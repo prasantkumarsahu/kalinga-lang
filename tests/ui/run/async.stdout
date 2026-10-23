@@ -1,0 +1,4 @@
+[slow, fast, medium] [fast, medium, slow] concurrent: true
+started background
+background result: background
+thread result ok: true loader: 40

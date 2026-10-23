@@ -1,0 +1,5 @@
+interface S { fn show() -> str }
+class A : S {
+    fn show() -> str { return "a" }
+}
+fn main() {}

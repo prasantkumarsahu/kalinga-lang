@@ -197,7 +197,8 @@ through a different reference (for example `a.f(a)` where `f` modifies `a`) stop
 | `src/driver.rs` | loads files and packages, invokes `rustc` / `cargo` and runs the program |
 | `std/` | bundled modules: `math2d.kl`, `game.kl` and its Rust glue |
 | `examples/` | `hello.kl`, `oop.kl`, `fib.kl`, `inventory.kl`, `pipeline.kl`, `particles.kl`, `shapes/` (modules), `interop/` (Rust), `pong/`, `asteroids/` |
-| `tests/examples.rs`, `tests/utkal.rs` | end-to-end tests of the compiler and of utkal |
+| `tests/ui/`, `tests/ui.rs` | output snapshot tests: each `.kl` with its expected `.stdout` / `.stderr` / `.exit` (`BLESS=1` updates them) |
+| `tests/cli.rs`, `tests/utkal.rs` | command-line behaviour of `kalinga` and `utkal` |
 | `editors/vscode/` | VS Code extension |
 | `docs/` | language guide and reference |
-| `tests/docs.rs` | compiles every example in `docs/` |
+| `tests/docs.rs` | compiles every example in `docs/` and checks its documented output |

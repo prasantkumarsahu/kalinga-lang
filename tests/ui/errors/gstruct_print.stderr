@@ -1,0 +1,3 @@
+tests/ui/errors/gstruct_print.kl:3:19: error: cannot print a `B<C>` value (print its fields or a method result instead)
+3 | fn main() { print(B(C())) }
+  |                   ^

@@ -1,0 +1,3 @@
+tests/ui/errors/generic_arity.kl:7:20: error: `Holder` needs 1 type argument(s), e.g. `Holder<int>`
+7 | fn main() { let b: Holder<int, str> = Holder() }
+  |                    ^

@@ -13,7 +13,7 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::ast::*;
-use crate::error::{err, Pos, Result};
+use crate::error::{Pos, Result, err};
 
 /// What the driver learned while loading files.
 #[derive(Default)]
@@ -306,7 +306,12 @@ impl<'a> Resolver<'a> {
                 if let Some((alias, name)) = n.split_once('.') {
                     *n = match self.resolve_qualified(alias, name, *pos) {
                         Some(r) => r?,
-                        None => return err(format!("`{}` is not an imported package (use `import \"...\" as {}`)", alias, alias), *pos),
+                        None => {
+                            return err(
+                                format!("`{}` is not an imported package (use `import \"...\" as {}`)", alias, alias),
+                                *pos,
+                            );
+                        }
                     };
                 } else if !tparams.contains(n) {
                     *n = self.resolve(n, *pos)?;
@@ -510,7 +515,12 @@ impl<'a> Resolver<'a> {
                 sc.pop();
                 r?;
             }
-            ExprKind::Int(_) | ExprKind::Float(_) | ExprKind::Str(_) | ExprKind::Bool(_) | ExprKind::None | ExprKind::SelfRef => {}
+            ExprKind::Int(_)
+            | ExprKind::Float(_)
+            | ExprKind::Str(_)
+            | ExprKind::Bool(_)
+            | ExprKind::None
+            | ExprKind::SelfRef => {}
         }
         Ok(())
     }

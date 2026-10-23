@@ -1,0 +1,8 @@
+fn f() -> Result<int, str> {
+    return Ok(1)
+}
+fn g() -> Result<int, int> {
+    let x = f()?
+    return Ok(x)
+}
+fn main() {}

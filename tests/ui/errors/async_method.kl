@@ -1,0 +1,4 @@
+class C {
+    async fn m() {}
+}
+fn main() {}

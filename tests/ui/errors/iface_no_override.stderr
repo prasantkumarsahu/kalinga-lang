@@ -1,0 +1,3 @@
+tests/ui/errors/iface_no_override.kl:3:5: error: method `show` implements `S.show`; mark it `override fn`
+3 |     fn show() -> str { return "a" }
+  |     ^

@@ -1,0 +1,8 @@
+fn f() -> Result<int, str> {
+    return Ok(1)
+}
+fn main() {
+    match f() {
+        Ok(v) => print(v)
+    }
+}

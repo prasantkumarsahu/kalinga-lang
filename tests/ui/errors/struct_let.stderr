@@ -1,0 +1,3 @@
+tests/ui/errors/struct_let.kl:12:5: error: cannot change `v`: it was declared with `let` (use `var` for a mutable variable) (`grow` is a `mut fn`, so it needs a variable it can change)
+12 |     v.grow()
+   |     ^

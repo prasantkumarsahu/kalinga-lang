@@ -1,0 +1,11 @@
+import "util.kl"
+
+class Square {
+    side: int
+    init(side: int) {
+        self.side = side
+    }
+    fn area() -> int {
+        return twice(self.side) / 2 * self.side
+    }
+}

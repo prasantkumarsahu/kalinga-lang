@@ -1,0 +1,3 @@
+tests/ui/errors/self_in_init.kl:3:17: error: `self` cannot be used as a value inside `init` (the object is not finished yet)
+3 |         let s = self
+  |                 ^

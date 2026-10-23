@@ -9,8 +9,10 @@ use std::collections::{HashMap, HashSet};
 use std::fmt::Write as _;
 
 use crate::ast::*;
-use crate::checker::{class_trait, has_params, is_map_key, subst, subst_sig, unify, Model, Signature, StructOp, Type, BUILTINS};
-use crate::error::{err, Pos, Result};
+use crate::checker::{
+    BUILTINS, Model, Signature, StructOp, Type, class_trait, has_params, is_map_key, subst, subst_sig, unify,
+};
+use crate::error::{Pos, Result, err};
 
 pub fn generate(prog: &Program, model: &Model) -> Result<String> {
     let g = Gen { m: model, self_values: RefCell::new(HashSet::new()), cast_targets: RefCell::new(HashSet::new()) };
@@ -18,10 +20,9 @@ pub fn generate(prog: &Program, model: &Model) -> Result<String> {
 }
 
 const RUST_KEYWORDS: &[&str] = &[
-    "as", "async", "await", "const", "dyn", "enum", "extern", "impl", "loop", "match", "mod", "move",
-    "mut", "pub", "ref", "static", "struct", "trait", "type", "unsafe", "use", "where", "yield",
-    "abstract", "become", "box", "do", "final", "macro", "priv", "typeof", "unsized", "virtual", "try",
-    "gen", "union",
+    "as", "async", "await", "const", "dyn", "enum", "extern", "impl", "loop", "match", "mod", "move", "mut", "pub",
+    "ref", "static", "struct", "trait", "type", "unsafe", "use", "where", "yield", "abstract", "become", "box", "do",
+    "final", "macro", "priv", "typeof", "unsized", "virtual", "try", "gen", "union",
 ];
 
 /// Rust identifier for a user-chosen variable, field or method name.
@@ -148,7 +149,6 @@ fn clone_if(code: String, ty: &Type) -> String {
     if ty.is_copy() { code } else { format!("{}.clone()", code) }
 }
 
-
 fn indent(n: usize) -> String {
     "    ".repeat(n)
 }
@@ -181,7 +181,9 @@ impl<'a> Gen<'a> {
             Type::Interface(i) => format!("Rc<RefCell<dyn {}>>", i),
             Type::Enum(e) | Type::Extern(e) => e.clone(),
             Type::Struct(n, args) if args.is_empty() => n.clone(),
-            Type::Struct(n, args) => format!("{}<{}>", n, args.iter().map(|a| self.rty(a)).collect::<Vec<_>>().join(", ")),
+            Type::Struct(n, args) => {
+                format!("{}<{}>", n, args.iter().map(|a| self.rty(a)).collect::<Vec<_>>().join(", "))
+            }
             Type::Func(ps, r) => {
                 let ps: Vec<String> = ps.iter().map(|p| self.rty(p)).collect();
                 if **r == Type::Void {
@@ -233,7 +235,9 @@ impl<'a> Gen<'a> {
                 format!("({}).map(|__v| {})", code, self.coerce("__v".into(), a, b, pos)?)
             }
             (f, Type::Optional(inner)) => format!("Some({})", self.coerce(code, f, inner, pos)?),
-            (Type::Class(_), Type::Class(_)) | (Type::Class(_), Type::Interface(_)) | (Type::Interface(_), Type::Interface(_)) => {
+            (Type::Class(_), Type::Class(_))
+            | (Type::Class(_), Type::Interface(_))
+            | (Type::Interface(_), Type::Interface(_)) => {
                 format!("({} as {})", code, self.rty(to))
             }
             (Type::Map(_, a), Type::Map(_, b)) => format!(
@@ -306,10 +310,25 @@ impl<'a> Gen<'a> {
             let bound = if supers.is_empty() { String::new() } else { format!(": {}", supers.join(" + ")) };
             writeln!(out, "trait {}{} {{", iname, bound).unwrap();
             for (mname, sig) in &info.methods {
-                writeln!(out, "    fn {}(&mut self{}){};", rid(mname), self.comma_params(sig), self.ret_suffix(&sig.ret)).unwrap();
+                writeln!(
+                    out,
+                    "    fn {}(&mut self{}){};",
+                    rid(mname),
+                    self.comma_params(sig),
+                    self.ret_suffix(&sig.ret)
+                )
+                .unwrap();
             }
-            for target in self.m.class_order.iter().filter(|c| self.m.all_interfaces(c).contains(iname) && self.is_cast_target(c)) {
-                writeln!(out, "    fn __as_{}(&self) -> Option<{}> {{ None }}", target, self.rty(&Type::Class(target.clone()))).unwrap();
+            for target in
+                self.m.class_order.iter().filter(|c| self.m.all_interfaces(c).contains(iname) && self.is_cast_target(c))
+            {
+                writeln!(
+                    out,
+                    "    fn __as_{}(&self) -> Option<{}> {{ None }}",
+                    target,
+                    self.rty(&Type::Class(target.clone()))
+                )
+                .unwrap();
             }
             out.push_str("}\n");
         }
@@ -323,7 +342,8 @@ impl<'a> Gen<'a> {
         }
         out.push_str(&functions);
         let main_async = self.m.async_fns.contains("main");
-        let call_main = if main_async { format!("__block_on({}())", fn_id("main")) } else { format!("{}()", fn_id("main")) };
+        let call_main =
+            if main_async { format!("__block_on({}())", fn_id("main")) } else { format!("{}()", fn_id("main")) };
         if matches!(self.m.functions.get("main").map(|s| &s.ret), Some(Type::Result(..))) {
             writeln!(
                 out,
@@ -333,7 +353,12 @@ impl<'a> Gen<'a> {
             .unwrap();
             writeln!(out, "\nfn main() {{\n    __kl_run(__kl_main_result);\n}}").unwrap();
         } else if main_async {
-            writeln!(out, "\nfn __kl_main_async() {{\n    {};\n}}\n\nfn main() {{\n    __kl_run(__kl_main_async);\n}}", call_main).unwrap();
+            writeln!(
+                out,
+                "\nfn __kl_main_async() {{\n    {};\n}}\n\nfn main() {{\n    __kl_run(__kl_main_async);\n}}",
+                call_main
+            )
+            .unwrap();
         } else {
             writeln!(out, "\nfn main() {{\n    __kl_run({});\n}}", fn_id("main")).unwrap();
         }
@@ -369,10 +394,14 @@ impl<'a> Gen<'a> {
             }
             for meth in &info.decl.methods {
                 if meth.is_abstract {
-                    method_bodies.insert((cname.clone(), meth.name.clone()), "        unreachable!(\"abstract method\")\n".into());
+                    method_bodies.insert(
+                        (cname.clone(), meth.name.clone()),
+                        "        unreachable!(\"abstract method\")\n".into(),
+                    );
                     continue;
                 }
-                let sig = if meth.is_static { info.statics[&meth.name].clone() } else { info.methods[&meth.name].clone() };
+                let sig =
+                    if meth.is_static { info.statics[&meth.name].clone() } else { info.methods[&meth.name].clone() };
                 let mut cx = Ctx::new(Some(cname.clone()), sig.ret.clone(), false);
                 cx.tparams = info.tparams.clone();
                 cx.is_static = meth.is_static;
@@ -401,7 +430,8 @@ impl<'a> Gen<'a> {
         for name in &self.m.struct_order {
             let info = &self.m.structs[name];
             let plain = self.m.plain_structs.contains(name);
-            let self_ty = if info.tparams.is_empty() { name.clone() } else { format!("{}<{}>", name, info.tparams.join(", ")) };
+            let self_ty =
+                if info.tparams.is_empty() { name.clone() } else { format!("{}<{}>", name, info.tparams.join(", ")) };
             writeln!(out, "\n// ===== struct {} =====", name).unwrap();
             writeln!(out, "#[derive(Clone{})]", if plain { ", PartialEq" } else { "" }).unwrap();
             writeln!(out, "struct {} {{", self_ty).unwrap();
@@ -423,7 +453,15 @@ impl<'a> Gen<'a> {
                     body = async_body(&body);
                 }
                 if m.is_static {
-                    writeln!(out, "    fn __s_{}({}){} {{\n{}    }}", meth.name, self.params_decl(&m.sig), self.fn_ret(&m.sig.ret, m.is_async), body).unwrap();
+                    writeln!(
+                        out,
+                        "    fn __s_{}({}){} {{\n{}    }}",
+                        meth.name,
+                        self.params_decl(&m.sig),
+                        self.fn_ret(&m.sig.ret, m.is_async),
+                        body
+                    )
+                    .unwrap();
                 } else {
                     let recv = if m.is_mut { "&mut self" } else { "&self" };
                     writeln!(
@@ -454,7 +492,15 @@ impl<'a> Gen<'a> {
                 cx.tparams = info.tparams.clone();
                 cx.strukt = Some(name.clone());
                 let body = self.body_in(&mut cx, &sig, &decl.body, decl.pos, &format!("op {}", o.op.rust()), 2)?;
-                writeln!(out, "    fn __op_{}(&self{}){} {{\n{}    }}", o.index, self.comma_params(&sig), self.ret_suffix(&o.ret), body).unwrap();
+                writeln!(
+                    out,
+                    "    fn __op_{}(&self{}){} {{\n{}    }}",
+                    o.index,
+                    self.comma_params(&sig),
+                    self.ret_suffix(&o.ret),
+                    body
+                )
+                .unwrap();
             }
             out.push_str("}\n");
             if plain {
@@ -463,7 +509,14 @@ impl<'a> Gen<'a> {
                 let bounds = if info.tparams.is_empty() {
                     String::new()
                 } else {
-                    format!("<{}>", info.tparams.iter().map(|t| format!("{}: Clone + 'static + __KlShow", t)).collect::<Vec<_>>().join(", "))
+                    format!(
+                        "<{}>",
+                        info.tparams
+                            .iter()
+                            .map(|t| format!("{}: Clone + 'static + __KlShow", t))
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    )
                 };
                 writeln!(
                     out,
@@ -491,7 +544,9 @@ impl<'a> Gen<'a> {
                 }
                 Ok(subst(t, &self.m.struct_bindings(st, args)))
             }
-            None if info.methods.contains_key(f) => err(format!("`{}` is a method of `{}`; call it with `()`", f, st), pos),
+            None if info.methods.contains_key(f) => {
+                err(format!("`{}` is a method of `{}`; call it with `()`", f, st), pos)
+            }
             None => err(format!("`{}` has no field `{}`", st, f), pos),
         }
     }
@@ -502,20 +557,38 @@ impl<'a> Gen<'a> {
         let ops: Vec<StructOp> = self.m.structs[st]
             .ops
             .iter()
-            .map(|o| StructOp { param: o.param.as_ref().map(|p| subst(p, &map)), ret: subst(&o.ret, &map), ..o.clone() })
+            .map(|o| StructOp {
+                param: o.param.as_ref().map(|p| subst(p, &map)),
+                ret: subst(&o.ret, &map),
+                ..o.clone()
+            })
             .collect();
         let candidates = ops.iter().filter(|o| o.op == op);
         match rhs {
             None => candidates.into_iter().find(|o| o.param.is_none()).cloned(),
             Some(rt) => {
                 let all: Vec<&StructOp> = candidates.filter(|o| o.param.is_some()).collect();
-                all.iter().find(|o| o.param.as_ref() == Some(rt)).or_else(|| all.iter().find(|o| self.m.assignable(rt, o.param.as_ref().unwrap()))).map(|o| (*o).clone())
+                all.iter()
+                    .find(|o| o.param.as_ref() == Some(rt))
+                    .or_else(|| all.iter().find(|o| self.m.assignable(rt, o.param.as_ref().unwrap())))
+                    .map(|o| (*o).clone())
             }
         }
     }
 
-    /// Calls `method` on a struct value: on `self`, on a place (for `mut fn`), or on any value.
-    fn struct_method_call(&self, cx: &mut Ctx, st: &str, targs: &[Type], recv: &Expr, name: &str, args: &[Expr], pos: Pos) -> Result<(String, Type)> {
+    /// Calls `method` on a value of struct type `strukt` (a `Type::Struct`): on `self`, on a
+    /// place (for `mut fn`), or on any value.
+    fn struct_method_call(
+        &self,
+        cx: &mut Ctx,
+        strukt: &Type,
+        recv: &Expr,
+        name: &str,
+        args: &[Expr],
+        pos: Pos,
+    ) -> Result<(String, Type)> {
+        let Type::Struct(st, targs) = strukt else { unreachable!("struct_method_call on `{}`", strukt) };
+        let (st, targs) = (st.as_str(), targs.as_slice());
         let info = &self.m.structs[st];
         let mut m = match info.methods.get(name) {
             Some(m) if !m.is_static => m.clone(),
@@ -548,7 +621,11 @@ impl<'a> Gen<'a> {
     /// `Math`, `Random` or `Time` used as a receiver (unless a variable shadows it).
     fn library_receiver(&self, cx: &Ctx, recv: &Expr) -> Option<String> {
         match &recv.kind {
-            ExprKind::Ident(n) if matches!(n.as_str(), "Math" | "Random" | "Time" | "Thread" | "Async") && cx.lookup(n).is_none() => Some(n.clone()),
+            ExprKind::Ident(n)
+                if matches!(n.as_str(), "Math" | "Random" | "Time" | "Thread" | "Async") && cx.lookup(n).is_none() =>
+            {
+                Some(n.clone())
+            }
             _ => None,
         }
     }
@@ -571,10 +648,13 @@ impl<'a> Gen<'a> {
             if !matches!(t, Type::Int | Type::Float) {
                 return err(format!("`{}` needs numbers, found `{}`", what, t), a.pos);
             }
-            if let Some(prev) = &ty {
-                if *prev != t {
-                    return err(format!("`{}` needs all `int` or all `float` arguments; convert with `float(x)`", what), a.pos);
-                }
+            if let Some(prev) = &ty
+                && *prev != t
+            {
+                return err(
+                    format!("`{}` needs all `int` or all `float` arguments; convert with `float(x)`", what),
+                    a.pos,
+                );
             }
             ty = Some(t);
             codes.push(c);
@@ -585,10 +665,18 @@ impl<'a> Gen<'a> {
     fn library_call(&self, cx: &mut Ctx, ns: &str, name: &str, args: &[Expr], pos: Pos) -> Result<(String, Type)> {
         let what = format!("{}.{}", ns, name);
         let arity = |n: usize| -> Result<()> {
-            if args.len() == n { Ok(()) } else { err(format!("`{}` takes {} argument(s), but {} were given", what, n, args.len()), pos) }
+            if args.len() == n {
+                Ok(())
+            } else {
+                err(format!("`{}` takes {} argument(s), but {} were given", what, n, args.len()), pos)
+            }
         };
         match (ns, name) {
-            ("Math", "sqrt" | "sin" | "cos" | "tan" | "asin" | "acos" | "atan" | "exp" | "ln" | "log10" | "floor" | "ceil" | "round") => {
+            (
+                "Math",
+                "sqrt" | "sin" | "cos" | "tan" | "asin" | "acos" | "atan" | "exp" | "ln" | "log10" | "floor" | "ceil"
+                | "round",
+            ) => {
                 arity(1)?;
                 let x = self.float_arg(cx, &args[0], &what)?;
                 let f = if name == "ln" { "ln" } else { name };
@@ -650,7 +738,13 @@ impl<'a> Gen<'a> {
                 let Type::Array(elem) = t else {
                     return err(format!("`Random.pick` needs an array, found `{}`", t), args[0].pos);
                 };
-                Ok((format!("{{ {}let __xs = &{}; if __xs.is_empty() {{ None }} else {{ Some(__xs[__rand_int(0, __xs.len() as i64) as usize].clone()) }} }}", setup, rcode), Type::Optional(elem)))
+                Ok((
+                    format!(
+                        "{{ {}let __xs = &{}; if __xs.is_empty() {{ None }} else {{ Some(__xs[__rand_int(0, __xs.len() as i64) as usize].clone()) }} }}",
+                        setup, rcode
+                    ),
+                    Type::Optional(elem),
+                ))
             }
             ("Random", "shuffle") => {
                 arity(1)?;
@@ -679,7 +773,10 @@ impl<'a> Gen<'a> {
                 arity(1)?;
                 let (code, t) = self.expr(cx, &args[0], None)?;
                 let Type::Async(inner) = t else {
-                    return err(format!("`{}` needs the result of calling an `async fn`, not `{}`", what, t), args[0].pos);
+                    return err(
+                        format!("`{}` needs the result of calling an `async fn`, not `{}`", what, t),
+                        args[0].pos,
+                    );
                 };
                 if name == "spawn" {
                     Ok((format!("__async_spawn({})", code), Type::Async(inner)))
@@ -717,14 +814,31 @@ impl<'a> Gen<'a> {
 
     /// `Grid(...)` / `Grid<int>(...)` for a generic struct: type arguments come from the
     /// field values, explicit type arguments or the expected type.
-    fn generic_struct_new(&self, cx: &mut Ctx, name: &str, targs: &[TypeExpr], args: &[Expr], expected: Option<&Type>, pos: Pos) -> Result<(String, Type)> {
+    fn generic_struct_new(
+        &self,
+        cx: &mut Ctx,
+        name: &str,
+        targs: &[TypeExpr],
+        args: &[Expr],
+        expected: Option<&Type>,
+        pos: Pos,
+    ) -> Result<(String, Type)> {
         let info = self.m.structs[name].clone();
         if info.tparams.is_empty() {
             return err(format!("`{}` is not generic and takes no type arguments", name), pos);
         }
         let (min, max) = (info.required_args(), info.fields.len());
         if args.len() < min || args.len() > max {
-            return err(format!("`{}(...)` takes {} to {} argument(s) (its fields in order) but {} were given", name, min, max, args.len()), pos);
+            return err(
+                format!(
+                    "`{}(...)` takes {} to {} argument(s) (its fields in order) but {} were given",
+                    name,
+                    min,
+                    max,
+                    args.len()
+                ),
+                pos,
+            );
         }
         let sig = Signature { params: info.fields[..args.len()].to_vec(), ret: self.struct_self_type(name) };
         let (binds, names, bound, ret) = self.infer_call(cx, &info.tparams, targs, &sig, args, expected, pos, name)?;
@@ -780,7 +894,8 @@ impl<'a> Gen<'a> {
         }
         out.push_str("}\n");
         if plain {
-            writeln!(out, "impl __KlShow for {} {{\n    fn __show(&self) -> String {{\n        match self {{", name).unwrap();
+            writeln!(out, "impl __KlShow for {} {{\n    fn __show(&self) -> String {{\n        match self {{", name)
+                .unwrap();
             for (v, fields) in &info.variants {
                 if fields.is_empty() {
                     writeln!(out, "            {}::{} => String::from({:?}),", name, v, v).unwrap();
@@ -806,7 +921,14 @@ impl<'a> Gen<'a> {
     }
 
     /// `Shape.Circle(args)` or `Shape.Empty`, when `type_name` is an enum.
-    fn variant_value(&self, cx: &mut Ctx, type_name: &str, variant: &str, args: Option<&[Expr]>, pos: Pos) -> Result<(String, Type)> {
+    fn variant_value(
+        &self,
+        cx: &mut Ctx,
+        type_name: &str,
+        variant: &str,
+        args: Option<&[Expr]>,
+        pos: Pos,
+    ) -> Result<(String, Type)> {
         let info = &self.m.enums[type_name];
         let fields = match info.variant(variant) {
             Some(f) => f.clone(),
@@ -816,10 +938,19 @@ impl<'a> Gen<'a> {
         match args {
             None if fields.is_empty() => Ok((format!("{}::{}", type_name, variant), ty)),
             None => err(
-                format!("`{}.{}` needs {} value(s): `{}.{}(...)`", type_name, variant, fields.len(), type_name, variant),
+                format!(
+                    "`{}.{}` needs {} value(s): `{}.{}(...)`",
+                    type_name,
+                    variant,
+                    fields.len(),
+                    type_name,
+                    variant
+                ),
                 pos,
             ),
-            Some(_) if fields.is_empty() => err(format!("`{}.{}` takes no values; write it without `()`", type_name, variant), pos),
+            Some(_) if fields.is_empty() => {
+                err(format!("`{}.{}` takes no values; write it without `()`", type_name, variant), pos)
+            }
             Some(args) => {
                 let sig = Signature { params: fields, ret: Type::Void };
                 let (binds, names) = self.args(cx, &sig, args, pos, variant)?;
@@ -838,13 +969,23 @@ impl<'a> Gen<'a> {
 
     /// Classes sharing `root` as their topmost base class (including `root`).
     fn hierarchy(&self, root: &str) -> Vec<String> {
-        self.m.class_order.iter().filter(|c| self.m.ancestors(c).last().map(String::as_str) == Some(root)).cloned().collect()
+        self.m
+            .class_order
+            .iter()
+            .filter(|c| self.m.ancestors(c).last().map(String::as_str) == Some(root))
+            .cloned()
+            .collect()
     }
 
     /// `fn __as_T(&self)` that succeeds, for an object whose class is `T` or derives from it.
     fn downcast_hook(&self, out: &mut String, target: &str) {
         let ty = self.rty(&Type::Class(target.to_string()));
-        writeln!(out, "    fn __as_{}(&self) -> Option<{}> {{ self.__self.upgrade().map(|__r| __r as {}) }}", target, ty, ty).unwrap();
+        writeln!(
+            out,
+            "    fn __as_{}(&self) -> Option<{}> {{ self.__self.upgrade().map(|__r| __r as {}) }}",
+            target, ty, ty
+        )
+        .unwrap();
     }
 
     fn comma_params(&self, sig: &Signature) -> String {
@@ -898,30 +1039,43 @@ impl<'a> Gen<'a> {
         if generic {
             writeln!(out, "impl{} {} {{", generic_params(&info.tparams), self_ty).unwrap();
         } else {
-        // trait for dynamic dispatch
-        let mut supers: Vec<String> = vec![];
-        if let Some(p) = &info.parent {
-            supers.push(class_trait(p));
-        }
-        supers.extend(info.interfaces.iter().cloned());
-        let bound = if supers.is_empty() { String::new() } else { format!(": {}", supers.join(" + ")) };
-        writeln!(out, "trait {}{} {{", class_trait(cname), bound).unwrap();
-        for (mname, sig) in m.new_trait_methods(cname) {
-            writeln!(out, "    fn {}(&mut self{}){};", rid(&mname), self.comma_params(&sig), self.ret_suffix(&sig.ret)).unwrap();
-        }
-        for (f, t) in &info.fields {
-            writeln!(out, "    fn __get_{}(&self) -> {};", f, self.rty(t)).unwrap();
-            writeln!(out, "    fn __set_{}(&mut self, v: {});", f, self.rty(t)).unwrap();
-        }
-        if info.parent.is_none() {
-            for target in self.hierarchy(cname).iter().filter(|t| self.is_cast_target(t)) {
-                writeln!(out, "    fn __as_{}(&self) -> Option<{}> {{ None }}", target, self.rty(&Type::Class(target.clone()))).unwrap();
+            // trait for dynamic dispatch
+            let mut supers: Vec<String> = vec![];
+            if let Some(p) = &info.parent {
+                supers.push(class_trait(p));
             }
-        }
-        out.push_str("}\n");
+            supers.extend(info.interfaces.iter().cloned());
+            let bound = if supers.is_empty() { String::new() } else { format!(": {}", supers.join(" + ")) };
+            writeln!(out, "trait {}{} {{", class_trait(cname), bound).unwrap();
+            for (mname, sig) in m.new_trait_methods(cname) {
+                writeln!(
+                    out,
+                    "    fn {}(&mut self{}){};",
+                    rid(&mname),
+                    self.comma_params(&sig),
+                    self.ret_suffix(&sig.ret)
+                )
+                .unwrap();
+            }
+            for (f, t) in &info.fields {
+                writeln!(out, "    fn __get_{}(&self) -> {};", f, self.rty(t)).unwrap();
+                writeln!(out, "    fn __set_{}(&mut self, v: {});", f, self.rty(t)).unwrap();
+            }
+            if info.parent.is_none() {
+                for target in self.hierarchy(cname).iter().filter(|t| self.is_cast_target(t)) {
+                    writeln!(
+                        out,
+                        "    fn __as_{}(&self) -> Option<{}> {{ None }}",
+                        target,
+                        self.rty(&Type::Class(target.clone()))
+                    )
+                    .unwrap();
+                }
+            }
+            out.push_str("}\n");
 
-        // inherent impl
-        writeln!(out, "impl {} {{", cname).unwrap();
+            // inherent impl
+            writeln!(out, "impl {} {{", cname).unwrap();
         }
         let ctor = m.find_init(cname);
         let ctor_params = ctor.as_ref().map(|(_, s)| self.params_decl(s)).unwrap_or_default();
@@ -946,7 +1100,8 @@ impl<'a> Gen<'a> {
         for a in &ancestors {
             let ainfo = &m.classes[a];
             if let Some(sig) = &ainfo.init {
-                writeln!(out, "    fn __{}__init(&mut self{}) {{\n{}    }}", a, self.comma_params(sig), init_bodies[a]).unwrap();
+                writeln!(out, "    fn __{}__init(&mut self{}) {{\n{}    }}", a, self.comma_params(sig), init_bodies[a])
+                    .unwrap();
             }
             let mut names: Vec<&String> = ainfo.methods.keys().collect();
             names.sort();
@@ -1043,7 +1198,15 @@ impl<'a> Gen<'a> {
     }
 
     /// Generates the statements of a function, method, init or lambda body.
-    fn body_in(&self, cx: &mut Ctx, sig: &Signature, stmts: &[Stmt], pos: Pos, name: &str, depth: usize) -> Result<String> {
+    fn body_in(
+        &self,
+        cx: &mut Ctx,
+        sig: &Signature,
+        stmts: &[Stmt],
+        pos: Pos,
+        name: &str,
+        depth: usize,
+    ) -> Result<String> {
         for (p, t) in &sig.params {
             cx.declare(p, t.clone(), false, pos)?;
         }
@@ -1098,7 +1261,12 @@ impl<'a> Gen<'a> {
                 };
                 match t {
                     Type::Void => return err("cannot store the result of a function that returns nothing", value.pos),
-                    Type::NoneLit => return err("cannot infer the type of `none`; add a type, e.g. `let x: int? = none`", value.pos),
+                    Type::NoneLit => {
+                        return err(
+                            "cannot infer the type of `none`; add a type, e.g. `let x: int? = none`",
+                            value.pos,
+                        );
+                    }
                     _ => {}
                 }
                 let rust = cx.declare(name, t.clone(), *mutable, s.pos)?;
@@ -1119,7 +1287,9 @@ impl<'a> Gen<'a> {
                 let (code, t) = self.expr(cx, value, None)?;
                 let inner = match t {
                     Type::Optional(i) => *i,
-                    other => return err(format!("`if let` needs an optional value (`T?`), found `{}`", other), value.pos),
+                    other => {
+                        return err(format!("`if let` needs an optional value (`T?`), found `{}`", other), value.pos);
+                    }
                 };
                 cx.scopes.push(HashMap::new());
                 let rust = cx.declare(name, inner, false, s.pos)?;
@@ -1153,7 +1323,12 @@ impl<'a> Gen<'a> {
                             Type::Array(inner) => (code, *inner, false),
                             Type::Map(k, _) => (format!("({}).into_keys()", code), *k, false),
                             Type::Str => (format!("({}).chars()", code), Type::Str, true),
-                            other => return err(format!("cannot loop over `{}` (expected an array, string or `a..b` range)", other), e.pos),
+                            other => {
+                                return err(
+                                    format!("cannot loop over `{}` (expected an array, string or `a..b` range)", other),
+                                    e.pos,
+                                );
+                            }
                         }
                     }
                 };
@@ -1187,7 +1362,10 @@ impl<'a> Gen<'a> {
                 }
                 let (code, t) = self.expr(cx, e, None)?;
                 if matches!(t, Type::Async(_)) {
-                    return err("calling an `async fn` only prepares it: put `await` in front, or start it with `Async.spawn(...)`", e.pos);
+                    return err(
+                        "calling an `async fn` only prepares it: put `await` in front, or start it with `Async.spawn(...)`",
+                        e.pos,
+                    );
                 }
                 Ok(format!("{};", code))
             }
@@ -1200,11 +1378,17 @@ impl<'a> Gen<'a> {
             Type::Enum(e) => Some((e.clone(), self.m.enums[e].clone())),
             Type::Result(t, e) => {
                 let ok = if **t == Type::Void { vec![] } else { vec![("value".to_string(), (**t).clone())] };
-                let variants = vec![("Ok".to_string(), ok), ("Err".to_string(), vec![("error".to_string(), (**e).clone())])];
+                let variants =
+                    vec![("Ok".to_string(), ok), ("Err".to_string(), vec![("error".to_string(), (**e).clone())])];
                 Some(("Result".to_string(), crate::checker::EnumInfo { variants }))
             }
             Type::Int | Type::Str | Type::Bool => None,
-            other => return err(format!("cannot `match` on `{}` (use an enum, `Result`, int, str or bool)", other), value.pos),
+            other => {
+                return err(
+                    format!("cannot `match` on `{}` (use an enum, `Result`, int, str or bool)", other),
+                    value.pos,
+                );
+            }
         };
         let scrutinee = if ty == Type::Str { format!("({}).as_str()", code) } else { code };
         let mut out = format!("match {} {{\n", scrutinee);
@@ -1216,7 +1400,8 @@ impl<'a> Gen<'a> {
                 return err("this arm can never run: an earlier `_` arm already matches everything", arm.pos);
             }
             cx.scopes.push(HashMap::new());
-            let pat = self.pattern(cx, arm, &ty, &enum_info, &mut covered, &mut wildcard, &mut saw_true, &mut saw_false);
+            let pat =
+                self.pattern(cx, arm, &ty, &enum_info, &mut covered, &mut wildcard, &mut saw_true, &mut saw_false);
             let pat = match pat {
                 Ok(p) => p,
                 Err(e) => {
@@ -1228,11 +1413,13 @@ impl<'a> Gen<'a> {
             cx.scopes.pop();
             writeln!(out, "{}{} => {}", indent(depth + 1), pat, body?).unwrap();
         }
-        let all_variants = enum_info.as_ref().is_some_and(|(_, info)| info.variants.iter().all(|(v, _)| covered.contains(v)));
+        let all_variants =
+            enum_info.as_ref().is_some_and(|(_, info)| info.variants.iter().all(|(v, _)| covered.contains(v)));
         if !(wildcard || (saw_true && saw_false) || all_variants) {
             let missing = match &enum_info {
                 Some((_, info)) => {
-                    let m: Vec<&str> = info.variants.iter().filter(|(v, _)| !covered.contains(v)).map(|(v, _)| v.as_str()).collect();
+                    let m: Vec<&str> =
+                        info.variants.iter().filter(|(v, _)| !covered.contains(v)).map(|(v, _)| v.as_str()).collect();
                     format!("missing: {}", m.join(", "))
                 }
                 None => "add a `_ =>` arm".to_string(),
@@ -1271,7 +1458,10 @@ impl<'a> Gen<'a> {
                 }
                 covered.push(v.clone());
                 if binds.len() != fields.len() {
-                    return err(format!("`{}` has {} value(s), but the pattern binds {}", v, fields.len(), binds.len()), arm.pos);
+                    return err(
+                        format!("`{}` has {} value(s), but the pattern binds {}", v, fields.len(), binds.len()),
+                        arm.pos,
+                    );
                 }
                 let mut rust = vec![];
                 for (b, (_, t)) in binds.iter().zip(&fields) {
@@ -1321,23 +1511,23 @@ impl<'a> Gen<'a> {
 
     fn assign(&self, cx: &mut Ctx, target: &Expr, op: AssignOp, value: &Expr) -> Result<String> {
         // Field of a base-class reference: go through the generated setter.
-        if let ExprKind::Field(recv, f) = &target.kind {
-            if !matches!(recv.kind, ExprKind::SelfRef) {
-                let (rcode, rt) = self.recv(cx, recv)?;
-                if let Type::Class(c) = &rt {
-                    if self.m.has_subclasses(c) {
-                        let ft = self.field_type(cx, c, f, target.pos)?;
-                        let v = self.assign_value(cx, op, &ft, value)?;
-                        let new = match op {
-                            AssignOp::Set => "__v".to_string(),
-                            _ => self.compound("__r.borrow().__get_".to_string() + f + "()", op, &ft),
-                        };
-                        return Ok(format!(
-                            "{{ let __v = {}; let __r = &{}; let __n = {}; __r.borrow_mut().__set_{}(__n); }}",
-                            v, rcode, new, f
-                        ));
-                    }
-                }
+        if let ExprKind::Field(recv, f) = &target.kind
+            && !matches!(recv.kind, ExprKind::SelfRef)
+        {
+            let (rcode, rt) = self.recv(cx, recv)?;
+            if let Type::Class(c) = &rt
+                && self.m.has_subclasses(c)
+            {
+                let ft = self.field_type(cx, c, f, target.pos)?;
+                let v = self.assign_value(cx, op, &ft, value)?;
+                let new = match op {
+                    AssignOp::Set => "__v".to_string(),
+                    _ => self.compound("__r.borrow().__get_".to_string() + f + "()", op, &ft),
+                };
+                return Ok(format!(
+                    "{{ let __v = {}; let __r = &{}; let __n = {}; __r.borrow_mut().__set_{}(__n); }}",
+                    v, rcode, new, f
+                ));
             }
         }
         // `m[k] = v` inserts (the key may be new).
@@ -1367,10 +1557,22 @@ impl<'a> Gen<'a> {
                     return err(format!("`{}` has no `op {}` taking a `{}`", ty, bin.rust(), vt), value.pos);
                 };
                 if o.ret != ty {
-                    return err(format!("`{}=` needs `op {}` to return `{}`, but it returns `{}`", bin.rust(), bin.rust(), st, o.ret), value.pos);
+                    return err(
+                        format!(
+                            "`{}=` needs `op {}` to return `{}`, but it returns `{}`",
+                            bin.rust(),
+                            bin.rust(),
+                            st,
+                            o.ret
+                        ),
+                        value.pos,
+                    );
                 }
                 let vc = self.coerce(vc, &vt, o.param.as_ref().unwrap(), value.pos)?;
-                return Ok(format!("{{ let __v = {}; {}let __n = {}.__op_{}(__v); {} = __n; }}", vc, pre, place, o.index, place));
+                return Ok(format!(
+                    "{{ let __v = {}; {}let __n = {}.__op_{}(__v); {} = __n; }}",
+                    vc, pre, place, o.index, place
+                ));
             }
         }
         let v = {
@@ -1435,7 +1637,10 @@ impl<'a> Gen<'a> {
         what: &str,
     ) -> Result<(String, String, Vec<Type>, Type)> {
         if args.len() != sig.params.len() {
-            return err(format!("`{}` takes {} argument(s) but {} were given", what, sig.params.len(), args.len()), pos);
+            return err(
+                format!("`{}` takes {} argument(s) but {} were given", what, sig.params.len(), args.len()),
+                pos,
+            );
         }
         let mut map: HashMap<String, Type> = HashMap::new();
         if !targs.is_empty() {
@@ -1471,7 +1676,10 @@ impl<'a> Gen<'a> {
         }
         for tp in tparams {
             if !map.contains_key(tp) {
-                return err(format!("cannot tell what `{}` is for `{}`; write it, e.g. `{}<int>(...)`", tp, what, what), pos);
+                return err(
+                    format!("cannot tell what `{}` is for `{}`; write it, e.g. `{}<int>(...)`", tp, what, what),
+                    pos,
+                );
             }
         }
         let mut binds = String::new();
@@ -1519,10 +1727,16 @@ impl<'a> Gen<'a> {
             ExprKind::Ident(name) => match cx.lookup(name) {
                 Some(v) if v.mutable => Ok((String::new(), v.rust.clone(), v.ty.clone())),
                 Some(v) if v.captured => err(
-                    format!("cannot change `{}` inside a lambda: lambdas get a read-only copy of outside variables", name),
+                    format!(
+                        "cannot change `{}` inside a lambda: lambdas get a read-only copy of outside variables",
+                        name
+                    ),
                     e.pos,
                 ),
-                Some(_) => err(format!("cannot change `{}`: it was declared with `let` (use `var` for a mutable variable)", name), e.pos),
+                Some(_) => err(
+                    format!("cannot change `{}`: it was declared with `let` (use `var` for a mutable variable)", name),
+                    e.pos,
+                ),
                 None => err(format!("unknown variable `{}`", name), e.pos),
             },
             ExprKind::Field(recv, f) => {
@@ -1558,7 +1772,10 @@ impl<'a> Gen<'a> {
                         let t = subst(&self.field_type(cx, c, f, e.pos)?, &self.m.bindings(c, targs));
                         Ok((String::new(), format!("{}.borrow_mut().{}", rcode, rid(f)), t))
                     }
-                    Type::Class(_) => err("cannot modify part of a field through a base-class reference; add a method to the class instead", e.pos),
+                    Type::Class(_) => err(
+                        "cannot modify part of a field through a base-class reference; add a method to the class instead",
+                        e.pos,
+                    ),
                     other => err(format!("`{}` has no fields", other), e.pos),
                 }
             }
@@ -1568,7 +1785,11 @@ impl<'a> Gen<'a> {
                     let kc = self.expr_to(cx, idx, &k)?;
                     let tmp = format!("__k{}", n);
                     *n += 1;
-                    return Ok((format!("{}let {} = {}; ", pre, tmp, kc), format!("(*__map_slot(&mut {}, {}))", bplace, tmp), *v));
+                    return Ok((
+                        format!("{}let {} = {}; ", pre, tmp, kc),
+                        format!("(*__map_slot(&mut {}, {}))", bplace, tmp),
+                        *v,
+                    ));
                 }
                 let elem = match bt {
                     Type::Array(i) => *i,
@@ -1598,13 +1819,16 @@ impl<'a> Gen<'a> {
         if !cx.lambdas.is_empty() && cx.class.is_some() {
             return err("`self` cannot be used inside a lambda; copy it first (`let me = self`) and use `me`", pos);
         }
-        cx.class.clone().ok_or_else(|| crate::error::CompileError::new("`self` is only available inside class methods", pos))
+        cx.class
+            .clone()
+            .ok_or_else(|| crate::error::CompileError::new("`self` is only available inside class methods", pos))
     }
 
     fn field_type(&self, cx: &Ctx, class: &str, field: &str, pos: Pos) -> Result<Type> {
         match self.m.all_fields(class).into_iter().find(|(n, _, _)| n == field) {
             Some((_, t, owner)) => {
-                if self.m.classes[&owner].private_fields.contains(field) && cx.class.as_deref() != Some(owner.as_str()) {
+                if self.m.classes[&owner].private_fields.contains(field) && cx.class.as_deref() != Some(owner.as_str())
+                {
                     return err(format!("field `{}` is private to `{}`", field, owner), pos);
                 }
                 Ok(t)
@@ -1615,7 +1839,11 @@ impl<'a> Gen<'a> {
 
     /// Type of field `name` when it holds a function.
     fn func_field(&self, class: &str, name: &str) -> Option<Type> {
-        self.m.all_fields(class).into_iter().find(|(n, t, _)| n == name && matches!(t, Type::Func(..))).map(|(_, t, _)| t)
+        self.m
+            .all_fields(class)
+            .into_iter()
+            .find(|(n, t, _)| n == name && matches!(t, Type::Func(..)))
+            .map(|(_, t, _)| t)
     }
 
     fn check_method_access(&self, cx: &Ctx, owner: &str, method: &str, pos: Pos) -> Result<()> {
@@ -1631,13 +1859,14 @@ impl<'a> Gen<'a> {
         let (owner, sig) = match self.m.find_static(class, name) {
             Some(x) => x,
             None if self.m.find_method(class, name).is_some() => {
-                return err(format!("`{}` is not a `static fn`; call it on a `{}` object", name, class), pos)
+                return err(format!("`{}` is not a `static fn`; call it on a `{}` object", name, class), pos);
             }
             None => return err(format!("`{}` has no static method `{}`", class, name), pos),
         };
         self.check_method_access(cx, &owner, name, pos)?;
         let (binds, names) = self.args(cx, &sig, args, pos, name)?;
-        let ret = if self.m.classes[&owner].async_statics.contains(name) { Type::Async(Box::new(sig.ret)) } else { sig.ret };
+        let ret =
+            if self.m.classes[&owner].async_statics.contains(name) { Type::Async(Box::new(sig.ret)) } else { sig.ret };
         Ok((format!("{{ {}{}::__s_{}({}) }}", binds, owner, name, names), ret))
     }
 
@@ -1695,10 +1924,10 @@ impl<'a> Gen<'a> {
 
     /// Receiver for a method call or field access, borrowed when it is a plain variable.
     fn recv(&self, cx: &mut Ctx, e: &Expr) -> Result<(String, Type)> {
-        if let ExprKind::Ident(name) = &e.kind {
-            if let Some(v) = cx.lookup(name) {
-                return Ok((v.rust.clone(), v.ty.clone()));
-            }
+        if let ExprKind::Ident(name) = &e.kind
+            && let Some(v) = cx.lookup(name)
+        {
+            return Ok((v.rust.clone(), v.ty.clone()));
         }
         let (code, t) = self.expr(cx, e, None)?;
         Ok((format!("({})", code), t))
@@ -1741,7 +1970,10 @@ impl<'a> Gen<'a> {
                 }
                 let class = self.self_class(cx, e.pos)?;
                 if cx.in_init {
-                    return err("`self` cannot be used as a value inside `init` (the object is not finished yet)", e.pos);
+                    return err(
+                        "`self` cannot be used as a value inside `init` (the object is not finished yet)",
+                        e.pos,
+                    );
                 }
                 let ty = self.class_type(&class);
                 self.self_values.borrow_mut().insert(class);
@@ -1757,7 +1989,10 @@ impl<'a> Gen<'a> {
                 match t {
                     Type::Async(v) => Ok((format!("({}).await", code), *v)),
                     Type::Task(v) => Ok((format!("__task_wait({}).await", code), *v)),
-                    other => err(format!("`await` needs an `Async<T>` (from an `async fn`) or a `Task<T>`, not `{}`", other), e.pos),
+                    other => err(
+                        format!("`await` needs an `Async<T>` (from an `async fn`) or a `Task<T>`, not `{}`", other),
+                        e.pos,
+                    ),
                 }
             }
             ExprKind::Try(inner) => {
@@ -1766,7 +2001,10 @@ impl<'a> Gen<'a> {
                     (Type::Result(v, err_ty), Type::Result(_, ret_err)) => {
                         if err_ty != ret_err {
                             return err(
-                                format!("`?` passes on a `{}` error, but this function returns `{}` errors", err_ty, ret_err),
+                                format!(
+                                    "`?` passes on a `{}` error, but this function returns `{}` errors",
+                                    err_ty, ret_err
+                                ),
                                 e.pos,
                             );
                         }
@@ -1774,11 +2012,17 @@ impl<'a> Gen<'a> {
                     }
                     (Type::Optional(v), Type::Optional(_)) => Ok((format!("({})?", code), (**v).clone())),
                     (Type::Result(..), other) => err(
-                        format!("`?` can only be used in a function that returns a `Result`; this one returns `{}`", other),
+                        format!(
+                            "`?` can only be used in a function that returns a `Result`; this one returns `{}`",
+                            other
+                        ),
                         e.pos,
                     ),
                     (Type::Optional(_), other) => err(
-                        format!("`?` on an optional needs a function that returns an optional; this one returns `{}`", other),
+                        format!(
+                            "`?` on an optional needs a function that returns an optional; this one returns `{}`",
+                            other
+                        ),
                         e.pos,
                     ),
                     (other, _) => err(format!("`?` works on a `Result` or an optional, not on `{}`", other), e.pos),
@@ -1786,15 +2030,18 @@ impl<'a> Gen<'a> {
             }
             ExprKind::Ident(name) => match cx.lookup(name) {
                 Some(v) => Ok((clone_if(v.rust.clone(), &v.ty), v.ty.clone())),
-                None if self.m.async_fns.contains(name) => {
-                    err(format!("`{}` is an `async fn`; call it (`{}(...)`) instead of using it as a value", name, name), e.pos)
-                }
+                None if self.m.async_fns.contains(name) => err(
+                    format!("`{}` is an `async fn`; call it (`{}(...)`) instead of using it as a value", name, name),
+                    e.pos,
+                ),
                 None if self.m.functions.contains_key(name) => {
                     let sig = &self.m.functions[name];
                     let ty = Type::Func(sig.params.iter().map(|(_, t)| t.clone()).collect(), Box::new(sig.ret.clone()));
                     Ok((format!("(Rc::new({}) as {})", fn_id(name), self.rty(&ty)), ty))
                 }
-                None if self.m.classes.contains_key(name) => err(format!("`{}` is a class; create one with `{}(...)`", name, name), e.pos),
+                None if self.m.classes.contains_key(name) => {
+                    err(format!("`{}` is a class; create one with `{}(...)`", name, name), e.pos)
+                }
                 None => err(format!("unknown variable `{}`", name), e.pos),
             },
             ExprKind::Array(items) => {
@@ -1805,12 +2052,17 @@ impl<'a> Gen<'a> {
                 let elem = match (elem, items.first()) {
                     (Some(t), _) => t,
                     (None, Some(first)) => self.expr(cx, first, None)?.1,
-                    (None, None) => return err("cannot infer the type of `[]`; add a type, e.g. `let xs: [int] = []`", e.pos),
+                    (None, None) => {
+                        return err("cannot infer the type of `[]`; add a type, e.g. `let xs: [int] = []`", e.pos);
+                    }
                 };
                 let mut codes = vec![];
                 for it in items {
                     codes.push(self.expr_to(cx, it, &elem).map_err(|mut er| {
-                        er.msg = format!("{} (all array elements must have the same type; annotate the variable to mix subclasses)", er.msg);
+                        er.msg = format!(
+                            "{} (all array elements must have the same type; annotate the variable to mix subclasses)",
+                            er.msg
+                        );
                         er
                     })?);
                 }
@@ -1820,7 +2072,9 @@ impl<'a> Gen<'a> {
                 let (kt, vt) = match (expected, entries.first()) {
                     (Some(Type::Map(k, v)), _) => ((**k).clone(), (**v).clone()),
                     (_, Some((k, v))) => (self.expr(cx, k, None)?.1, self.expr(cx, v, None)?.1),
-                    (_, None) => return err("cannot infer the type of `{}`; add a type, e.g. `let m: {str: int} = {}`", e.pos),
+                    (_, None) => {
+                        return err("cannot infer the type of `{}`; add a type, e.g. `let m: {str: int} = {}`", e.pos);
+                    }
                 };
                 if !is_map_key(&kt) {
                     return err(format!("map keys must be `int`, `str` or `bool`, not `{}`", kt), e.pos);
@@ -1829,7 +2083,10 @@ impl<'a> Gen<'a> {
                 for (k, v) in entries {
                     let kc = self.expr_to(cx, k, &kt)?;
                     let vc = self.expr_to(cx, v, &vt).map_err(|mut er| {
-                        er.msg = format!("{} (all map values must have the same type; annotate the variable to mix subclasses)", er.msg);
+                        er.msg = format!(
+                            "{} (all map values must have the same type; annotate the variable to mix subclasses)",
+                            er.msg
+                        );
                         er
                     })?;
                     write!(code, "__m.insert({}, {}); ", kc, vc).unwrap();
@@ -1875,15 +2132,20 @@ impl<'a> Gen<'a> {
                 if let Some(t) = self.type_receiver(cx, recv) {
                     return self.variant_value(cx, &t, f, None, e.pos);
                 }
-                if let ExprKind::Ident(n) = &recv.kind {
-                    if cx.lookup(n).is_none() {
-                        if let Some(info) = self.m.structs.get(n) {
-                            if let Some((_, t)) = info.consts.iter().find(|(c, _)| c == f) {
-                                return Ok((format!("{}::__c_{}()", n, f), t.clone()));
-                            }
-                            return err(format!("`{}` has no constant `{}` (constants are declared `static {}: Type = value`)", n, f, f), e.pos);
-                        }
+                if let ExprKind::Ident(n) = &recv.kind
+                    && cx.lookup(n).is_none()
+                    && let Some(info) = self.m.structs.get(n)
+                {
+                    if let Some((_, t)) = info.consts.iter().find(|(c, _)| c == f) {
+                        return Ok((format!("{}::__c_{}()", n, f), t.clone()));
                     }
+                    return err(
+                        format!(
+                            "`{}` has no constant `{}` (constants are declared `static {}: Type = value`)",
+                            n, f, f
+                        ),
+                        e.pos,
+                    );
                 }
                 if let Some(ns) = self.library_receiver(cx, recv) {
                     return match (ns.as_str(), f.as_str()) {
@@ -1891,7 +2153,9 @@ impl<'a> Gen<'a> {
                         ("Math", "TAU") => Ok(("std::f64::consts::TAU".into(), Type::Float)),
                         ("Math", "E") => Ok(("std::f64::consts::E".into(), Type::Float)),
                         ("Math", "INF") => Ok(("f64::INFINITY".into(), Type::Float)),
-                        _ => err(format!("`{}.{}` is not a value; library functions are called with `()`", ns, f), e.pos),
+                        _ => {
+                            err(format!("`{}.{}` is not a value; library functions are called with `()`", ns, f), e.pos)
+                        }
                     };
                 }
                 if matches!(recv.kind, ExprKind::SelfRef) {
@@ -1935,8 +2199,12 @@ impl<'a> Gen<'a> {
                         };
                         Ok((format!("{{ {}let __t = {}; __t }}", setup, read), t))
                     }
-                    Type::Array(_) | Type::Str | Type::Map(..) if f == "len" => err("`len` is a method: use `.len()`", e.pos),
-                    Type::Interface(i) => err(format!("interface `{}` has no fields; only methods can be used", i), e.pos),
+                    Type::Array(_) | Type::Str | Type::Map(..) if f == "len" => {
+                        err("`len` is a method: use `.len()`", e.pos)
+                    }
+                    Type::Interface(i) => {
+                        err(format!("interface `{}` has no fields; only methods can be used", i), e.pos)
+                    }
                     other => err(format!("`{}` has no field `{}`", other, f), e.pos),
                 }
             }
@@ -1973,8 +2241,20 @@ impl<'a> Gen<'a> {
 
     /// Calls a function value held in `code`.
     #[allow(clippy::too_many_arguments)]
-    fn call_value(&self, cx: &mut Ctx, code: String, ps: &[Type], ret: &Type, args: &[Expr], pos: Pos, what: &str) -> Result<(String, Type)> {
-        let sig = Signature { params: ps.iter().enumerate().map(|(i, t)| (format!("p{}", i), t.clone())).collect(), ret: ret.clone() };
+    fn call_value(
+        &self,
+        cx: &mut Ctx,
+        code: String,
+        ps: &[Type],
+        ret: &Type,
+        args: &[Expr],
+        pos: Pos,
+        what: &str,
+    ) -> Result<(String, Type)> {
+        let sig = Signature {
+            params: ps.iter().enumerate().map(|(i, t)| (format!("p{}", i), t.clone())).collect(),
+            ret: ret.clone(),
+        };
         let (binds, names) = self.args(cx, &sig, args, pos, what)?;
         Ok((format!("{{ let __f = {}; {}__f({}) }}", code, binds, names), ret.clone()))
     }
@@ -2025,11 +2305,17 @@ impl<'a> Gen<'a> {
         let Type::Func(pts, rt) = &parts.ty else { unreachable!() };
         for t in pts.iter().chain(std::iter::once(&**rt)) {
             if !self.m.is_sendable(t) {
-                return err(format!("`{}` works with values that can move between threads; `{}` cannot", what, t), e.pos);
+                return err(
+                    format!("`{}` works with values that can move between threads; `{}` cannot", what, t),
+                    e.pos,
+                );
             }
         }
         let caps: String = parts.captures.iter().map(|(c, _, _)| format!("let {} = {}.clone(); ", c, c)).collect();
-        Ok((format!("{{ {}move |{}|{} {} }}", caps, parts.params.join(", "), parts.ret_sig, parts.body), (**rt).clone()))
+        Ok((
+            format!("{{ {}move |{}|{} {} }}", caps, parts.params.join(", "), parts.ret_sig, parts.body),
+            (**rt).clone(),
+        ))
     }
 
     fn lambda_parts(
@@ -2050,7 +2336,12 @@ impl<'a> Gen<'a> {
             let t = match (ty, &hint) {
                 (Some(te), _) => self.m.resolve(te, &cx.tparams).map_err(|e| crate::checker::at_pos(e, *ppos))?,
                 (None, Some((ps, _))) if ps[i] != Type::Unknown => ps[i].clone(),
-                _ => return err(format!("cannot tell the type of `{}`; write it, e.g. `fn({}: int) => ...`", name, name), *ppos),
+                _ => {
+                    return err(
+                        format!("cannot tell the type of `{}`; write it, e.g. `fn({}: int) => ...`", name, name),
+                        *ppos,
+                    );
+                }
             };
             ptypes.push(t);
         }
@@ -2120,14 +2411,19 @@ impl<'a> Gen<'a> {
             Type::Class(c) if self.m.is_subclass(target, c) => {
                 self.cast_targets.borrow_mut().insert(target.to_string());
                 let root = self.m.ancestors(c).last().unwrap().clone();
-                format!("{{ let __x = {}; let __t = {}::__as_{}(&*__x.borrow()); __t }}", code, class_trait(&root), target)
+                format!(
+                    "{{ let __x = {}; let __t = {}::__as_{}(&*__x.borrow()); __t }}",
+                    code,
+                    class_trait(&root),
+                    target
+                )
             }
             Type::Interface(i) if self.m.all_interfaces(target).contains(i) => {
                 self.cast_targets.borrow_mut().insert(target.to_string());
                 format!("{{ let __x = {}; let __t = {}::__as_{}(&*__x.borrow()); __t }}", code, i, target)
             }
             Type::Class(_) | Type::Interface(_) => {
-                return err(format!("a `{}` can never be a `{}`, so this check would always fail", ty, target), pos)
+                return err(format!("a `{}` can never be a `{}`, so this check would always fail", ty, target), pos);
             }
             other => return err(format!("`as`/`is` work on objects, not on `{}`", other), pos),
         };
@@ -2141,37 +2437,44 @@ impl<'a> Gen<'a> {
     fn binary(&self, cx: &mut Ctx, op: BinOp, l: &Expr, r: &Expr, pos: Pos) -> Result<(String, Type)> {
         let (lc, lt) = self.expr(cx, l, None)?;
         let (rc, rt) = self.expr(cx, r, None)?;
-        if let Type::Struct(st, sargs) = &lt {
-            if matches!(op, BinOp::Add | BinOp::Sub | BinOp::Mul | BinOp::Div | BinOp::Rem) {
-                let Some(o) = self.find_op(st, sargs, op, Some(&rt)) else {
-                    return err(format!("`{}` has no `op {}` taking a `{}`", lt, op.rust(), rt), pos);
-                };
-                let rc = self.coerce(rc, &rt, o.param.as_ref().unwrap(), r.pos)?;
-                return Ok((format!("{{ let __l = {}; let __r = {}; __l.__op_{}(__r) }}", lc, rc, o.index), o.ret));
-            }
+        if let Type::Struct(st, sargs) = &lt
+            && matches!(op, BinOp::Add | BinOp::Sub | BinOp::Mul | BinOp::Div | BinOp::Rem)
+        {
+            let Some(o) = self.find_op(st, sargs, op, Some(&rt)) else {
+                return err(format!("`{}` has no `op {}` taking a `{}`", lt, op.rust(), rt), pos);
+            };
+            let rc = self.coerce(rc, &rt, o.param.as_ref().unwrap(), r.pos)?;
+            return Ok((format!("{{ let __l = {}; let __r = {}; __l.__op_{}(__r) }}", lc, rc, o.index), o.ret));
         }
         // `2.0 * v` / `1.0 + v`: a number on the left uses the struct's `*` / `+` operator.
-        if let Type::Struct(st, sargs) = &rt {
-            if matches!(op, BinOp::Add | BinOp::Mul) && !matches!(lt, Type::Struct(..)) {
-                if let Some(o) = self.find_op(st, sargs, op, Some(&lt)) {
-                    let lc = self.coerce(lc, &lt, o.param.as_ref().unwrap(), l.pos)?;
-                    return Ok((format!("{{ let __l = {}; let __r = {}; __r.__op_{}(__l) }}", lc, rc, o.index), o.ret));
-                }
-            }
+        if let Type::Struct(st, sargs) = &rt
+            && matches!(op, BinOp::Add | BinOp::Mul)
+            && !matches!(lt, Type::Struct(..))
+            && let Some(o) = self.find_op(st, sargs, op, Some(&lt))
+        {
+            let lc = self.coerce(lc, &lt, o.param.as_ref().unwrap(), l.pos)?;
+            return Ok((format!("{{ let __l = {}; let __r = {}; __r.__op_{}(__l) }}", lc, rc, o.index), o.ret));
         }
         use BinOp::*;
         match op {
             And | Or => {
                 if lt != Type::Bool || rt != Type::Bool {
-                    return err(format!("`{}` needs `bool` on both sides, found `{}` and `{}`", op.rust(), lt, rt), pos);
+                    return err(
+                        format!("`{}` needs `bool` on both sides, found `{}` and `{}`", op.rust(), lt, rt),
+                        pos,
+                    );
                 }
                 Ok((format!("({} {} {})", lc, op.rust(), rc), Type::Bool))
             }
             Eq | Ne => {
                 let neg = if op == Eq { "" } else { "!" };
                 match (&lt, &rt) {
-                    (Type::Optional(_), Type::NoneLit) => return Ok((format!("{}({}).is_none()", neg, lc), Type::Bool)),
-                    (Type::NoneLit, Type::Optional(_)) => return Ok((format!("{}({}).is_none()", neg, rc), Type::Bool)),
+                    (Type::Optional(_), Type::NoneLit) => {
+                        return Ok((format!("{}({}).is_none()", neg, lc), Type::Bool));
+                    }
+                    (Type::NoneLit, Type::Optional(_)) => {
+                        return Ok((format!("{}({}).is_none()", neg, rc), Type::Bool));
+                    }
                     _ => {}
                 }
                 if lt != rt {
@@ -2188,7 +2491,9 @@ impl<'a> Gen<'a> {
                 }
                 Ok((format!("({} {} {})", lc, op.rust(), rc), Type::Bool))
             }
-            Add if lt == Type::Str && rt == Type::Str => Ok((format!("format!(\"{{}}{{}}\", {}, {})", lc, rc), Type::Str)),
+            Add if lt == Type::Str && rt == Type::Str => {
+                Ok((format!("format!(\"{{}}{{}}\", {}, {})", lc, rc), Type::Str))
+            }
             Add | Sub | Mul | Div | Rem => {
                 if lt != rt || !matches!(lt, Type::Int | Type::Float) {
                     let hint = if lt == Type::Str || rt == Type::Str { " (convert with `str(x)` first)" } else { "" };
@@ -2200,7 +2505,15 @@ impl<'a> Gen<'a> {
     }
 
     #[allow(clippy::too_many_arguments)]
-    fn call(&self, cx: &mut Ctx, name: &str, targs: &[TypeExpr], args: &[Expr], expected: Option<&Type>, pos: Pos) -> Result<(String, Type)> {
+    fn call(
+        &self,
+        cx: &mut Ctx,
+        name: &str,
+        targs: &[TypeExpr],
+        args: &[Expr],
+        expected: Option<&Type>,
+        pos: Pos,
+    ) -> Result<(String, Type)> {
         if (name == "Channel" || name == "Shared") && cx.lookup(name).is_none() {
             let explicit = match targs {
                 [] => None,
@@ -2217,7 +2530,10 @@ impl<'a> Gen<'a> {
                     _ => return err("cannot tell what the channel carries; write `Channel<int>()`", pos),
                 };
                 if !self.m.is_sendable(&elem) {
-                    return err(format!("a channel can only carry values that can move between threads, not `{}`", elem), pos);
+                    return err(
+                        format!("a channel can only carry values that can move between threads, not `{}`", elem),
+                        pos,
+                    );
                 }
                 return Ok((format!("__Channel::<{}>::new()", self.rty(&elem)), Type::Channel(Box::new(elem))));
             }
@@ -2243,9 +2559,12 @@ impl<'a> Gen<'a> {
                     t @ Type::Result(..) if expected.is_none() => t.clone(),
                     _ => {
                         return err(
-                            format!("cannot tell which `Result` this `{}` belongs to; give the variable a type, e.g. `let r: Result<int, str> = {}(...)`", name, name),
+                            format!(
+                                "cannot tell which `Result` this `{}` belongs to; give the variable a type, e.g. `let r: Result<int, str> = {}(...)`",
+                                name, name
+                            ),
                             pos,
-                        )
+                        );
                     }
                 },
             };
@@ -2299,7 +2618,15 @@ impl<'a> Gen<'a> {
             let (min, max) = (info.required_args(), info.fields.len());
             if args.len() < min || args.len() > max {
                 let range = if min == max { format!("{}", max) } else { format!("{} to {}", min, max) };
-                return err(format!("`{}(...)` takes {} argument(s) (its fields in order) but {} were given", name, range, args.len()), pos);
+                return err(
+                    format!(
+                        "`{}(...)` takes {} argument(s) (its fields in order) but {} were given",
+                        name,
+                        range,
+                        args.len()
+                    ),
+                    pos,
+                );
             }
             let mut binds = String::new();
             let mut inits = vec![];
@@ -2314,7 +2641,10 @@ impl<'a> Gen<'a> {
                 write!(binds, "let __a{} = {}; ", i, code).unwrap();
                 inits.push(format!("{}: __a{}", rid(f), i));
             }
-            return Ok((format!("{{ {}{} {{ {} }} }}", binds, name, inits.join(", ")), Type::Struct(name.to_string(), vec![])));
+            return Ok((
+                format!("{{ {}{} {{ {} }} }}", binds, name, inits.join(", ")),
+                Type::Struct(name.to_string(), vec![]),
+            ));
         }
         if self.m.classes.contains_key(name) {
             if self.m.classes[name].decl.is_abstract {
@@ -2323,7 +2653,10 @@ impl<'a> Gen<'a> {
             let sig = self.m.find_init(name).map(|(_, s)| s).unwrap_or(Signature { params: vec![], ret: Type::Void });
             let mut codes = vec![];
             if args.len() != sig.params.len() {
-                return err(format!("`{}(...)` takes {} argument(s) but {} were given", name, sig.params.len(), args.len()), pos);
+                return err(
+                    format!("`{}(...)` takes {} argument(s) but {} were given", name, sig.params.len(), args.len()),
+                    pos,
+                );
             }
             for (a, (_, t)) in args.iter().zip(&sig.params) {
                 codes.push(self.expr_to(cx, a, t)?);
@@ -2363,7 +2696,10 @@ impl<'a> Gen<'a> {
                 for a in args {
                     let (c, t) = self.expr(cx, a, None)?;
                     if !self.m.is_plain(&t) {
-                        return err(format!("cannot print a `{}` value (print its fields or a method result instead)", t), a.pos);
+                        return err(
+                            format!("cannot print a `{}` value (print its fields or a method result instead)", t),
+                            a.pos,
+                        );
                     }
                     parts.push(format!("__KlShow::__show(&{})", c));
                 }
@@ -2449,9 +2785,13 @@ impl<'a> Gen<'a> {
                 }
                 let tparams = self.m.structs[n].tparams.clone();
                 if !tparams.is_empty() {
-                    let (binds, names, bound, ret) = self.infer_call(cx, &tparams, &[], &m.sig, args, None, pos, name)?;
+                    let (binds, names, bound, ret) =
+                        self.infer_call(cx, &tparams, &[], &m.sig, args, None, pos, name)?;
                     let ret = if m.is_async { Type::Async(Box::new(ret)) } else { ret };
-                    return Ok((format!("{{ {}{}{}::__s_{}({}) }}", binds, n, self.turbofish(&bound), name, names), ret));
+                    return Ok((
+                        format!("{{ {}{}{}::__s_{}({}) }}", binds, n, self.turbofish(&bound), name, names),
+                        ret,
+                    ));
                 }
                 let (binds, names) = self.args(cx, &m.sig, args, pos, name)?;
                 let ret = if m.is_async { Type::Async(Box::new(m.sig.ret)) } else { m.sig.ret };
@@ -2463,11 +2803,7 @@ impl<'a> Gen<'a> {
                 if cx.is_static {
                     return err("`self` is not available in a `static fn`", pos);
                 }
-                let sargs = match self.struct_self_type(&st) {
-                    Type::Struct(_, a) => a,
-                    _ => unreachable!(),
-                };
-                return self.struct_method_call(cx, &st, &sargs, recv, name, args, pos);
+                return self.struct_method_call(cx, &self.struct_self_type(&st), recv, name, args, pos);
             }
             let class = self.self_class(cx, recv.pos)?;
             let sig = match self.m.find_method(&class, name) {
@@ -2476,7 +2812,7 @@ impl<'a> Gen<'a> {
                     s
                 }
                 None if self.m.find_static(&class, name).is_some() => {
-                    return err(format!("`{}` is a `static fn`; call it as `{}.{}(...)`", name, class, name), pos)
+                    return err(format!("`{}` is a `static fn`; call it as `{}.{}(...)`", name, class, name), pos);
                 }
                 None => {
                     if let Some(Type::Func(ps, r)) = self.func_field(&class, name) {
@@ -2502,8 +2838,12 @@ impl<'a> Gen<'a> {
                     let v = self.expr_to(cx, &args[0], t)?;
                     Ok((format!("{{ let __v = {}; {}{}.send(__v) }}", v, setup, rcode), Type::Void))
                 }
-                (Type::Channel(_), "receive", 0) => Ok((call(format!("{}.receive()", rcode)), Type::Optional(t.clone()))),
-                (Type::Channel(_), "try_receive", 0) => Ok((call(format!("{}.try_receive()", rcode)), Type::Optional(t.clone()))),
+                (Type::Channel(_), "receive", 0) => {
+                    Ok((call(format!("{}.receive()", rcode)), Type::Optional(t.clone())))
+                }
+                (Type::Channel(_), "try_receive", 0) => {
+                    Ok((call(format!("{}.try_receive()", rcode)), Type::Optional(t.clone())))
+                }
                 (Type::Channel(_), "close", 0) => Ok((call(format!("{}.close()", rcode)), Type::Void)),
                 (Type::Shared(_), "get", 0) => Ok((call(format!("{}.get()", rcode)), (**t).clone())),
                 (Type::Shared(_), "set", 1) => {
@@ -2515,11 +2855,30 @@ impl<'a> Gen<'a> {
                     let f = self.expr_to(cx, &args[0], &fty)?;
                     Ok((format!("{{ let __f = {}; {}{}.update(|__v| __f(__v)) }}", f, setup, rcode), Type::Void))
                 }
-                (Type::Task(_), _, _) => err(format!("`Task` has no method `{}` with {} argument(s) (use `join()` or `is_done()`)", name, args.len()), pos),
-                (Type::Channel(_), _, _) => {
-                    err(format!("`Channel` has no method `{}` with {} argument(s) (use send, receive, try_receive or close)", name, args.len()), pos)
-                }
-                _ => err(format!("`Shared` has no method `{}` with {} argument(s) (use get, set or update)", name, args.len()), pos),
+                (Type::Task(_), _, _) => err(
+                    format!(
+                        "`Task` has no method `{}` with {} argument(s) (use `join()` or `is_done()`)",
+                        name,
+                        args.len()
+                    ),
+                    pos,
+                ),
+                (Type::Channel(_), _, _) => err(
+                    format!(
+                        "`Channel` has no method `{}` with {} argument(s) (use send, receive, try_receive or close)",
+                        name,
+                        args.len()
+                    ),
+                    pos,
+                ),
+                _ => err(
+                    format!(
+                        "`Shared` has no method `{}` with {} argument(s) (use get, set or update)",
+                        name,
+                        args.len()
+                    ),
+                    pos,
+                ),
             };
         }
         if let (Type::Array(elem), "par_map") = (&recv_ty, name) {
@@ -2534,7 +2893,10 @@ impl<'a> Gen<'a> {
                 return err("the function given to `par_map` must return a value", args[0].pos);
             }
             let (setup, rcode, _) = self.receiver(cx, recv)?;
-            return Ok((format!("{{ let __f = {}; {}__par_map(&{}, &__f) }}", closure, setup, rcode), Type::Array(Box::new(rt))));
+            return Ok((
+                format!("{{ let __f = {}; {}__par_map(&{}, &__f) }}", closure, setup, rcode),
+                Type::Array(Box::new(rt)),
+            ));
         }
         if let Type::Result(t, e) = &recv_ty {
             let (setup, rcode, _) = self.receiver(cx, recv)?;
@@ -2550,19 +2912,30 @@ impl<'a> Gen<'a> {
                 ("unwrap", 0) => {
                     let show = if self.m.is_plain(e) { "__KlShow::__show(&__e)" } else { "String::from(\"an error\")" };
                     (
-                        format!("match {}.clone() {{ Ok(__v) => __v, Err(__e) => panic!(\"called unwrap() on an error: {{}}\", {}) }}", rcode, show),
+                        format!(
+                            "match {}.clone() {{ Ok(__v) => __v, Err(__e) => panic!(\"called unwrap() on an error: {{}}\", {}) }}",
+                            rcode, show
+                        ),
                         (**t).clone(),
                     )
                 }
                 ("is_ok" | "is_err" | "ok" | "err" | "unwrap" | "unwrap_or", _) => {
-                    return err(format!("wrong number of arguments for `{}`", name), pos)
+                    return err(format!("wrong number of arguments for `{}`", name), pos);
                 }
-                _ => return err(format!("`Result` has no method `{}` (use is_ok, is_err, ok, err, unwrap, unwrap_or or `match`)", name), pos),
+                _ => {
+                    return err(
+                        format!(
+                            "`Result` has no method `{}` (use is_ok, is_err, ok, err, unwrap, unwrap_or or `match`)",
+                            name
+                        ),
+                        pos,
+                    );
+                }
             };
             return Ok((format!("{{ {}{} }}", setup, code), ty));
         }
-        if let Type::Struct(st, sargs) = &recv_ty {
-            return self.struct_method_call(cx, st, sargs, recv, name, args, pos);
+        if matches!(recv_ty, Type::Struct(..)) {
+            return self.struct_method_call(cx, &recv_ty, recv, name, args, pos);
         }
         if let (Type::Map(k, v), "remove") = (&recv_ty, name) {
             let mut n = 0;
@@ -2583,7 +2956,12 @@ impl<'a> Gen<'a> {
                 let call = match **elem {
                     Type::Int | Type::Str | Type::Bool => "sort()",
                     Type::Float => "sort_by(|a, b| a.total_cmp(b))",
-                    _ => return err(format!("`sort` works on arrays of int, float, str or bool, not `{}`; use `sort_by`", elem), pos),
+                    _ => {
+                        return err(
+                            format!("`sort` works on arrays of int, float, str or bool, not `{}`; use `sort_by`", elem),
+                            pos,
+                        );
+                    }
                 };
                 return Ok((format!("{{ {}{}.{}; }}", pre, place, call), Type::Void));
             }
@@ -2635,7 +3013,17 @@ impl<'a> Gen<'a> {
                 self.check_method_access(cx, &owner, name, pos)?;
                 let sig = subst_sig(&sig, &self.m.bindings(c, targs));
                 let (binds, names) = self.args(cx, &sig, args, pos, name)?;
-                Ok((format!("{{ {}{}let __r = &{}; let __t = __r.borrow_mut().{}({}); __t }}", setup, binds, rcode, rid(name), names), sig.ret))
+                Ok((
+                    format!(
+                        "{{ {}{}let __r = &{}; let __t = __r.borrow_mut().{}({}); __t }}",
+                        setup,
+                        binds,
+                        rcode,
+                        rid(name),
+                        names
+                    ),
+                    sig.ret,
+                ))
             }
             Type::Class(c) => {
                 let sig = match self.m.find_method(c, name) {
@@ -2644,7 +3032,7 @@ impl<'a> Gen<'a> {
                         s
                     }
                     None if self.m.find_static(c, name).is_some() => {
-                        return err(format!("`{}` is a `static fn`; call it as `{}.{}(...)`", name, c, name), pos)
+                        return err(format!("`{}` is a `static fn`; call it as `{}.{}(...)`", name, c, name), pos);
                     }
                     None => {
                         if let Some(Type::Func(ps, r)) = self.func_field(c, name) {
@@ -2695,7 +3083,15 @@ impl<'a> Gen<'a> {
     }
 
     /// Non-mutating methods on arrays and strings.
-    fn value_method(&self, cx: &mut Ctx, rcode: &str, t: &Type, name: &str, args: &[Expr], pos: Pos) -> Result<(String, Type)> {
+    fn value_method(
+        &self,
+        cx: &mut Ctx,
+        rcode: &str,
+        t: &Type,
+        name: &str,
+        args: &[Expr],
+        pos: Pos,
+    ) -> Result<(String, Type)> {
         let arity = |n: usize| -> Result<()> {
             if args.len() != n { err(format!("`{}` takes {} argument(s)", name, n), pos) } else { Ok(()) }
         };
@@ -2709,20 +3105,44 @@ impl<'a> Gen<'a> {
                 let hint = Type::Func(vec![(**elem).clone()], Box::new(Type::Unknown));
                 let (f, ft) = self.expr(cx, &args[0], Some(&hint))?;
                 let out = match &ft {
-                    Type::Func(ps, r) if ps.len() == 1 && self.m.assignable(elem, &ps[0]) && **r != Type::Void => (**r).clone(),
-                    _ => return err(format!("`map` needs a function `fn({}) -> T`, found `{}`", elem, ft), args[0].pos),
+                    Type::Func(ps, r) if ps.len() == 1 && self.m.assignable(elem, &ps[0]) && **r != Type::Void => {
+                        (**r).clone()
+                    }
+                    _ => {
+                        return err(format!("`map` needs a function `fn({}) -> T`, found `{}`", elem, ft), args[0].pos);
+                    }
                 };
-                let arg = self.coerce("__e.clone()".into(), elem, &match &ft { Type::Func(ps, _) => ps[0].clone(), _ => unreachable!() }, pos)?;
-                Ok((format!("{{ let __f = {}; {}.iter().map(|__e| __f({})).collect::<Vec<_>>() }}", f, rcode, arg), Type::Array(Box::new(out))))
+                let arg = self.coerce(
+                    "__e.clone()".into(),
+                    elem,
+                    &match &ft {
+                        Type::Func(ps, _) => ps[0].clone(),
+                        _ => unreachable!(),
+                    },
+                    pos,
+                )?;
+                Ok((
+                    format!("{{ let __f = {}; {}.iter().map(|__e| __f({})).collect::<Vec<_>>() }}", f, rcode, arg),
+                    Type::Array(Box::new(out)),
+                ))
             }
             (Type::Array(elem), "filter" | "find") => {
                 arity(1)?;
                 let fty = Type::Func(vec![(**elem).clone()], Box::new(Type::Bool));
                 let f = self.expr_to(cx, &args[0], &fty)?;
                 if name == "filter" {
-                    Ok((format!("{{ let __f = {}; {}.iter().filter(|__e| __f((*__e).clone())).cloned().collect::<Vec<_>>() }}", f, rcode), t.clone()))
+                    Ok((
+                        format!(
+                            "{{ let __f = {}; {}.iter().filter(|__e| __f((*__e).clone())).cloned().collect::<Vec<_>>() }}",
+                            f, rcode
+                        ),
+                        t.clone(),
+                    ))
                 } else {
-                    Ok((format!("{{ let __f = {}; {}.iter().find(|__e| __f((*__e).clone())).cloned() }}", f, rcode), Type::Optional(elem.clone())))
+                    Ok((
+                        format!("{{ let __f = {}; {}.iter().find(|__e| __f((*__e).clone())).cloned() }}", f, rcode),
+                        Type::Optional(elem.clone()),
+                    ))
                 }
             }
             (Type::Array(elem), "contains") => {
@@ -2836,9 +3256,8 @@ fn op_sym(op: AssignOp) -> &'static str {
 fn always_returns(stmts: &[Stmt]) -> bool {
     match stmts.last().map(|s| &s.kind) {
         Some(StmtKind::Return(_)) => true,
-        Some(StmtKind::If { then, otherwise: Some(o), .. }) | Some(StmtKind::IfLet { then, otherwise: Some(o), .. }) => {
-            always_returns(then) && always_returns(o)
-        }
+        Some(StmtKind::If { then, otherwise: Some(o), .. })
+        | Some(StmtKind::IfLet { then, otherwise: Some(o), .. }) => always_returns(then) && always_returns(o),
         Some(StmtKind::While { cond: Expr { kind: ExprKind::Bool(true), .. }, body }) => !has_break(body),
         // Non-exhaustive matches are rejected during code generation.
         Some(StmtKind::Match { arms, .. }) => arms.iter().all(|a| always_returns(&a.body)),

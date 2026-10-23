@@ -1,0 +1,3 @@
+tests/ui/errors/struct_args.kl:10:19: error: `V(...)` takes 1 argument(s) (its fields in order) but 0 were given
+10 | fn main() { print(V()) }
+   |                   ^

@@ -1,0 +1,6 @@
+// Imports form a cycle (geo <-> util); each file is loaded once.
+import "lib/geo.kl"
+
+fn main() {
+    print(Square(3).area(), twice(5))
+}

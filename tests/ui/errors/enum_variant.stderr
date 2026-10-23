@@ -1,0 +1,3 @@
+tests/ui/errors/enum_variant.kl:2:20: error: enum `C` has no variant `X`
+2 | fn main() { print(C.X) }
+  |                    ^

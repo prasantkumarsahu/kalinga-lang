@@ -1,0 +1,8 @@
+fn main() {
+    let t = Thread.spawn(fn() -> int {
+        let xs = [1]
+        return xs[5]
+    })
+    print("before join")
+    print(t.join())
+}

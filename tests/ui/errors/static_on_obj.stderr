@@ -1,0 +1,3 @@
+tests/ui/errors/static_on_obj.kl:4:14: error: `f` is not a `static fn`; call it on a `C` object
+4 | fn main() { C.f() }
+  |              ^

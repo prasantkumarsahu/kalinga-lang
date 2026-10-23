@@ -1,0 +1,3 @@
+// An error inside an imported file points into that file.
+import "lib/bad.kl"
+fn main() {}

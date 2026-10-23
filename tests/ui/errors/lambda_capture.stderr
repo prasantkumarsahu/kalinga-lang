@@ -1,0 +1,3 @@
+tests/ui/errors/lambda_capture.kl:4:9: error: cannot change `n` inside a lambda: lambdas get a read-only copy of outside variables
+4 |         n += 1
+  |         ^

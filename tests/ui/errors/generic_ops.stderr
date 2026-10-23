@@ -1,0 +1,3 @@
+tests/ui/errors/generic_ops.kl:2:14: error: cannot apply `+` to `T` and `T`
+2 |     return a + b
+  |              ^

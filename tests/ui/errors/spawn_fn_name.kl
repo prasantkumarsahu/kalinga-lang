@@ -1,0 +1,4 @@
+fn work() -> int {
+    return 1
+}
+fn main() { let t = Thread.spawn(work) }

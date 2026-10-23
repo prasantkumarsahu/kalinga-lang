@@ -1,0 +1,8 @@
+async fn answer() -> int {
+    await Time.wait(0.01)
+    return 42
+}
+
+fn main() {
+    print("sync main got", Async.run(answer()))
+}

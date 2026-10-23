@@ -1,0 +1,12 @@
+struct V {
+    x: float
+    mut fn grow() {
+        self.x += 1.0
+    }
+    op +(o: V) -> V {
+        return V(self.x + o.x)
+    }
+}
+fn main() {
+    print(V(1.0) * 2.0)
+}

@@ -78,7 +78,10 @@ fn load(root_name: &str, root_source: &str) -> Result<(Program, SourceMap), Stri
         for (file, pos) in &parsed.rust_files {
             let target = dir.join(file);
             let canonical = std::fs::canonicalize(&target).map_err(|_| {
-                map.render(&CompileError::new(format!("cannot find Rust file `{}` (looked for {})", file, target.display()), *pos))
+                map.render(&CompileError::new(
+                    format!("cannot find Rust file `{}` (looked for {})", file, target.display()),
+                    *pos,
+                ))
             })?;
             let shown = canonical.display().to_string();
             // Windows canonical paths start with `\\?\`, which `#[path]` does not need.
@@ -94,7 +97,8 @@ fn load(root_name: &str, root_source: &str) -> Result<(Program, SourceMap), Stri
             program.rust_files.push((shown, *pos));
         }
         for dep in &parsed.crates {
-            crate::project::merge_crate(&mut program.crates, dep).map_err(|m| map.render(&CompileError::new(m, dep.pos)))?;
+            crate::project::merge_crate(&mut program.crates, dep)
+                .map_err(|m| map.render(&CompileError::new(m, dep.pos)))?;
         }
         program.extern_types.extend(parsed.extern_types);
         program.extern_fns.extend(parsed.extern_fns);
@@ -119,13 +123,13 @@ fn load(root_name: &str, root_source: &str) -> Result<(Program, SourceMap), Stri
                         return Err(fail(format!(
                             "unknown package `{}`: add it to utkal.toml (`utkal add {} --git <url>` or `--path <folder>`); files are imported with a `.kl` ending",
                             pkg, pkg
-                        )))
+                        )));
                     }
                     None => {
                         return Err(fail(format!(
                             "unknown package `{}`: packages need a utkal.toml project (`utkal new`); files are imported with a `.kl` ending",
                             pkg
-                        )))
+                        )));
                     }
                 }
             };
@@ -140,7 +144,8 @@ fn load(root_name: &str, root_source: &str) -> Result<(Program, SourceMap), Stri
                 units.imports.entry(unit.clone()).or_default().insert(target_unit.clone());
             }
             if seen.insert(canonical.clone()) {
-                let text = std::fs::read_to_string(&canonical).map_err(|err| fail(format!("cannot read `{}`: {}", import.path, err)))?;
+                let text = std::fs::read_to_string(&canonical)
+                    .map_err(|err| fail(format!("cannot read `{}`: {}", import.path, err)))?;
                 file_units.insert(canonical, target_unit.clone());
                 queue.push((target.clone(), target.display().to_string(), text, target_unit));
             }
@@ -273,7 +278,11 @@ fn rust_failure(native: &Native, generated: &Path, stderr: &str) -> String {
             stderr
         )
     } else {
-        format!("internal compiler error: generated Rust failed to compile.\nGenerated file: {}\n{}", generated.display(), stderr)
+        format!(
+            "internal compiler error: generated Rust failed to compile.\nGenerated file: {}\n{}",
+            generated.display(),
+            stderr
+        )
     }
 }
 
@@ -292,7 +301,12 @@ fn build_with_cargo(work: &Path, name: &str, rust: &str, native: &Native, exe: &
             manifest.push_str(&format!("{} = {:?}\n", dep.name, dep.version));
         } else {
             let fs: Vec<String> = dep.features.iter().map(|f| format!("{:?}", f)).collect();
-            manifest.push_str(&format!("{} = {{ version = {:?}, features = [{}] }}\n", dep.name, dep.version, fs.join(", ")));
+            manifest.push_str(&format!(
+                "{} = {{ version = {:?}, features = [{}] }}\n",
+                dep.name,
+                dep.version,
+                fs.join(", ")
+            ));
         }
     }
     let manifest_path = project.join("Cargo.toml");
@@ -317,12 +331,19 @@ fn build_with_cargo(work: &Path, name: &str, rust: &str, native: &Native, exe: &
         .map_err(|e| format!("cannot run `cargo` (is Rust installed and on PATH?): {}", e))?;
     if !result.status.success() {
         let stderr = String::from_utf8_lossy(&result.stderr);
-        if stderr.contains("failed to select a version") || stderr.contains("no matching package") || stderr.contains("failed to get") {
-            return Err(format!("error: cargo could not get the crates this program uses (check the names, versions and your internet connection)\n{}", stderr));
+        if stderr.contains("failed to select a version")
+            || stderr.contains("no matching package")
+            || stderr.contains("failed to get")
+        {
+            return Err(format!(
+                "error: cargo could not get the crates this program uses (check the names, versions and your internet connection)\n{}",
+                stderr
+            ));
         }
         return Err(rust_failure(native, &main_rs, &stderr));
     }
-    let built = target.join(&host).join("release").join(format!("{}{}", name.replace('_', "-"), std::env::consts::EXE_SUFFIX));
+    let built =
+        target.join(&host).join("release").join(format!("{}{}", name.replace('_', "-"), std::env::consts::EXE_SUFFIX));
     std::fs::copy(&built, exe).map_err(|e| format!("cannot copy {} to {}: {}", built.display(), exe.display(), e))?;
     Ok(exe.to_path_buf())
 }

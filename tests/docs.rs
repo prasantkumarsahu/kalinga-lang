@@ -1,90 +1,148 @@
-//! Keeps the documentation honest: every complete program in `docs/*.md` must compile,
-//! and every block marked ```` ```kalinga error ```` must be rejected.
+//! Keeps the documentation honest. In `docs/*.md`:
+//! - every complete program (a ```` ```kalinga ```` block with `fn main()`) must compile, and
+//!   when a ```` ```text ```` block follows it, running it must print exactly that;
+//! - every ```` ```kalinga error ```` block must be rejected, with the first line of the
+//!   following ```` ```text ```` block as the first line of the error.
+//!
+//! Programs that read input get `Asha` and `20` on stdin. Blocks that need other files
+//! (`import`, `use rust`, `use crate`) are covered by the UI tests instead.
 
 use std::io::Write;
 use std::process::{Command, Stdio};
+use std::sync::Mutex;
 
 struct Block {
     file: String,
     line: usize,
     expect_error: bool,
     code: String,
+    /// The ```` ```text ```` block right after this one.
+    output: Option<String>,
+}
+
+/// All fenced blocks of one Markdown text: (info string, first line, contents).
+fn fenced(text: &str) -> Vec<(String, usize, String)> {
+    let mut out = vec![];
+    let mut current: Option<(String, usize, String)> = None;
+    for (i, line) in text.lines().enumerate() {
+        let trimmed = line.trim();
+        match current.take() {
+            None => {
+                if let Some(info) = trimmed.strip_prefix("```").filter(|i| !i.trim().is_empty()) {
+                    current = Some((info.trim().to_string(), i + 1, String::new()));
+                }
+            }
+            Some((info, start, mut body)) => {
+                if trimmed == "```" {
+                    out.push((info, start, body));
+                } else {
+                    body.push_str(line);
+                    body.push('\n');
+                    current = Some((info, start, body));
+                }
+            }
+        }
+    }
+    out
 }
 
 fn doc_blocks() -> Vec<Block> {
-    let mut blocks = vec![];
     let mut paths: Vec<_> = std::fs::read_dir("docs")
         .expect("docs folder")
         .map(|e| e.unwrap().path())
         .filter(|p| p.extension().is_some_and(|x| x == "md"))
         .collect();
     paths.sort();
+    let mut blocks = vec![];
     for path in paths {
-        let text = std::fs::read_to_string(&path).unwrap();
-        let mut current: Option<Block> = None;
-        for (i, line) in text.lines().enumerate() {
-            let trimmed = line.trim();
-            match current.take() {
-                None => {
-                    if let Some(info) = trimmed.strip_prefix("```") {
-                        let info = info.trim();
-                        if info == "kalinga" || info == "kalinga error" {
-                            current = Some(Block {
-                                file: path.display().to_string(),
-                                line: i + 1,
-                                expect_error: info == "kalinga error",
-                                code: String::new(),
-                            });
-                        }
-                    }
-                }
-                Some(mut b) => {
-                    if trimmed == "```" {
-                        blocks.push(b);
-                    } else {
-                        b.code.push_str(line);
-                        b.code.push('\n');
-                        current = Some(b);
-                    }
-                }
+        let all = fenced(&std::fs::read_to_string(&path).unwrap());
+        for (i, (info, line, code)) in all.iter().enumerate() {
+            if info != "kalinga" && info != "kalinga error" {
+                continue;
             }
+            // The output is the next ```text block; ```bash blocks (the command that runs
+            // the program) may come in between.
+            let output = all[i + 1..]
+                .iter()
+                .find(|(next, _, _)| next != "bash")
+                .filter(|(next, _, _)| next == "text")
+                .map(|(_, _, t)| t.clone());
+            blocks.push(Block {
+                file: path.display().to_string(),
+                line: *line,
+                expect_error: info == "kalinga error",
+                code: code.clone(),
+                output,
+            });
         }
     }
     blocks
 }
 
-fn check(code: &str) -> (bool, String) {
+fn kalinga(args: &[&str], stdin: &str) -> (i32, String) {
     let mut child = Command::new(env!("CARGO_BIN_EXE_kalinga"))
-        .args(["check", "main.kl", "--stdin"])
+        .args(args)
         .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
         .unwrap();
-    child.stdin.take().unwrap().write_all(code.as_bytes()).unwrap();
+    child.stdin.take().unwrap().write_all(stdin.as_bytes()).unwrap();
     let out = child.wait_with_output().unwrap();
-    (out.status.success(), String::from_utf8_lossy(&out.stderr).into_owned())
+    let text = format!("{}{}", String::from_utf8_lossy(&out.stdout), String::from_utf8_lossy(&out.stderr));
+    (out.status.code().unwrap_or(-1), text.replace("\r\n", "\n"))
+}
+
+/// Checks one block; `None` when it is as documented.
+fn verify(b: &Block, id: usize) -> Option<String> {
+    let at = format!("{}:{}", b.file, b.line);
+    let (code, checked) = kalinga(&["check", "main.kl", "--stdin"], &b.code);
+    if b.expect_error {
+        let expected = b.output.as_deref().and_then(|o| o.lines().next()).unwrap_or("");
+        return match (code, checked.lines().next()) {
+            (0, _) => Some(format!("{}: expected a compile error, but it compiled", at)),
+            (_, Some(first)) if !expected.is_empty() && first != expected => {
+                Some(format!("{}: error is\n  {}\nbut the docs say\n  {}", at, first, expected))
+            }
+            _ => None,
+        };
+    }
+    if code != 0 {
+        return Some(format!("{}: does not compile:\n{}", at, checked));
+    }
+    let expected = b.output.as_deref()?;
+    // Each block gets its own folder, so build files never collide.
+    let dir = std::env::temp_dir().join("kalinga-doc-tests").join(id.to_string());
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("main.kl");
+    std::fs::write(&file, &b.code).unwrap();
+    let (_, got) = kalinga(&["run", file.to_str().unwrap()], "Asha\n20\n");
+    (got.trim() != expected.trim()).then(|| format!("{}: output differs\n--- docs\n{}--- got\n{}", at, expected, got))
 }
 
 #[test]
-fn doc_examples_compile() {
-    let blocks = doc_blocks();
-    let mut checked = 0;
-    let mut failures = vec![];
-    for b in &blocks {
-        if !b.expect_error && !b.code.contains("fn main()") {
-            continue; // a fragment, not a complete program
+fn doc_examples_match_their_output() {
+    let blocks: Vec<Block> = doc_blocks()
+        .into_iter()
+        .filter(|b| b.expect_error || b.code.contains("fn main()"))
+        .filter(|b| !["import \"", "use rust \"", "use crate \""].iter().any(|n| b.code.contains(n)))
+        .collect();
+    assert!(blocks.len() > 100, "only found {} doc examples", blocks.len());
+    let queue = Mutex::new(blocks.iter().enumerate().collect::<Vec<_>>());
+    let failures = Mutex::new(vec![]);
+    let workers = std::thread::available_parallelism().map_or(4, |n| n.get());
+    std::thread::scope(|s| {
+        for _ in 0..workers {
+            s.spawn(|| {
+                while let Some((id, b)) = queue.lock().unwrap().pop() {
+                    if let Some(f) = verify(b, id) {
+                        failures.lock().unwrap().push(f);
+                    }
+                }
+            });
         }
-        if b.code.contains("import \"") || b.code.contains("use rust \"") || b.code.contains("use crate \"") {
-            continue; // needs other files; covered by the `imports` and interop tests
-        }
-        checked += 1;
-        let (ok, stderr) = check(&b.code);
-        if b.expect_error && ok {
-            failures.push(format!("{}:{}: expected a compile error, but it compiled", b.file, b.line));
-        } else if !b.expect_error && !ok {
-            failures.push(format!("{}:{}: does not compile:\n{}", b.file, b.line, stderr));
-        }
-    }
-    assert!(checked > 40, "only found {} doc examples", checked);
-    assert!(failures.is_empty(), "{}", failures.join("\n\n"));
+    });
+    let mut failures = failures.into_inner().unwrap();
+    failures.sort();
+    assert!(failures.is_empty(), "{} doc example(s) are wrong:\n\n{}", failures.len(), failures.join("\n\n"));
 }

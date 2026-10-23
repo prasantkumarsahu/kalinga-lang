@@ -1,0 +1,13 @@
+// ui: network
+use crate "fastrand" = "2" features ["std"]
+
+extern fn roll(sides: int) -> int = rust { fastrand::i64(1..=sides) }
+
+fn main() {
+    var ok = true
+    for i in 0..1000 {
+        let r = roll(6)
+        if r < 1 || r > 6 { ok = false }
+    }
+    print("roll ok:", ok)
+}

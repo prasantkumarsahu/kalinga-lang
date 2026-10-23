@@ -160,10 +160,19 @@ From the repository root:
 cargo test
 ```
 
-This runs the example programs, checks the expected error messages, compiles every
-complete example in these docs, and exercises `utkal` with local packages and a local git
-repository. `cargo test -- --ignored` also runs the tests that download crates or open a
-window.
+This runs:
+
+- **snapshot tests**: every `tests/ui/<group>/<name>.kl` is run (or checked, when its first
+  line is `// ui: check`), and its output must match `<name>.stdout`, `<name>.stderr` and
+  `<name>.exit` next to it. After an intended change, `BLESS=1 cargo test --test ui`
+  rewrites the snapshots; review them with `git diff` before committing;
+- **documentation tests**: every complete example in these docs must compile and print
+  exactly the output shown after it;
+- **command-line and utkal tests**, including local packages and a local git repository.
+
+`cargo test -- --ignored` also runs the tests that download crates or open a window. The
+same checks, plus `cargo fmt --check` and `cargo clippy -- -D warnings`, run on Windows,
+Linux and macOS for every push (`.github/workflows/ci.yml`).
 
 ---
 

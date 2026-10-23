@@ -1,0 +1,3 @@
+tests/ui/errors/unknown_field.kl:4:12: error: `A` has no field `b`
+4 |     print(a.b)
+  |            ^

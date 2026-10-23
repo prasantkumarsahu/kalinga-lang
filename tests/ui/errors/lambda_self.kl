@@ -1,0 +1,7 @@
+class A {
+    x: int
+    fn m() {
+        let f = fn() => self.x
+    }
+}
+fn main() {}

@@ -1,0 +1,3 @@
+tests/ui/errors/std_missing.kl:1:1: error: there is no standard module `std/nope`
+1 | import "std/nope"
+  | ^
