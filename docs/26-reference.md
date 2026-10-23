@@ -108,7 +108,7 @@ TARGET = EXPR                  TARGET is a var, self.field, obj.field or a[i]
 TARGET op= EXPR
 if EXPR { ... } [else if EXPR { ... }] [else { ... }]
 if let NAME = OPTIONAL_EXPR { ... } [else { ... }]
-match EXPR { PATTERN => STATEMENT_OR_BLOCK ... }
+match EXPR { PATTERN => STATEMENT_OR_BLOCK ... }     arms on one line need `,` between them
     PATTERN = Variant | Variant(name, _, ...) | Enum.Variant(...) | INT | STRING | true | false | _
 while EXPR { ... }
 for NAME in EXPR..EXPR { ... }
@@ -240,12 +240,13 @@ Library functions: `Math.*`, `Random.*` and `Time.*` (chapter 15), `Time.wait(s)
 ## Grammar (EBNF)
 
 ```text
-program     = { import | use | extern | function | class | struct | interface | enum } ;
+program     = { import | use | extern | function | class | struct | interface | enum | const } ;
+const       = "const" IDENT ":" type "=" expr ;
 import      = "import" STRING [ "as" IDENT ] ;
 use         = "use" ( "rust" STRING | "crate" STRING "=" STRING [ "features" "[" STRING { "," STRING } "]" ] ) ;
 extern      = "extern" ( "type" IDENT | "fn" IDENT params [ "->" type ] [ "=" ( STRING | "rust" RUST_BLOCK ) ] ) ;
 struct      = "struct" IDENT [ tparams ] "{" { { modifier } IDENT ":" type [ "=" expr ]
-            | "static" IDENT ":" type "=" expr
+            | const | "static" "var" IDENT ":" type "=" expr
             | [ "mut" ] { modifier } "fn" IDENT params [ "->" type ] block
             | "op" ( "+" | "-" | "*" | "/" | "%" ) params "->" type block } "}" ;
 function    = [ "async" ] "fn" IDENT [ tparams ] params [ "->" type ] block ;
@@ -255,6 +256,7 @@ param       = IDENT ":" type ;
 class       = [ "abstract" ] "class" IDENT [ tparams ] [ ":" IDENT { "," IDENT } ] "{" { member } "}" ;
 member      = { modifier } IDENT ":" type [ "=" expr ]
             | "init" params block
+            | const | "static" "var" IDENT ":" type "=" expr
             | { modifier } "fn" IDENT params [ "->" type ] ( block | (* abstract *) ) ;
 modifier    = "private" | "static" | "abstract" | "override" | "async" ;
 interface   = "interface" IDENT [ ":" IDENT { "," IDENT } ] "{" { "fn" IDENT params [ "->" type ] } "}" ;
@@ -270,7 +272,7 @@ statement   = ( "let" | "var" ) IDENT [ ":" type ] "=" expr
             | "if" ( expr | "let" IDENT "=" expr ) block [ "else" ( block | if_stmt ) ]
             | "while" expr block
             | "for" IDENT "in" expr [ ".." expr ] block
-            | "match" expr "{" { pattern "=>" ( block | statement ) } "}"
+            | "match" expr "{" { pattern "=>" ( block | statement ) [ "," ] } "}"
             | "return" [ expr ] | "break" | "continue" ;
 pattern     = "_" | [ IDENT "." ] IDENT [ "(" IDENT { "," IDENT } ")" ] | [ "-" ] INT | STRING | "true" | "false" ;
 assign_op   = "=" | "+=" | "-=" | "*=" | "/=" | "%=" ;
@@ -289,17 +291,21 @@ primary     = INT | FLOAT | STRING | "true" | "false" | "none" | "self"
             | IDENT [ "<" type { "," type } ">" ] [ args ]
             | "super" ( args | "." IDENT args )
             | "fn" "(" [ IDENT [ ":" type ] { "," IDENT [ ":" type ] } ] ")" [ "->" type ] ( "=>" expr | block )
+            | "if" expr value_block "else" ( value_block | (* if expression *) )
+            | "match" expr "{" { pattern "=>" ( value_block | expr ) [ "," ] } "}"
             | "(" expr ")" | "[" [ expr { "," expr } [ "," ] ] "]"
             | "{" [ expr ":" expr { "," expr ":" expr } [ "," ] ] "}" ;
 args        = "(" [ expr { "," expr } [ "," ] ] ")" ;
+value_block = "{" { statement } expr "}" ;
 ```
 
 ## Not yet supported
 
 Bounds on type parameters (`T: Show`), generic interfaces and enums, inheritance with
-generic classes, operators on classes, closures that change captured variables, global
-variables, `async` instance methods, `await` inside lambdas, sharing objects between threads,
-a package registry, string indexing, tuples, exceptions (`try`/`catch`; use `Result`).
+generic classes, operators on classes, closures that change captured variables, mutable
+global variables (use a `static var` member), `if let` as a value, `async` instance
+methods, `await` inside lambdas, sharing objects between threads, a package registry,
+tuples, exceptions (`try`/`catch`; use `Result`).
 
 ---
 

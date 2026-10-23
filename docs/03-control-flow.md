@@ -39,6 +39,32 @@ fn main() {
 }
 ```
 
+### if as a value
+
+An `if` can also give a value. Each branch ends with the value it gives, and `else` is
+required:
+
+```kalinga
+fn main() {
+    let score = 82
+    let grade = if score >= 90 { "A" } else if score >= 75 { "B" } else { "C" }
+    let bonus = if score > 80 {
+        let extra = score - 80
+        extra * 10
+    } else {
+        0
+    }
+    println(grade, bonus)
+}
+```
+
+```text
+B 20
+```
+
+All branches must give the same type. A branch that gives `none` makes the value optional
+(`if found { x } else { none }` is an `int?` when `x` is an `int`).
+
 ## while
 
 Repeats while the condition is `true`:

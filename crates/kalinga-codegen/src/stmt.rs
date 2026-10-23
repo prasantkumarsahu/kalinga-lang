@@ -166,9 +166,7 @@ impl Gen<'_> {
     }
 
     fn match_stmt(&self, value: &TExpr, arms: &[TArm], depth: usize) -> String {
-        let code = self.expr(value);
-        let scrutinee = if value.ty == Type::Str { format!("({}).as_str()", code) } else { code };
-        let mut out = format!("match {} {{\n", scrutinee);
+        let mut out = format!("match {} {{\n", self.scrutinee(value));
         for arm in arms {
             let (pattern, unbox) = self.pattern(&arm.pattern);
             let body = self.block(&arm.body, depth + 1);
@@ -181,6 +179,29 @@ impl Gen<'_> {
 }
 
 impl Gen<'_> {
+    /// The value a `match` looks at; strings are matched as `&str`.
+    pub(crate) fn scrutinee(&self, value: &TExpr) -> String {
+        let code = self.expr(value);
+        if value.ty == Type::Str { format!("({}).as_str()", code) } else { code }
+    }
+
+    /// A branch of an `if` or `match` used as a value, as a Rust block.
+    pub(crate) fn value_block(&self, b: &TValueBlock, unbox: &str) -> String {
+        format!("{{ {}{}{} }}", unbox, self.block_inner(&b.stmts, 1), self.expr(&b.value))
+    }
+
+    /// `match` used as a value.
+    pub(crate) fn match_expr(&self, value: &TExpr, arms: &[(TPattern, TValueBlock)]) -> String {
+        let arms: Vec<String> = arms
+            .iter()
+            .map(|(p, b)| {
+                let (pattern, unbox) = self.pattern(p);
+                format!("{} => {}", pattern, self.value_block(b, &unbox))
+            })
+            .collect();
+        format!("(match {} {{ {} }})", self.scrutinee(value), arms.join(", "))
+    }
+
     /// A match pattern, and the `let x = *x;` lines that take boxed fields out of their box.
     fn pattern(&self, pattern: &TPattern) -> (String, String) {
         let TPattern::Variant { enum_name, variant, binds } = pattern else {

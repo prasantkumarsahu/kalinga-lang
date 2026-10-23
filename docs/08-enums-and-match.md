@@ -144,6 +144,41 @@ error — so nothing silently falls through.
 A `match` whose arms all `return` counts as returning, so a function can end with one
 (like `area` above).
 
+### match as a value
+
+A `match` can give a value, too: each arm is `Pattern => value`, or a block that ends with
+its value. Arms on one line are separated by commas:
+
+```kalinga
+enum Dir {
+    Up
+    Down
+    Left
+    Right
+}
+
+fn main() {
+    let d = Dir.Left
+    let dx = match d { Left => -1, Right => 1, _ => 0 }
+    let name = match d {
+        Up => "up"
+        Down => "down"
+        Left => {
+            let arrow = "<-"
+            "left {arrow}"
+        }
+        Right => "right"
+    }
+    println(dx, name)
+}
+```
+
+```text
+-1 left <-
+```
+
+As with `if`, every arm must give the same type, and the `match` must handle every case.
+
 ## Matching numbers, strings and booleans
 
 `match` also works on `int`, `str` and `bool` values, using literal patterns. These need a

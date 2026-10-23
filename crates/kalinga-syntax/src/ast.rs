@@ -287,6 +287,19 @@ pub enum ExprKind {
     Await(Box<Expr>),
     /// `expr?`: unwrap an `Ok` / non-`none` value or return the error / `none` early.
     Try(Box<Expr>),
+    /// `if cond { ... a } else { ... b }` used as a value. Each branch ends with an
+    /// expression statement, its value; `else if` is an `otherwise` holding one `If`.
+    If {
+        cond: Box<Expr>,
+        then: Vec<Stmt>,
+        otherwise: Vec<Stmt>,
+    },
+    /// `match value { Pattern => a, ... }` used as a value; each arm's body ends with an
+    /// expression statement, its value.
+    Match {
+        value: Box<Expr>,
+        arms: Vec<MatchArm>,
+    },
     /// `fn(x: int) -> int { ... }` or `fn(x) => x * 2`
     Lambda {
         params: Vec<(String, Option<TypeExpr>, Span)>,
@@ -329,7 +342,22 @@ impl Expr {
             ExprKind::Slice(base, from, to) => {
                 std::iter::once(&**base).chain(from.as_deref()).chain(to.as_deref()).collect()
             }
+            // Statements inside the branches are not included, only the values they end with.
+            ExprKind::If { cond, then, otherwise } => {
+                std::iter::once(&**cond).chain(block_value(then)).chain(block_value(otherwise)).collect()
+            }
+            ExprKind::Match { value, arms } => {
+                std::iter::once(&**value).chain(arms.iter().filter_map(|a| block_value(&a.body))).collect()
+            }
         }
+    }
+}
+
+/// The expression a value block (a branch of an `if` or `match` expression) ends with.
+pub fn block_value(stmts: &[Stmt]) -> Option<&Expr> {
+    match stmts.last().map(|s| &s.kind) {
+        Some(StmtKind::Expr(e)) => Some(e),
+        _ => None,
     }
 }
 

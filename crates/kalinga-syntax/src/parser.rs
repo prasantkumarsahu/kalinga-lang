@@ -684,13 +684,9 @@ impl Parser {
             let apos = self.pos();
             let pattern = self.pattern()?;
             self.expect(Tok::FatArrow, "`=>` after the pattern")?;
-            let body = if self.check(&Tok::LBrace) {
-                let b = self.block()?;
-                self.skip_newlines();
-                b
-            } else {
-                vec![self.statement()?]
-            };
+            let body = if self.check(&Tok::LBrace) { self.block()? } else { vec![self.statement_ending(true)?] };
+            self.eat(&Tok::Comma);
+            self.skip_newlines();
             arms.push(MatchArm { pattern, body, pos: apos });
         }
         self.expect(Tok::RBrace, "`}`")?;
@@ -772,6 +768,11 @@ impl Parser {
     }
 
     fn statement(&mut self) -> Result<Stmt> {
+        self.statement_ending(false)
+    }
+
+    /// A statement; with `comma_ok` (a one-line match arm) it may also end at a `,`.
+    fn statement_ending(&mut self, comma_ok: bool) -> Result<Stmt> {
         let pos = self.pos();
         let kind = match self.peek() {
             Tok::Let | Tok::Var => {
@@ -839,7 +840,9 @@ impl Parser {
                 }
             }
         };
-        self.end_of_statement()?;
+        if !(comma_ok && self.check(&Tok::Comma)) {
+            self.end_of_statement()?;
+        }
         Ok(Stmt { kind, pos })
     }
 
@@ -871,6 +874,81 @@ impl Parser {
             return Ok(None);
         }
         if self.check(&Tok::If) { Ok(Some(vec![self.if_stmt()?])) } else { Ok(Some(self.block()?)) }
+    }
+
+    /// `if` used as a value, after `if`: both branches are value blocks, and `else` is
+    /// required.
+    fn if_expr(&mut self, pos: Span) -> Result<ExprKind> {
+        if self.check(&Tok::Let) {
+            return err("`if let` cannot be used as a value (yet); use a `match`, or a `var` set in each branch", pos);
+        }
+        let cond = self.expr()?;
+        let then = self.value_block("if")?;
+        self.skip_newlines();
+        if !self.eat(&Tok::Else) {
+            return err("an `if` used as a value needs an `else` branch", pos);
+        }
+        let otherwise = if self.check(&Tok::If) {
+            let at = self.advance().pos;
+            let inner = Expr { kind: self.if_expr(at)?, pos: at };
+            vec![Stmt { kind: StmtKind::Expr(inner), pos: at }]
+        } else {
+            self.value_block("if")?
+        };
+        Ok(ExprKind::If { cond: Box::new(cond), then, otherwise })
+    }
+
+    /// `match` used as a value, after `match`: each arm is `Pattern => value` or
+    /// `Pattern => { ... value }`, separated by newlines or commas.
+    fn match_expr(&mut self) -> Result<ExprKind> {
+        let value = self.expr()?;
+        self.expect(Tok::LBrace, "`{` to start the match arms")?;
+        self.skip_newlines();
+        let mut arms = Vec::new();
+        while !self.check(&Tok::RBrace) {
+            let apos = self.pos();
+            let pattern = self.pattern()?;
+            self.expect(Tok::FatArrow, "`=>` after the pattern")?;
+            let body = if self.check(&Tok::LBrace) {
+                self.value_block("match")?
+            } else {
+                let e = self.expr()?;
+                vec![Stmt { pos: e.pos, kind: StmtKind::Expr(e) }]
+            };
+            self.eat(&Tok::Comma);
+            self.skip_newlines();
+            arms.push(MatchArm { pattern, body, pos: apos });
+        }
+        self.expect(Tok::RBrace, "`}`")?;
+        Ok(ExprKind::Match { value: Box::new(value), arms })
+    }
+
+    /// `{ statements... value }`: a block whose last line is the value it gives. A trailing
+    /// `if` or `match` is read as a value too.
+    fn value_block(&mut self, what: &str) -> Result<Vec<Stmt>> {
+        self.expect(Tok::LBrace, "`{`")?;
+        self.skip_newlines();
+        let mut stmts = Vec::new();
+        while !self.check(&Tok::RBrace) {
+            if self.check(&Tok::Eof) {
+                return err("unexpected end of file, missing `}`", self.pos());
+            }
+            let start = self.i;
+            let s = self.statement()?;
+            if self.check(&Tok::RBrace) && matches!(s.kind, StmtKind::If { .. } | StmtKind::Match { .. }) {
+                self.i = start;
+                let e = self.expr()?;
+                self.skip_newlines();
+                stmts.push(Stmt { pos: e.pos, kind: StmtKind::Expr(e) });
+            } else {
+                stmts.push(s);
+            }
+        }
+        let end = self.expect(Tok::RBrace, "`}`")?;
+        if block_value(&stmts).is_none() {
+            return err(format!("this branch of an `{}` used as a value must end with its value", what), end);
+        }
+        Ok(stmts)
     }
 
     // ---- expressions, lowest precedence first ----
@@ -997,6 +1075,8 @@ impl Parser {
             Tok::Int(v) => ExprKind::Int(v),
             Tok::Float(v) => ExprKind::Float(v),
             Tok::Str(s) => ExprKind::Str(s),
+            Tok::If => self.if_expr(pos)?,
+            Tok::Match => self.match_expr()?,
             Tok::Fn => {
                 self.expect(Tok::LParen, "`(` to start the lambda's parameters")?;
                 let mut params = Vec::new();

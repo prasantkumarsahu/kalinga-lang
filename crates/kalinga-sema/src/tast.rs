@@ -90,6 +90,17 @@ pub enum TExprKind {
     },
     /// `Math.PI`, `Math.TAU`, `Math.E`, `Math.INF`.
     MathConst(String),
+    /// `if` used as a value.
+    If {
+        cond: Box<TExpr>,
+        then: TValueBlock,
+        otherwise: TValueBlock,
+    },
+    /// `match` used as a value.
+    Match {
+        value: Box<TExpr>,
+        arms: Vec<(TPattern, TValueBlock)>,
+    },
     /// `Enum.Variant` or `Enum.Variant(args)`.
     Variant {
         enum_name: String,
@@ -406,6 +417,13 @@ pub enum TStmt {
         owner: String,
         args: Vec<TExpr>,
     },
+}
+
+/// A branch of an `if` or `match` used as a value: statements, then the value.
+#[derive(Debug, Clone)]
+pub struct TValueBlock {
+    pub stmts: Vec<TStmt>,
+    pub value: Box<TExpr>,
 }
 
 #[derive(Debug, Clone)]

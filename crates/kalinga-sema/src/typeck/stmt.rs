@@ -18,7 +18,7 @@ impl Checker<'_> {
         cx.scoped(|cx| self.stmts(cx, stmts))
     }
 
-    fn cond(&self, cx: &mut Ctx, e: &Expr) -> Result<TExpr> {
+    pub(super) fn cond(&self, cx: &mut Ctx, e: &Expr) -> Result<TExpr> {
         let c = self.expr(cx, e, None)?;
         if c.ty != Type::Bool {
             return err(format!("condition must be `bool`, found `{}`", c.ty), e.pos);
@@ -174,6 +174,20 @@ impl Checker<'_> {
     // ------------------------------------------------------------ match
 
     fn match_stmt(&self, cx: &mut Ctx, value: &Expr, arms: &[MatchArm], pos: Span) -> Result<TStmt> {
+        let (value, arms) = self.match_arms(cx, value, arms, pos, |cx, arm| self.block(cx, &arm.body))?;
+        Ok(TStmt::Match { value, arms: arms.into_iter().map(|(pattern, body)| TArm { pattern, body }).collect() })
+    }
+
+    /// The value and patterns of a `match`, which must handle every case; `body` checks
+    /// each arm's body with the pattern's bindings in scope.
+    pub(super) fn match_arms<T>(
+        &self,
+        cx: &mut Ctx,
+        value: &Expr,
+        arms: &[MatchArm],
+        pos: Span,
+        mut body: impl FnMut(&mut Ctx, &MatchArm) -> Result<T>,
+    ) -> Result<(TExpr, Vec<(TPattern, T)>)> {
         let value_t = self.expr(cx, value, None)?;
         let ty = value_t.ty.clone();
         let enum_info = match &ty {
@@ -195,7 +209,7 @@ impl Checker<'_> {
             }
             let tarm = cx.scoped(|cx| {
                 let pattern = self.pattern(cx, arm, &ty, enum_info.as_ref(), &mut cover)?;
-                Ok(TArm { pattern, body: self.block(cx, &arm.body)? })
+                Ok((pattern, body(cx, arm)?))
             })?;
             tarms.push(tarm);
         }
@@ -216,7 +230,7 @@ impl Checker<'_> {
             };
             return err(format!("`match` does not handle every case ({})", missing), pos);
         }
-        Ok(TStmt::Match { value: value_t, arms: tarms })
+        Ok((value_t, tarms))
     }
 
     /// The pattern of one arm; declares its bindings in the current scope.

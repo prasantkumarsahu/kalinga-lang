@@ -36,6 +36,15 @@ impl Gen<'_> {
             TExprKind::StructOp { index, lhs, rhs, swapped } => self.struct_op(*index, lhs, rhs.as_deref(), *swapped),
             TExprKind::Downcast { value, target, via, test_only } => self.downcast(value, target, via, *test_only),
             TExprKind::Lambda(l) => self.lambda(l, &e.ty),
+            TExprKind::If { cond, then, otherwise } => {
+                format!(
+                    "(if {} {} else {})",
+                    self.expr(cond),
+                    self.value_block(then, ""),
+                    self.value_block(otherwise, "")
+                )
+            }
+            TExprKind::Match { value, arms } => self.match_expr(value, arms),
             TExprKind::Await(v) => match v.ty {
                 Type::Task(_) => format!("__task_wait({}).await", self.expr(v)),
                 _ => format!("({}).await", self.expr(v)),

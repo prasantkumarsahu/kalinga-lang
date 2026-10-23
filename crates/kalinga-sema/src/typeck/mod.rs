@@ -4,6 +4,7 @@
 //! Each body is checked on its own: an error in one does not stop the others from being
 //! checked, so a program's independent mistakes are all reported at once.
 
+mod branch;
 mod call;
 mod expr;
 mod lambda;

@@ -1,0 +1,66 @@
+enum Dir {
+    Up
+    Down
+    Left
+    Right
+}
+
+enum Shape {
+    Circle(r: float)
+    Rect(w: float, h: float)
+}
+
+class Animal {
+    fn name() -> str {
+        return "animal"
+    }
+}
+
+class Dog : Animal {
+    override fn name() -> str {
+        return "dog"
+    }
+}
+
+fn area(s: Shape) -> float {
+    return match s {
+        Circle(r) => 3.0 * r * r
+        Rect(w, h) => w * h
+    }
+}
+
+fn main() {
+    let a = 3
+    let b = 7
+    let big = if a > b { a } else { b }
+    println(big)
+    let label = if big > 10 { "large" } else if big > 5 { "medium" } else { "small" }
+    println(label)
+    let speed: float = if a > 0 { 2 } else { 0.5 }
+    println(speed)
+    let d = Dir.Left
+    let dx = match d { Left => -1, Right => 1, _ => 0 }
+    println(dx)
+    let name = match d {
+        Up => "up"
+        Down => "down"
+        Left => {
+            let s = "le"
+            s + "ft"
+        }
+        Right => "right"
+    }
+    println(name)
+    println(area(Shape.Circle(1)), area(Shape.Rect(2, 3)))
+    let found: int? = if a > 1 { a } else { none }
+    let missing = if a > 100 { a } else { none }
+    println(found, missing)
+    let pet: Animal = if a > 1 { Dog() } else { Animal() }
+    println(pet.name())
+    let word = match "b" { "a" => 1, "b" => 2, _ => 3 }
+    let nested = if true { match d { Left => "L", _ => "?" } } else { "no" }
+    println(word, nested)
+    let f = fn(x: int) => if x % 2 == 0 { "even" } else { "odd" }
+    println(f(3), f(4))
+    println("total: {if a > 1 { a * 10 } else { 0 }}")
+}

@@ -1,0 +1,3 @@
+tests/ui/errors/if_value_types.kl:2:34: error: expected `int`, found `str` (every branch must give the same type)
+2 |     let x = if true { 1 } else { "a" }
+  |                                  ^^^

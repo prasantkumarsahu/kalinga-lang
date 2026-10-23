@@ -29,6 +29,8 @@ impl Checker<'_> {
             ExprKind::SelfRef => self.self_value(cx, pos),
             ExprKind::Downcast { value, class, test_only } => self.downcast(cx, value, class, *test_only, pos),
             ExprKind::Lambda { params, ret, body } => self.lambda(cx, params, ret.as_ref(), body, expected, pos),
+            ExprKind::If { cond, then, otherwise } => self.if_expr(cx, cond, then, otherwise, expected, pos),
+            ExprKind::Match { value, arms } => self.match_expr(cx, value, arms, expected, pos),
             ExprKind::Await(inner) => self.await_expr(cx, inner, pos),
             ExprKind::Try(inner) => self.try_expr(cx, inner, pos),
             ExprKind::Ident(name) => self.ident(cx, name, pos),

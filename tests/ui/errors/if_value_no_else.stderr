@@ -1,0 +1,3 @@
+tests/ui/errors/if_value_no_else.kl:2:13: error: an `if` used as a value needs an `else` branch
+2 |     let y = if true { 1 }
+  |             ^^

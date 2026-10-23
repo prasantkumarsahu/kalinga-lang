@@ -392,17 +392,7 @@ impl<'a> Resolver<'a> {
             }
             StmtKind::Match { value, arms } => {
                 self.expr(value, sc)?;
-                for arm in arms {
-                    sc.push();
-                    if let Pattern::Variant(_, binds) = &arm.pattern {
-                        for b in binds {
-                            sc.add(b);
-                        }
-                    }
-                    let r = self.block(&mut arm.body, sc);
-                    sc.pop();
-                    r?;
-                }
+                self.arms(arms, sc)?;
             }
             StmtKind::For { var, iter, body } => {
                 match iter {
@@ -420,6 +410,48 @@ impl<'a> Resolver<'a> {
             }
             StmtKind::Return(Some(e)) | StmtKind::Expr(e) => self.expr(e, sc)?,
             StmtKind::Return(None) | StmtKind::Break | StmtKind::Continue => {}
+        }
+        Ok(())
+    }
+
+    /// A lambda's types and body, with its parameters in scope.
+    fn lambda(
+        &self,
+        params: &mut [(String, Option<TypeExpr>, Span)],
+        ret: Option<&mut TypeExpr>,
+        body: &mut LambdaBody,
+        sc: &mut Scope,
+    ) -> Result<()> {
+        sc.push();
+        for (n, t, _) in params.iter_mut() {
+            if let Some(t) = t {
+                self.ty(t, &[])?;
+            }
+            sc.add(n);
+        }
+        if let Some(r) = ret {
+            self.ty(r, &[])?;
+        }
+        let r = match body {
+            LambdaBody::Expr(x) => self.expr(x, sc),
+            LambdaBody::Block(stmts) => self.block(stmts, sc),
+        };
+        sc.pop();
+        r
+    }
+
+    /// Match arms, each with its pattern's bindings in scope.
+    fn arms(&self, arms: &mut [MatchArm], sc: &mut Scope) -> Result<()> {
+        for arm in arms {
+            sc.push();
+            if let Pattern::Variant(_, binds) = &arm.pattern {
+                for b in binds {
+                    sc.add(b);
+                }
+            }
+            let r = self.block(&mut arm.body, sc);
+            sc.pop();
+            r?;
         }
         Ok(())
     }
@@ -528,24 +560,16 @@ impl<'a> Resolver<'a> {
                     self.expr(a, sc)?;
                 }
             }
-            ExprKind::Lambda { params, ret, body } => {
-                sc.push();
-                for (n, t, _) in params.iter_mut() {
-                    if let Some(t) = t {
-                        self.ty(t, &[])?;
-                    }
-                    sc.add(n);
-                }
-                if let Some(r) = ret {
-                    self.ty(r, &[])?;
-                }
-                let r = match body {
-                    LambdaBody::Expr(x) => self.expr(x, sc),
-                    LambdaBody::Block(stmts) => self.block(stmts, sc),
-                };
-                sc.pop();
-                r?;
+            ExprKind::If { cond, then, otherwise } => {
+                self.expr(cond, sc)?;
+                self.block(then, sc)?;
+                self.block(otherwise, sc)?;
             }
+            ExprKind::Match { value, arms } => {
+                self.expr(value, sc)?;
+                self.arms(arms, sc)?;
+            }
+            ExprKind::Lambda { params, ret, body } => self.lambda(params, ret.as_mut(), body, sc)?,
             ExprKind::Int(_)
             | ExprKind::Float(_)
             | ExprKind::Str(_)

@@ -1,0 +1,6 @@
+tests/ui/errors/match_value_cases.kl:2:13: error: `match` does not handle every case (add a `_ =>` arm)
+2 |     let x = match 3 { 1 => "a", 2 => "b" }
+  |             ^^^^^
+tests/ui/errors/match_value_cases.kl:7:9: error: this branch gives no value
+7 |         println(1)
+  |         ^^^^^^^
