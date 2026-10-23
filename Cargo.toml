@@ -30,6 +30,9 @@ kalinga-driver = { path = "crates/kalinga-driver" }
 kalinga-project = { path = "crates/kalinga-project" }
 toml = { workspace = true }
 
+[dev-dependencies]
+kalinga-sema = { path = "crates/kalinga-sema" }
+
 [lints]
 workspace = true
 

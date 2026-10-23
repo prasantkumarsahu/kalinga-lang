@@ -4,14 +4,12 @@ use kalinga_syntax::ast::*;
 use kalinga_syntax::error::{Result, Span, err};
 
 use super::{Checker, Ctx, texpr};
+use crate::builtins::{self, LIBRARIES};
 use crate::tast::*;
 use crate::types::Type;
 
-/// The library names, which work as receivers unless a variable shadows them.
-const LIBRARIES: &[&str] = &["Math", "Random", "Time", "Thread", "Async"];
-
 impl Checker<'_> {
-    /// `Math`, `Random`, ... used as a receiver.
+    /// `Math`, `Random`, ... used as a receiver (unless a variable shadows the name).
     pub(super) fn library_receiver(&self, cx: &Ctx, recv: &Expr) -> Option<String> {
         match &recv.kind {
             ExprKind::Ident(n) if LIBRARIES.contains(&n.as_str()) && cx.lookup(n).is_none() => Some(n.clone()),
@@ -21,10 +19,11 @@ impl Checker<'_> {
 
     /// `Math.PI` and the other library constants.
     pub(super) fn library_value(&self, ns: &str, name: &str, pos: Span) -> Result<TExpr> {
-        match (ns, name) {
-            ("Math", "PI" | "TAU" | "E" | "INF") => Ok(texpr(TExprKind::MathConst(name.to_string()), Type::Float, pos)),
-            _ => err(format!("`{}.{}` is not a value; library functions are called with `()`", ns, name), pos),
+        let full = format!("{}.{}", ns, name);
+        if builtins::CONSTANTS.iter().any(|c| c.name == full) {
+            return Ok(texpr(TExprKind::MathConst(name.to_string()), Type::Float, pos));
         }
+        err(format!("`{}` is not a value; library functions are called with `()`", full), pos)
     }
 
     /// A numeric argument as a `float` (ints are converted).
@@ -62,6 +61,9 @@ impl Checker<'_> {
 
     pub(super) fn library_call(&self, cx: &mut Ctx, ns: &str, name: &str, args: &[Expr], pos: Span) -> Result<TExpr> {
         let what = format!("{}.{}", ns, name);
+        if builtins::function(&what).is_none() {
+            return err(format!("`{}` has no function `{}`", ns, name), pos);
+        }
         let arity = |n: usize| -> Result<()> {
             if args.len() == n {
                 Ok(())

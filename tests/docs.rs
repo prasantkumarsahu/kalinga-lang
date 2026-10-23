@@ -146,3 +146,64 @@ fn doc_examples_match_their_output() {
     failures.sort();
     assert!(failures.is_empty(), "{} doc example(s) are wrong:\n\n{}", failures.len(), failures.join("\n\n"));
 }
+
+/// The `| ... |` rows of the table that follows `heading` in `text`.
+fn table_rows<'a>(text: &'a str, heading: &str) -> Vec<Vec<&'a str>> {
+    let after = &text[text.find(heading).unwrap_or_else(|| panic!("no `{}` section", heading))..];
+    after
+        .lines()
+        .skip(1)
+        .skip_while(|l| !l.starts_with('|'))
+        .take_while(|l| l.starts_with('|'))
+        .skip(2) // header and separator
+        .map(|l| l.trim_matches('|').split(" | ").map(str::trim).collect())
+        .collect()
+}
+
+/// Names called like `name(...)` in a table cell, e.g. `` `get(k)` / `has(k)` ``.
+fn called_names(cell: &str) -> Vec<String> {
+    let mut out = vec![];
+    for part in cell.split('`').skip(1).step_by(2) {
+        let name: String = part.chars().take_while(|c| c.is_alphanumeric() || *c == '_' || *c == '.').collect();
+        if part[name.len()..].starts_with('(') {
+            out.push(name);
+        }
+    }
+    out
+}
+
+#[test]
+fn reference_lists_every_builtin_method() {
+    use kalinga_sema::builtins::METHODS;
+    let text = std::fs::read_to_string("docs/26-reference.md").unwrap();
+    let mut documented: Vec<(String, String)> = vec![];
+    for row in table_rows(&text, "## Built-in methods") {
+        let receiver = row[0].trim_end_matches(" (var)").trim_matches('`').to_string();
+        for name in called_names(row[1]) {
+            documented.push((receiver.clone(), name));
+        }
+    }
+    documented.sort();
+    let mut registered: Vec<(String, String)> =
+        METHODS.iter().map(|m| (m.receiver.to_string(), m.name.to_string())).collect();
+    registered.sort();
+    assert_eq!(documented, registered, "docs/26-reference.md's built-in methods differ from the registry");
+}
+
+#[test]
+fn standard_library_chapter_lists_every_library_function() {
+    use kalinga_sema::builtins::FUNCTIONS;
+    let text = std::fs::read_to_string("docs/15-standard-library.md").unwrap();
+    for lib in ["Math", "Random", "Time"] {
+        let mut documented: Vec<String> = table_rows(&text, &format!("## {}", lib))
+            .iter()
+            .flat_map(|row| called_names(row[0]))
+            .map(|n| format!("{}.{}", lib, n))
+            .collect();
+        documented.sort();
+        let mut registered: Vec<String> =
+            FUNCTIONS.iter().filter(|f| f.name.starts_with(&format!("{}.", lib))).map(|f| f.name.to_string()).collect();
+        registered.sort();
+        assert_eq!(documented, registered, "docs/15-standard-library.md's `{}` table differs from the registry", lib);
+    }
+}

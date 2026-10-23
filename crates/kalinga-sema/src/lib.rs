@@ -2,6 +2,7 @@
 //! interfaces, structs, enums, functions and their types), the rules they must follow, and
 //! type checking of every body into the typed tree.
 
+pub mod builtins;
 mod declare;
 pub mod model;
 pub mod namespaces;
