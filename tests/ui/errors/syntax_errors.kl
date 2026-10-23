@@ -1,0 +1,15 @@
+// A syntax error does not hide the errors after it.
+fn a( {
+}
+
+class C {
+    fn ok() -> int {
+        return 1
+    }
+}
+
+fn b() {
+    let = 2
+}
+
+fn main() {}

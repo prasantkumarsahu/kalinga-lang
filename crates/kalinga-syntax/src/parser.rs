@@ -1,8 +1,9 @@
 use crate::ast::*;
-use crate::error::{Result, Span, err};
+use crate::error::{Diagnostic, Result, Span, err};
 use crate::token::{StrPart, Tok, Token};
 
-pub fn parse(tokens: Vec<Token>) -> Result<Program> {
+/// Parses a file's tokens; all syntax errors are reported, one per declaration.
+pub fn parse(tokens: Vec<Token>) -> std::result::Result<Program, Vec<Diagnostic>> {
     Parser { tokens, i: 0 }.program()
 }
 
@@ -99,150 +100,186 @@ impl Parser {
         }
     }
 
-    fn program(&mut self) -> Result<Program> {
+    /// The whole file. After an error the parser skips to the next top-level declaration,
+    /// so the errors of independent declarations are all reported.
+    fn program(&mut self) -> std::result::Result<Program, Vec<Diagnostic>> {
         let mut prog = Program::default();
+        let mut errors = vec![];
         self.skip_newlines();
         while !self.check(&Tok::Eof) {
-            match self.peek() {
-                Tok::Fn => prog.functions.push(self.function(Mods::default())?),
-                Tok::Async => {
-                    self.advance();
-                    if !self.check(&Tok::Fn) {
-                        return err("expected `fn` after `async`", self.pos());
-                    }
-                    prog.functions.push(self.function(Mods { is_async: true, ..Mods::default() })?);
-                }
-                Tok::Class => prog.classes.push(self.class(false)?),
-                Tok::Abstract => {
-                    self.advance();
-                    if !self.check(&Tok::Class) {
-                        return err("expected `class` after `abstract`", self.pos());
-                    }
-                    prog.classes.push(self.class(true)?);
-                }
-                Tok::Interface => prog.interfaces.push(self.interface()?),
-                Tok::Enum => prog.enums.push(self.enum_decl()?),
-                Tok::Struct => prog.structs.push(self.struct_decl()?),
-                Tok::Use => {
-                    let pos = self.advance().pos;
-                    let kind = self.ident("`rust` or `crate` after `use`")?.0;
-                    let what = match self.advance().tok {
-                        Tok::Str(s) => s,
-                        other => return err(format!("expected a name in quotes, found {}", other.describe()), pos),
-                    };
-                    match kind.as_str() {
-                        "rust" => prog.rust_files.push((what, pos)),
-                        "crate" => {
-                            self.expect(Tok::Assign, "`=` and a version, e.g. `use crate \"rand\" = \"0.8\"`")?;
-                            let version = match self.advance().tok {
-                                Tok::Str(v) => v,
-                                other => {
-                                    return err(
-                                        format!("expected a version in quotes, found {}", other.describe()),
-                                        pos,
-                                    );
-                                }
-                            };
-                            let mut features = Vec::new();
-                            if self.peek() == &Tok::Ident("features".into()) {
-                                self.advance();
-                                self.expect(Tok::LBracket, "`[` and a list of feature names")?;
-                                while !self.check(&Tok::RBracket) {
-                                    match self.advance().tok {
-                                        Tok::Str(f) => features.push(f),
-                                        other => {
-                                            return err(
-                                                format!(
-                                                    "expected a feature name in quotes, found {}",
-                                                    other.describe()
-                                                ),
-                                                pos,
-                                            );
-                                        }
-                                    }
-                                    if !self.eat(&Tok::Comma) {
-                                        break;
-                                    }
-                                }
-                                self.expect(Tok::RBracket, "`]`")?;
-                            }
-                            prog.crates.push(CrateDep { name: what, version, features, pos });
-                        }
-                        other => {
-                            return err(
-                                format!(
-                                    "expected `use rust \"file.rs\"` or `use crate \"name\" = \"version\"`, found `use {}`",
-                                    other
-                                ),
-                                pos,
-                            );
-                        }
-                    }
-                    self.end_of_statement()?;
-                }
-                Tok::Extern => {
-                    let pos = self.advance().pos;
-                    if self.check(&Tok::Fn) {
-                        self.advance();
-                        let (name, _) = self.ident("function name")?;
-                        let params = self.params()?;
-                        let ret = self.ret_type()?;
-                        let (mut path, mut body) = (None, None);
-                        if self.eat(&Tok::Assign) {
-                            match self.advance().tok {
-                                Tok::Str(p) => path = Some(p),
-                                Tok::RustBlock(b) => body = Some(b),
-                                other => {
-                                    return err(
-                                        format!(
-                                            "expected a Rust path in quotes or `rust {{ ... }}`, found {}",
-                                            other.describe()
-                                        ),
-                                        pos,
-                                    );
-                                }
-                            }
-                        }
-                        prog.extern_fns.push(ExternFn { name, params, ret, path, body, pos });
-                    } else if self.peek() == &Tok::Ident("type".into()) {
-                        self.advance();
-                        let (name, npos) = self.ident("type name")?;
-                        prog.extern_types.push((name, npos));
-                    } else {
-                        return err("expected `extern fn` or `extern type`", pos);
-                    }
-                    self.end_of_statement()?;
-                }
-                Tok::Import => {
-                    let pos = self.advance().pos;
-                    match self.advance().tok {
-                        Tok::Str(path) => {
-                            let alias =
-                                if self.eat(&Tok::As) { Some(self.ident("a name after `as`")?.0) } else { None };
-                            prog.imports.push(Import { path, alias, pos });
-                        }
-                        other => {
-                            return err(
-                                format!("expected a file name in quotes after `import`, found {}", other.describe()),
-                                pos,
-                            );
-                        }
-                    }
-                    self.end_of_statement()?;
-                }
-                other => {
-                    return err(
-                        format!(
-                            "expected `fn`, `class`, `struct`, `interface`, `enum` or `import` at top level, found {}",
-                            other.describe()
-                        ),
-                        self.pos(),
-                    );
-                }
+            if let Err(e) = self.item(&mut prog) {
+                errors.push(e);
+                self.skip_to_next_item();
             }
             self.skip_newlines();
         }
-        Ok(prog)
+        if errors.is_empty() { Ok(prog) } else { Err(errors) }
+    }
+
+    /// Skips past the current token, then to the next token that starts a top-level
+    /// declaration at the beginning of a line.
+    fn skip_to_next_item(&mut self) {
+        self.advance();
+        while !self.check(&Tok::Eof) {
+            let at_line_start = self.pos().col == 1;
+            let starts_item = matches!(
+                self.peek(),
+                Tok::Fn
+                    | Tok::Async
+                    | Tok::Class
+                    | Tok::Abstract
+                    | Tok::Interface
+                    | Tok::Enum
+                    | Tok::Struct
+                    | Tok::Use
+                    | Tok::Extern
+                    | Tok::Import
+            );
+            if at_line_start && starts_item {
+                return;
+            }
+            self.advance();
+        }
+    }
+
+    /// One top-level declaration.
+    fn item(&mut self, prog: &mut Program) -> Result<()> {
+        match self.peek() {
+            Tok::Fn => prog.functions.push(self.function(Mods::default())?),
+            Tok::Async => {
+                self.advance();
+                if !self.check(&Tok::Fn) {
+                    return err("expected `fn` after `async`", self.pos());
+                }
+                prog.functions.push(self.function(Mods { is_async: true, ..Mods::default() })?);
+            }
+            Tok::Class => prog.classes.push(self.class(false)?),
+            Tok::Abstract => {
+                self.advance();
+                if !self.check(&Tok::Class) {
+                    return err("expected `class` after `abstract`", self.pos());
+                }
+                prog.classes.push(self.class(true)?);
+            }
+            Tok::Interface => prog.interfaces.push(self.interface()?),
+            Tok::Enum => prog.enums.push(self.enum_decl()?),
+            Tok::Struct => prog.structs.push(self.struct_decl()?),
+            Tok::Use => self.use_decl(prog)?,
+            Tok::Extern => self.extern_decl(prog)?,
+            Tok::Import => {
+                let pos = self.advance().pos;
+                match self.advance().tok {
+                    Tok::Str(path) => {
+                        let alias = if self.eat(&Tok::As) { Some(self.ident("a name after `as`")?.0) } else { None };
+                        prog.imports.push(Import { path, alias, pos });
+                    }
+                    other => {
+                        return err(
+                            format!("expected a file name in quotes after `import`, found {}", other.describe()),
+                            pos,
+                        );
+                    }
+                }
+                self.end_of_statement()?;
+            }
+            other => {
+                return err(
+                    format!(
+                        "expected `fn`, `class`, `struct`, `interface`, `enum` or `import` at top level, found {}",
+                        other.describe()
+                    ),
+                    self.pos(),
+                );
+            }
+        }
+        Ok(())
+    }
+
+    /// `use rust "file.rs"` or `use crate "name" = "version" [features ["a", ...]]`.
+    fn use_decl(&mut self, prog: &mut Program) -> Result<()> {
+        let pos = self.advance().pos;
+        let kind = self.ident("`rust` or `crate` after `use`")?.0;
+        let what = match self.advance().tok {
+            Tok::Str(s) => s,
+            other => return err(format!("expected a name in quotes, found {}", other.describe()), pos),
+        };
+        match kind.as_str() {
+            "rust" => prog.rust_files.push((what, pos)),
+            "crate" => {
+                self.expect(Tok::Assign, "`=` and a version, e.g. `use crate \"rand\" = \"0.8\"`")?;
+                let version = match self.advance().tok {
+                    Tok::Str(v) => v,
+                    other => return err(format!("expected a version in quotes, found {}", other.describe()), pos),
+                };
+                let features = self.crate_features(pos)?;
+                prog.crates.push(CrateDep { name: what, version, features, pos });
+            }
+            other => {
+                return err(
+                    format!(
+                        "expected `use rust \"file.rs\"` or `use crate \"name\" = \"version\"`, found `use {}`",
+                        other
+                    ),
+                    pos,
+                );
+            }
+        }
+        self.end_of_statement()
+    }
+
+    /// `features ["a", "b"]` after a crate version (or nothing).
+    fn crate_features(&mut self, pos: Span) -> Result<Vec<String>> {
+        let mut features = Vec::new();
+        if self.peek() != &Tok::Ident("features".into()) {
+            return Ok(features);
+        }
+        self.advance();
+        self.expect(Tok::LBracket, "`[` and a list of feature names")?;
+        while !self.check(&Tok::RBracket) {
+            match self.advance().tok {
+                Tok::Str(f) => features.push(f),
+                other => {
+                    return err(format!("expected a feature name in quotes, found {}", other.describe()), pos);
+                }
+            }
+            if !self.eat(&Tok::Comma) {
+                break;
+            }
+        }
+        self.expect(Tok::RBracket, "`]`")?;
+        Ok(features)
+    }
+
+    /// `extern fn name(...) -> T [= "rust::path" | = rust { ... }]` or `extern type Name`.
+    fn extern_decl(&mut self, prog: &mut Program) -> Result<()> {
+        let pos = self.advance().pos;
+        if self.check(&Tok::Fn) {
+            self.advance();
+            let (name, _) = self.ident("function name")?;
+            let params = self.params()?;
+            let ret = self.ret_type()?;
+            let (mut path, mut body) = (None, None);
+            if self.eat(&Tok::Assign) {
+                match self.advance().tok {
+                    Tok::Str(p) => path = Some(p),
+                    Tok::RustBlock(b) => body = Some(b),
+                    other => {
+                        return err(
+                            format!("expected a Rust path in quotes or `rust {{ ... }}`, found {}", other.describe()),
+                            pos,
+                        );
+                    }
+                }
+            }
+            prog.extern_fns.push(ExternFn { name, params, ret, path, body, pos });
+        } else if self.peek() == &Tok::Ident("type".into()) {
+            self.advance();
+            let (name, npos) = self.ident("type name")?;
+            prog.extern_types.push((name, npos));
+        } else {
+            return err("expected `extern fn` or `extern type`", pos);
+        }
+        self.end_of_statement()
     }
 
     fn params(&mut self) -> Result<Vec<Param>> {

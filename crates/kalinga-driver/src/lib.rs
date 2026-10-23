@@ -31,16 +31,22 @@ fn packages_for(file: &str) -> Result<Packages> {
     Ok(Packages { dirs: r.packages, rust_deps: r.rust_deps, in_project: true })
 }
 
-/// A failure while loading: an error in the program (shown with its source line) or
+/// A failure while loading: errors in the program (shown with their source lines) or
 /// anything else.
 enum Failure {
-    Program(Diagnostic),
+    Program(Vec<Diagnostic>),
     Other(DriverError),
 }
 
 impl From<Diagnostic> for Failure {
     fn from(d: Diagnostic) -> Self {
-        Failure::Program(d)
+        Failure::Program(vec![d])
+    }
+}
+
+impl From<Vec<Diagnostic>> for Failure {
+    fn from(ds: Vec<Diagnostic>) -> Self {
+        Failure::Program(ds)
     }
 }
 
@@ -79,7 +85,7 @@ fn load(root_name: &str, root_source: &str) -> Result<(Program, SourceMap)> {
     };
     match l.load_all() {
         Ok(()) => Ok((l.program, l.map)),
-        Err(Failure::Program(d)) => Err(DriverError::compile(l.map, d)),
+        Err(Failure::Program(ds)) => Err(DriverError::compile_all(l.map, ds)),
         Err(Failure::Other(e)) => Err(e),
     }
 }
@@ -108,7 +114,8 @@ impl Loader {
         self.map.files.push((name, source));
         self.units.file_unit.push(unit.clone());
         self.units.file_aliases.push(Default::default());
-        let parsed = lexer::lex(&self.map.files[id as usize].1, id).and_then(parser::parse)?;
+        let tokens = lexer::lex(&self.map.files[id as usize].1, id)?;
+        let parsed = parser::parse(tokens)?;
         if !parsed.rust_files.is_empty() || parsed.extern_fns.iter().any(|x| x.body.is_some()) {
             self.units.rust_units.insert(unit.clone());
         }
@@ -168,7 +175,7 @@ impl Loader {
         unit: &str,
         import: &Import,
     ) -> std::result::Result<(PathBuf, String), Failure> {
-        let fail = |m: String| Failure::Program(Diagnostic::error(m, import.pos));
+        let fail = |m: String| Failure::from(Diagnostic::error(m, import.pos));
         if let Some(module) = import.path.strip_prefix("std/") {
             let module = module.strip_suffix(".kl").unwrap_or(module);
             if module == "game" {
@@ -197,7 +204,7 @@ impl Loader {
     }
 
     fn add_import(&mut self, dir: &Path, id: u32, unit: &str, import: &Import) -> std::result::Result<(), Failure> {
-        let fail = |m: String| Failure::Program(Diagnostic::error(m, import.pos));
+        let fail = |m: String| Failure::from(Diagnostic::error(m, import.pos));
         let (target, target_unit) = self.import_target(dir, unit, import)?;
         let Ok(canonical) = std::fs::canonicalize(&target) else {
             return Err(fail(format!("cannot find `{}` (looked for {})", import.path, target.display())));

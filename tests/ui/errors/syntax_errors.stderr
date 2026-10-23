@@ -1,0 +1,6 @@
+tests/ui/errors/syntax_errors.kl:2:7: error: expected parameter name, found `{`
+2 | fn a( {
+  |       ^
+tests/ui/errors/syntax_errors.kl:12:9: error: expected variable name, found `=`
+12 |     let = 2
+   |         ^
