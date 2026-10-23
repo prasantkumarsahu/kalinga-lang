@@ -11,20 +11,20 @@ You do not need it to write Kalinga programs, but it explains the performance mo
  hello.kl
     │
     ▼
- Lexer        src/lexer.rs     characters → tokens; decides which newlines end statements
+ Lexer        kalinga-syntax   characters → tokens; decides which newlines end statements
     │
     ▼
- Parser       src/parser.rs    tokens → syntax tree (src/ast.rs); `import`ed files are
-                               loaded and merged by src/driver.rs
+ Parser       kalinga-syntax   tokens → syntax tree; `import`ed files are loaded and
+                               merged by kalinga-driver
     │
     ▼
- Checker      src/checker.rs   classes, interfaces, inheritance, overrides, signatures
+ Checker      kalinga-sema     package names, classes, interfaces, inheritance, overrides
     │
     ▼
- Codegen      src/codegen.rs   type-checks every function body and writes Rust source
+ Codegen      kalinga-codegen  type-checks every function body and writes Rust source
     │
     ▼
- rustc -O     src/driver.rs    Rust → native executable (with overflow checks on)
+ rustc -O     kalinga-driver   Rust → native executable (with overflow checks on)
 ```
 
 `kalinga check` stops after codegen without writing any file; `kalinga emit` prints the
@@ -220,20 +220,16 @@ The costs to be aware of:
 
 ## Source layout
 
-| File | Role |
+The compiler is a Cargo workspace. Each crate depends only on the ones above it:
+
+| Crate / file | Role |
 |---|---|
-| `src/main.rs` | The `kalinga` command line |
-| `src/bin/utkal.rs` | The `utkal` command line |
-| `src/lib.rs` | The compiler as a library, shared by both commands |
-| `src/project.rs` | `utkal.toml`, `utkal.lock`, fetching git and path packages, versions |
-| `src/namespaces.rs` | Package namespaces: renaming clashing names, `import ... as` |
-| `src/stdlib.rs`, `std/` | The bundled `std/` modules (`math2d`, `game` and its Rust glue) |
-| `src/token.rs`, `src/lexer.rs` | Tokens, newline handling |
-| `src/ast.rs`, `src/parser.rs` | Syntax tree and recursive-descent parser |
-| `src/checker.rs` | Type model, class hierarchy, override and interface rules |
-| `src/codegen.rs` | Body type checking, Rust generation, runtime prelude |
-| `src/driver.rs` | Loads files and packages, writes the `.rs` file, runs `rustc` or `cargo` and the program |
-| `src/error.rs` | Error type and the source-line-with-caret display |
+| `crates/kalinga-syntax` | `token.rs`, `lexer.rs` (tokens, newline handling), `ast.rs`, `parser.rs` (syntax tree, recursive-descent parser), `error.rs` (positions, the source-line-with-caret display) |
+| `crates/kalinga-sema` | `namespaces.rs` (package namespaces: renaming clashing names, `import ... as`), `checker.rs` (type model, class hierarchy, override and interface rules) |
+| `crates/kalinga-codegen` | Body type checking, Rust generation, runtime prelude |
+| `crates/kalinga-project` | `utkal.toml`, `utkal.lock`, fetching git and path packages, versions |
+| `crates/kalinga-driver` | Loads files and packages, writes the `.rs` file, runs `rustc` or `cargo` and the program; `stdlib.rs` and `std/` hold the bundled modules (`math2d`, `game` and its Rust glue) |
+| `src/main.rs`, `src/bin/utkal.rs` | The `kalinga` and `utkal` command lines |
 
 ---
 

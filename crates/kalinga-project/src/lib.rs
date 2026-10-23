@@ -9,8 +9,8 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use crate::ast::CrateDep;
-use crate::error::Pos;
+use kalinga_syntax::ast::CrateDep;
+use kalinga_syntax::error::Pos;
 
 pub const MANIFEST: &str = "utkal.toml";
 pub const LOCK: &str = "utkal.lock";

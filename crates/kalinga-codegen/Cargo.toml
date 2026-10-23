@@ -1,0 +1,13 @@
+[package]
+name = "kalinga-codegen"
+description = "Rust code generation for the Kalinga language"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+kalinga-syntax = { path = "../kalinga-syntax" }
+kalinga-sema = { path = "../kalinga-sema" }
+
+[lints]
+workspace = true

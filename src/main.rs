@@ -1,4 +1,4 @@
-use kalinga_lang::driver;
+use kalinga_driver as driver;
 
 use std::path::PathBuf;
 use std::process::exit;

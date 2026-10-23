@@ -1,12 +1,15 @@
 //! Turns a `.kl` file into Rust source, then into a native executable via `rustc`.
 
+mod stdlib;
+
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use crate::ast::Program;
-use crate::error::CompileError;
-use crate::{checker, codegen, lexer, namespaces, parser};
+use kalinga_sema::{checker, namespaces};
+use kalinga_syntax::ast::Program;
+use kalinga_syntax::error::CompileError;
+use kalinga_syntax::{lexer, parser};
 
 /// Every source file taking part in a compilation: (display name, text).
 /// `Pos::file` indexes into it.
@@ -32,15 +35,15 @@ impl SourceMap {
 struct Packages {
     /// Package name → folder.
     dirs: std::collections::BTreeMap<String, PathBuf>,
-    rust_deps: Vec<crate::ast::CrateDep>,
+    rust_deps: Vec<kalinga_syntax::ast::CrateDep>,
     in_project: bool,
 }
 
 /// Finds the `utkal.toml` above `file` and the packages it uses, from the lock file and
 /// the local cache (never the network: `utkal build` downloads).
 fn packages_for(file: &str) -> Result<Packages, String> {
-    let Some(project) = crate::project::find_project(Path::new(file)) else { return Ok(Packages::default()) };
-    let r = crate::project::resolve(&project, crate::project::Mode::Offline)?;
+    let Some(project) = kalinga_project::find_project(Path::new(file)) else { return Ok(Packages::default()) };
+    let r = kalinga_project::resolve(&project, kalinga_project::Mode::Offline)?;
     Ok(Packages { dirs: r.packages, rust_deps: r.rust_deps, in_project: true })
 }
 
@@ -52,7 +55,7 @@ fn load(root_name: &str, root_source: &str) -> Result<(Program, SourceMap), Stri
     let mut units = namespaces::Units::default();
     let mut program = Program::default();
     for c in &pkgs.rust_deps {
-        crate::project::merge_crate(&mut program.crates, c)?;
+        kalinga_project::merge_crate(&mut program.crates, c)?;
     }
     let root_path = PathBuf::from(root_name);
     let mut seen: HashSet<PathBuf> = HashSet::new();
@@ -97,7 +100,7 @@ fn load(root_name: &str, root_source: &str) -> Result<(Program, SourceMap), Stri
             program.rust_files.push((shown, *pos));
         }
         for dep in &parsed.crates {
-            crate::project::merge_crate(&mut program.crates, dep)
+            kalinga_project::merge_crate(&mut program.crates, dep)
                 .map_err(|m| map.render(&CompileError::new(m, dep.pos)))?;
         }
         program.extern_types.extend(parsed.extern_types);
@@ -109,16 +112,16 @@ fn load(root_name: &str, root_source: &str) -> Result<(Program, SourceMap), Stri
                 if module == "game" {
                     program.main_thread = true;
                 }
-                if !crate::stdlib::has(module) {
+                if !stdlib::has(module) {
                     return Err(fail(format!("there is no standard module `std/{}`", module)));
                 }
-                (crate::stdlib::dir()?.join(format!("{}.kl", module)), format!("std_{}", module))
+                (stdlib::dir()?.join(format!("{}.kl", module)), format!("std_{}", module))
             } else if import.path.ends_with(".kl") {
                 (dir.join(&import.path), unit.clone())
             } else {
                 let (pkg, rest) = import.path.split_once('/').unwrap_or((&import.path, "lib"));
                 match pkgs.dirs.get(pkg) {
-                    Some(pdir) => (pdir.join("src").join(format!("{}.kl", rest)), crate::project::unit_name(pkg)),
+                    Some(pdir) => (pdir.join("src").join(format!("{}.kl", rest)), kalinga_project::unit_name(pkg)),
                     None if pkgs.in_project => {
                         return Err(fail(format!(
                             "unknown package `{}`: add it to utkal.toml (`utkal add {} --git <url>` or `--path <folder>`); files are imported with a `.kl` ending",
@@ -171,7 +174,7 @@ pub fn to_rust(file: &str, source: &str) -> Result<String, String> {
 /// What the Rust build needs besides the generated source.
 struct Native {
     /// crates.io dependencies.
-    crates: Vec<crate::ast::CrateDep>,
+    crates: Vec<kalinga_syntax::ast::CrateDep>,
     /// Whether the program calls hand-written Rust (`use rust` / `extern fn`).
     uses_rust: bool,
     /// `main` runs on the process's main thread (games), so it needs a big main stack.
@@ -187,7 +190,7 @@ pub fn check(file: &str, source: &str) -> Result<(), String> {
 fn compile(file: &str, source: &str, require_main: bool) -> Result<(String, Native), String> {
     let (program, map) = load(file, source)?;
     let model = checker::Model::build(&program, require_main).map_err(|e| map.render(&e))?;
-    let rust = codegen::generate(&program, &model).map_err(|e| map.render(&e))?;
+    let rust = kalinga_codegen::generate(&program, &model).map_err(|e| map.render(&e))?;
     let native = Native {
         crates: program.crates.clone(),
         uses_rust: !program.rust_files.is_empty() || !program.extern_fns.is_empty() || !program.crates.is_empty(),

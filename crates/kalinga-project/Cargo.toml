@@ -1,0 +1,13 @@
+[package]
+name = "kalinga-project"
+description = "utkal projects: manifests, lock files and fetching packages"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+kalinga-syntax = { path = "../kalinga-syntax" }
+toml = { workspace = true }
+
+[lints]
+workspace = true

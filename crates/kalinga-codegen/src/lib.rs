@@ -8,11 +8,11 @@ use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::fmt::Write as _;
 
-use crate::ast::*;
-use crate::checker::{
+use kalinga_sema::checker::{
     BUILTINS, Model, Signature, StructOp, Type, class_trait, has_params, is_map_key, subst, subst_sig, unify,
 };
-use crate::error::{Pos, Result, err};
+use kalinga_syntax::ast::*;
+use kalinga_syntax::error::{Pos, Result, err};
 
 pub fn generate(prog: &Program, model: &Model) -> Result<String> {
     let g = Gen { m: model, self_values: RefCell::new(HashSet::new()), cast_targets: RefCell::new(HashSet::new()) };
@@ -1380,7 +1380,7 @@ impl<'a> Gen<'a> {
                 let ok = if **t == Type::Void { vec![] } else { vec![("value".to_string(), (**t).clone())] };
                 let variants =
                     vec![("Ok".to_string(), ok), ("Err".to_string(), vec![("error".to_string(), (**e).clone())])];
-                Some(("Result".to_string(), crate::checker::EnumInfo { variants }))
+                Some(("Result".to_string(), kalinga_sema::checker::EnumInfo { variants }))
             }
             Type::Int | Type::Str | Type::Bool => None,
             other => {
@@ -1437,7 +1437,7 @@ impl<'a> Gen<'a> {
         cx: &mut Ctx,
         arm: &MatchArm,
         ty: &Type,
-        enum_info: &Option<(String, crate::checker::EnumInfo)>,
+        enum_info: &Option<(String, kalinga_sema::checker::EnumInfo)>,
         covered: &mut Vec<String>,
         wildcard: &mut bool,
         saw_true: &mut bool,
@@ -1648,7 +1648,7 @@ impl<'a> Gen<'a> {
                 return err(format!("`{}` takes {} type argument(s), not {}", what, tparams.len(), targs.len()), pos);
             }
             for (tp, te) in tparams.iter().zip(targs) {
-                let t = self.m.resolve(te, &cx.tparams).map_err(|e| crate::checker::at_pos(e, pos))?;
+                let t = self.m.resolve(te, &cx.tparams).map_err(|e| kalinga_sema::checker::at_pos(e, pos))?;
                 map.insert(tp.clone(), t);
             }
         } else if let Some(exp) = expected {
@@ -1819,9 +1819,9 @@ impl<'a> Gen<'a> {
         if !cx.lambdas.is_empty() && cx.class.is_some() {
             return err("`self` cannot be used inside a lambda; copy it first (`let me = self`) and use `me`", pos);
         }
-        cx.class
-            .clone()
-            .ok_or_else(|| crate::error::CompileError::new("`self` is only available inside class methods", pos))
+        cx.class.clone().ok_or_else(|| {
+            kalinga_syntax::error::CompileError::new("`self` is only available inside class methods", pos)
+        })
     }
 
     fn field_type(&self, cx: &Ctx, class: &str, field: &str, pos: Pos) -> Result<Type> {
@@ -2334,7 +2334,9 @@ impl<'a> Gen<'a> {
         let mut ptypes = Vec::new();
         for (i, (name, ty, ppos)) in params.iter().enumerate() {
             let t = match (ty, &hint) {
-                (Some(te), _) => self.m.resolve(te, &cx.tparams).map_err(|e| crate::checker::at_pos(e, *ppos))?,
+                (Some(te), _) => {
+                    self.m.resolve(te, &cx.tparams).map_err(|e| kalinga_sema::checker::at_pos(e, *ppos))?
+                }
                 (None, Some((ps, _))) if ps[i] != Type::Unknown => ps[i].clone(),
                 _ => {
                     return err(
@@ -2346,7 +2348,7 @@ impl<'a> Gen<'a> {
             ptypes.push(t);
         }
         let declared_ret = match ret {
-            Some(te) => Some(self.m.resolve(te, &cx.tparams).map_err(|e| crate::checker::at_pos(e, pos))?),
+            Some(te) => Some(self.m.resolve(te, &cx.tparams).map_err(|e| kalinga_sema::checker::at_pos(e, pos))?),
             None => hint.as_ref().map(|(_, r)| r.clone()).filter(|r| *r != Type::Unknown),
         };
 
@@ -2517,7 +2519,7 @@ impl<'a> Gen<'a> {
         if (name == "Channel" || name == "Shared") && cx.lookup(name).is_none() {
             let explicit = match targs {
                 [] => None,
-                [t] => Some(self.m.resolve(t, &cx.tparams).map_err(|e| crate::checker::at_pos(e, pos))?),
+                [t] => Some(self.m.resolve(t, &cx.tparams).map_err(|e| kalinga_sema::checker::at_pos(e, pos))?),
                 _ => return err(format!("`{}` takes one type argument", name), pos),
             };
             if name == "Channel" {

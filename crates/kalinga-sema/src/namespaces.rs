@@ -12,8 +12,8 @@
 
 use std::collections::{HashMap, HashSet};
 
-use crate::ast::*;
-use crate::error::{Pos, Result, err};
+use kalinga_syntax::ast::*;
+use kalinga_syntax::error::{Pos, Result, err};
 
 /// What the driver learned while loading files.
 #[derive(Default)]

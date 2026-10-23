@@ -1,0 +1,11 @@
+[package]
+name = "kalinga-syntax"
+description = "Lexer, parser and syntax tree of the Kalinga language"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+
+[lints]
+workspace = true

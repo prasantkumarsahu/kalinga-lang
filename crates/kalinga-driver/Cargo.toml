@@ -1,0 +1,15 @@
+[package]
+name = "kalinga-driver"
+description = "Loads Kalinga programs and builds them with rustc or cargo"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+kalinga-syntax = { path = "../kalinga-syntax" }
+kalinga-sema = { path = "../kalinga-sema" }
+kalinga-codegen = { path = "../kalinga-codegen" }
+kalinga-project = { path = "../kalinga-project" }
+
+[lints]
+workspace = true

@@ -25,11 +25,50 @@ dependencies = [
 ]
 
 [[package]]
+name = "kalinga-codegen"
+version = "0.4.0"
+dependencies = [
+ "kalinga-sema",
+ "kalinga-syntax",
+]
+
+[[package]]
+name = "kalinga-driver"
+version = "0.4.0"
+dependencies = [
+ "kalinga-codegen",
+ "kalinga-project",
+ "kalinga-sema",
+ "kalinga-syntax",
+]
+
+[[package]]
 name = "kalinga-lang"
 version = "0.4.0"
 dependencies = [
+ "kalinga-driver",
+ "kalinga-project",
  "toml",
 ]
+
+[[package]]
+name = "kalinga-project"
+version = "0.4.0"
+dependencies = [
+ "kalinga-syntax",
+ "toml",
+]
+
+[[package]]
+name = "kalinga-sema"
+version = "0.4.0"
+dependencies = [
+ "kalinga-syntax",
+]
+
+[[package]]
+name = "kalinga-syntax"
+version = "0.4.0"
 
 [[package]]
 name = "proc-macro2"

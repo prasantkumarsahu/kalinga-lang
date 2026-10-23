@@ -5,8 +5,8 @@
 use std::collections::{HashMap, HashSet};
 use std::fmt;
 
-use crate::ast::*;
-use crate::error::{Pos, Result, err};
+use kalinga_syntax::ast::*;
+use kalinga_syntax::error::{Pos, Result, err};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Type {
@@ -1181,7 +1181,7 @@ impl Model {
 }
 
 /// Gives a position to errors raised without one (e.g. from type resolution).
-pub fn at_pos(mut e: crate::error::CompileError, pos: Pos) -> crate::error::CompileError {
+pub fn at_pos(mut e: kalinga_syntax::error::CompileError, pos: Pos) -> kalinga_syntax::error::CompileError {
     if e.pos == Pos::default() {
         e.pos = pos;
     }

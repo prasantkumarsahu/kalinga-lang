@@ -188,14 +188,12 @@ through a different reference (for example `a.f(a)` where `f` modifies `a`) stop
 | Path | Purpose |
 |---|---|
 | `src/main.rs`, `src/bin/utkal.rs` | the `kalinga` and `utkal` commands |
-| `src/lexer.rs`, `src/token.rs` | tokens, newline handling |
-| `src/parser.rs`, `src/ast.rs` | syntax tree |
-| `src/checker.rs` | class/interface model, inheritance and override rules |
-| `src/codegen.rs` | type checking of bodies, Rust generation, runtime prelude |
-| `src/namespaces.rs` | package namespaces |
-| `src/project.rs` | `utkal.toml`, `utkal.lock`, fetching packages |
-| `src/driver.rs` | loads files and packages, invokes `rustc` / `cargo` and runs the program |
-| `std/` | bundled modules: `math2d.kl`, `game.kl` and its Rust glue |
+| `crates/kalinga-syntax/` | tokens, lexer, syntax tree, parser, source positions and errors |
+| `crates/kalinga-sema/` | package namespaces; class/interface model, inheritance and override rules |
+| `crates/kalinga-codegen/` | type checking of bodies, Rust generation, runtime prelude |
+| `crates/kalinga-project/` | `utkal.toml`, `utkal.lock`, fetching packages |
+| `crates/kalinga-driver/` | loads files and packages, invokes `rustc` / `cargo` and runs the program |
+| `crates/kalinga-driver/std/` | bundled modules: `math2d.kl`, `game.kl` and its Rust glue |
 | `examples/` | `hello.kl`, `oop.kl`, `fib.kl`, `inventory.kl`, `pipeline.kl`, `particles.kl`, `shapes/` (modules), `interop/` (Rust), `pong/`, `asteroids/` |
 | `tests/ui/`, `tests/ui.rs` | output snapshot tests: each `.kl` with its expected `.stdout` / `.stderr` / `.exit` (`BLESS=1` updates them) |
 | `tests/cli.rs`, `tests/utkal.rs` | command-line behaviour of `kalinga` and `utkal` |

@@ -3,8 +3,8 @@
 use std::path::{Path, PathBuf};
 use std::process::{Command, exit};
 
-use kalinga_lang::driver;
-use kalinga_lang::project::{self, MANIFEST, Mode};
+use kalinga_driver as driver;
+use kalinga_project::{self as project, MANIFEST, Mode};
 
 const USAGE: &str = "utkal — the Kalinga package manager
 
