@@ -33,6 +33,8 @@ pub enum Type {
     Shared(Box<Type>),
     /// `Task<T>`: a running thread that will produce a `T`.
     Task(Box<Type>),
+    /// `Async<T>`: the result of calling an `async fn`; `await` gives the `T`.
+    Async(Box<Type>),
     /// `fn(A, B) -> R`
     Func(Vec<Type>, Box<Type>),
     /// Placeholder for "not known yet" in expected-type hints (lambda results).
@@ -79,6 +81,7 @@ impl fmt::Display for Type {
             Type::Channel(t) => write!(f, "Channel<{}>", t),
             Type::Shared(t) => write!(f, "Shared<{}>", t),
             Type::Task(t) => write!(f, "Task<{}>", t),
+            Type::Async(t) => write!(f, "Async<{}>", t),
             Type::Generic(n, args) => {
                 let a: Vec<String> = args.iter().map(|t| t.to_string()).collect();
                 write!(f, "{}<{}>", n, a.join(", "))
@@ -127,6 +130,8 @@ pub struct ClassInfo {
     pub private_fields: HashSet<String>,
     pub private_methods: HashSet<String>,
     pub abstract_methods: HashSet<String>,
+    /// `static async fn`s.
+    pub async_statics: HashSet<String>,
     pub init: Option<Signature>,
     pub children: Vec<String>,
     /// Type parameters of a generic class (empty otherwise).
@@ -156,6 +161,7 @@ impl EnumInfo {
 pub struct StructMethod {
     pub sig: Signature,
     pub is_mut: bool,
+    pub is_async: bool,
     pub is_static: bool,
     pub is_private: bool,
 }
@@ -214,6 +220,8 @@ pub struct Model {
     pub extern_fns: HashMap<String, (Signature, String)>,
     /// Type parameters of generic functions.
     pub fn_tparams: HashMap<String, Vec<String>>,
+    /// Top-level `async fn`s.
+    pub async_fns: HashSet<String>,
     pub enums: HashMap<String, EnumInfo>,
     pub enum_order: Vec<String>,
     /// Enums whose payloads can all be printed and compared.
@@ -227,7 +235,7 @@ pub struct Model {
 
 pub const BUILTINS: &[&str] = &["print", "len", "str", "int", "float", "input"];
 const RESERVED_TYPES: &[&str] = &[
-    "Rc", "RefCell", "String", "Vec", "BTreeMap", "Result", "Ok", "Err", "Thread", "Channel", "Shared", "Task", "Math", "Random", "Time", "Option", "Some", "None", "Box", "Self", "std", "main",
+    "Rc", "RefCell", "String", "Vec", "BTreeMap", "Result", "Ok", "Err", "Thread", "Channel", "Shared", "Task", "Async", "Math", "Random", "Time", "Option", "Some", "None", "Box", "Self", "std", "main",
     "int", "float", "bool", "str", "void",
 ];
 
@@ -243,6 +251,7 @@ impl Model {
             functions: HashMap::new(),
             extern_fns: HashMap::new(),
             fn_tparams: HashMap::new(),
+            async_fns: HashSet::new(),
             enums: HashMap::new(),
             enum_order: vec![],
             plain_enums: HashSet::new(),
@@ -354,10 +363,13 @@ impl Model {
                 if !meth.tparams.is_empty() {
                     return err("struct methods cannot be generic (yet)", meth.pos);
                 }
+                if meth.is_async && !meth.is_static {
+                    return err("only `static async fn` is supported in structs (yet)", meth.pos);
+                }
                 let sig = signature(&meth.params, &meth.ret, &resolve)?;
                 methods.insert(
                     meth.name.clone(),
-                    StructMethod { sig, is_mut: meth.is_mut, is_static: meth.is_static, is_private: meth.is_private },
+                    StructMethod { sig, is_mut: meth.is_mut, is_async: meth.is_async, is_static: meth.is_static, is_private: meth.is_private },
                 );
             }
             let mut ops: Vec<StructOp> = Vec::new();
@@ -495,6 +507,9 @@ impl Model {
             let resolve_fn = |t: &TypeExpr| resolve_type(t, &names, &tps);
             m.functions.insert(f.name.clone(), signature(&f.params, &f.ret, &resolve_fn)?);
             m.fn_tparams.insert(f.name.clone(), f.tparams.clone());
+            if f.is_async {
+                m.async_fns.insert(f.name.clone());
+            }
         }
         for x in &prog.extern_fns {
             if BUILTINS.contains(&x.name.as_str()) || type_names.contains(x.name.as_str()) {
@@ -605,6 +620,9 @@ impl Model {
                 if meth.is_static && meth.is_override {
                     return err("a `static fn` cannot override", meth.pos);
                 }
+                if meth.is_async && !meth.is_static {
+                    return err("only `static async fn` is supported in classes (yet); use an `async fn` that takes the object", meth.pos);
+                }
                 let sig = signature(&meth.params, &meth.ret, &resolve)?;
                 if meth.is_private {
                     private_methods.insert(meth.name.clone());
@@ -635,6 +653,7 @@ impl Model {
                     private_fields,
                     private_methods,
                     abstract_methods,
+                    async_statics: c.methods.iter().filter(|m| m.is_async).map(|m| m.name.clone()).collect(),
                     init,
                     children: vec![],
                     tparams: c.tparams.clone(),
@@ -1097,6 +1116,7 @@ pub fn subst(t: &Type, map: &HashMap<String, Type>) -> Type {
         Type::Channel(t) => Type::Channel(Box::new(subst(t, map))),
         Type::Shared(t) => Type::Shared(Box::new(subst(t, map))),
         Type::Task(t) => Type::Task(Box::new(subst(t, map))),
+        Type::Async(t) => Type::Async(Box::new(subst(t, map))),
         other => other.clone(),
     }
 }
@@ -1199,7 +1219,7 @@ fn resolve_type(t: &TypeExpr, names: &TypeNames, tparams: &[String]) -> Result<T
                 }
                 return Ok(Type::Param(n.clone()));
             }
-            if matches!(n.as_str(), "Channel" | "Shared" | "Task") {
+            if matches!(n.as_str(), "Channel" | "Shared" | "Task" | "Async") {
                 if args.len() != 1 {
                     return err(format!("`{}` needs one type: `{}<int>`", n, n), *pos);
                 }
@@ -1207,6 +1227,7 @@ fn resolve_type(t: &TypeExpr, names: &TypeNames, tparams: &[String]) -> Result<T
                 return Ok(match n.as_str() {
                     "Channel" => Type::Channel(t),
                     "Shared" => Type::Shared(t),
+                    "Async" => Type::Async(t),
                     _ => Type::Task(t),
                 });
             }

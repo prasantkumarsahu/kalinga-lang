@@ -21,6 +21,7 @@ fn parse_embedded(code: &str, at: Pos) -> Result<Expr> {
 #[derive(Default, PartialEq)]
 struct Mods {
     is_mut: bool,
+    is_async: bool,
     is_private: bool,
     is_static: bool,
     is_abstract: bool,
@@ -104,6 +105,13 @@ impl Parser {
         while !self.check(&Tok::Eof) {
             match self.peek() {
                 Tok::Fn => prog.functions.push(self.function(Mods::default())?),
+                Tok::Async => {
+                    self.advance();
+                    if !self.check(&Tok::Fn) {
+                        return err("expected `fn` after `async`", self.pos());
+                    }
+                    prog.functions.push(self.function(Mods { is_async: true, ..Mods::default() })?);
+                }
                 Tok::Class => prog.classes.push(self.class(false)?),
                 Tok::Abstract => {
                     self.advance();
@@ -247,6 +255,7 @@ impl Parser {
             is_static: mods.is_static,
             is_abstract: mods.is_abstract,
             is_mut: mods.is_mut,
+            is_async: mods.is_async,
             pos,
         })
     }
@@ -290,6 +299,7 @@ impl Parser {
                 Tok::Static => &mut m.is_static,
                 Tok::Abstract => &mut m.is_abstract,
                 Tok::Override => &mut m.is_override,
+                Tok::Async => &mut m.is_async,
                 _ => return Ok(m),
             };
             if *flag {
@@ -772,6 +782,10 @@ impl Parser {
 
     fn unary(&mut self) -> Result<Expr> {
         let pos = self.pos();
+        if self.eat(&Tok::Await) {
+            let e = self.unary()?;
+            return Ok(Expr { kind: ExprKind::Await(Box::new(e)), pos });
+        }
         if self.eat(&Tok::Minus) {
             let e = self.unary()?;
             return Ok(Expr { kind: ExprKind::Unary(UnOp::Neg, Box::new(e)), pos });

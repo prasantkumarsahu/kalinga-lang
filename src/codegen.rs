@@ -64,6 +64,8 @@ struct Ctx {
     self_mut: bool,
     /// Inside a `static fn`: no `self`.
     is_static: bool,
+    /// Inside an `async fn`: `await` is allowed.
+    is_async: bool,
     loops: usize,
     /// Lambdas being generated, innermost last.
     lambdas: Vec<LambdaFrame>,
@@ -98,6 +100,7 @@ impl Ctx {
             strukt: None,
             self_mut: false,
             is_static: false,
+            is_async: false,
             loops: 0,
             lambdas: vec![],
             tparams: vec![],
@@ -167,6 +170,7 @@ impl<'a> Gen<'a> {
             Type::Channel(t) => format!("__Channel<{}>", self.rty(t)),
             Type::Shared(t) => format!("__Shared<{}>", self.rty(t)),
             Type::Task(t) => format!("__Task<{}>", self.rty(t)),
+            Type::Async(t) => format!("__Async<{}>", self.rty(t)),
             Type::Class(c) => {
                 if self.m.has_subclasses(c) {
                     format!("Rc<RefCell<dyn {}>>", class_trait(c))
@@ -193,6 +197,11 @@ impl<'a> Gen<'a> {
                 format!("Rc<RefCell<{}<{}>>>", n, a.join(", "))
             }
         }
+    }
+
+    /// Return type of a generated function; `async fn`s return `__Async<T>`.
+    fn fn_ret(&self, t: &Type, is_async: bool) -> String {
+        if is_async { format!(" -> {}", self.rty(&Type::Async(Box::new(t.clone())))) } else { self.ret_suffix(t) }
     }
 
     fn ret_suffix(&self, t: &Type) -> String {
@@ -253,14 +262,18 @@ impl<'a> Gen<'a> {
             let sig = self.m.functions[&f.name].clone();
             let mut cx = Ctx::new(None, sig.ret.clone(), false);
             cx.tparams = f.tparams.clone();
-            let body = self.body_in(&mut cx, &sig, &f.body, f.pos, &f.name, 1)?;
+            cx.is_async = f.is_async;
+            let mut body = self.body_in(&mut cx, &sig, &f.body, f.pos, &f.name, 1)?;
+            if f.is_async {
+                body = async_body(&body);
+            }
             writeln!(
                 functions,
                 "\nfn {}{}({}){} {{\n{}}}",
                 fn_id(&f.name),
                 generic_params(&f.tparams),
                 self.params_decl(&sig),
-                self.ret_suffix(&sig.ret),
+                self.fn_ret(&sig.ret, f.is_async),
                 body
             )
             .unwrap();
@@ -309,14 +322,18 @@ impl<'a> Gen<'a> {
             self.class(&mut out, cname, &method_bodies, &init_bodies, &field_defaults);
         }
         out.push_str(&functions);
+        let main_async = self.m.async_fns.contains("main");
+        let call_main = if main_async { format!("__block_on({}())", fn_id("main")) } else { format!("{}()", fn_id("main")) };
         if matches!(self.m.functions.get("main").map(|s| &s.ret), Some(Type::Result(..))) {
             writeln!(
                 out,
-                "\nfn __kl_main_result() {{\n    if let Err(e) = {}() {{\n        eprintln!(\"error: {{}}\", __KlShow::__show(&e));\n        std::process::exit(1);\n    }}\n}}",
-                fn_id("main")
+                "\nfn __kl_main_result() {{\n    if let Err(e) = {} {{\n        eprintln!(\"error: {{}}\", __KlShow::__show(&e));\n        std::process::exit(1);\n    }}\n}}",
+                call_main
             )
             .unwrap();
             writeln!(out, "\nfn main() {{\n    __kl_run(__kl_main_result);\n}}").unwrap();
+        } else if main_async {
+            writeln!(out, "\nfn __kl_main_async() {{\n    {};\n}}\n\nfn main() {{\n    __kl_run(__kl_main_async);\n}}", call_main).unwrap();
         } else {
             writeln!(out, "\nfn main() {{\n    __kl_run({});\n}}", fn_id("main")).unwrap();
         }
@@ -355,7 +372,11 @@ impl<'a> Gen<'a> {
                 let mut cx = Ctx::new(Some(cname.clone()), sig.ret.clone(), false);
                 cx.tparams = info.tparams.clone();
                 cx.is_static = meth.is_static;
-                let body = self.body_in(&mut cx, &sig, &meth.body, meth.pos, &meth.name, 2)?;
+                cx.is_async = meth.is_async;
+                let mut body = self.body_in(&mut cx, &sig, &meth.body, meth.pos, &meth.name, 2)?;
+                if meth.is_async {
+                    body = async_body(&body);
+                }
                 let key = if meth.is_static { format!("static {}", meth.name) } else { meth.name.clone() };
                 method_bodies.insert((cname.clone(), key), body);
             }
@@ -392,9 +413,13 @@ impl<'a> Gen<'a> {
                 cx.strukt = Some(name.clone());
                 cx.self_mut = m.is_mut;
                 cx.is_static = m.is_static;
-                let body = self.body_in(&mut cx, &m.sig, &meth.body, meth.pos, &meth.name, 2)?;
+                cx.is_async = m.is_async;
+                let mut body = self.body_in(&mut cx, &m.sig, &meth.body, meth.pos, &meth.name, 2)?;
+                if m.is_async {
+                    body = async_body(&body);
+                }
                 if m.is_static {
-                    writeln!(out, "    fn __s_{}({}){} {{\n{}    }}", meth.name, self.params_decl(&m.sig), self.ret_suffix(&m.sig.ret), body).unwrap();
+                    writeln!(out, "    fn __s_{}({}){} {{\n{}    }}", meth.name, self.params_decl(&m.sig), self.fn_ret(&m.sig.ret, m.is_async), body).unwrap();
                 } else {
                     let recv = if m.is_mut { "&mut self" } else { "&self" };
                     writeln!(
@@ -512,7 +537,7 @@ impl<'a> Gen<'a> {
     /// `Math`, `Random` or `Time` used as a receiver (unless a variable shadows it).
     fn library_receiver(&self, cx: &Ctx, recv: &Expr) -> Option<String> {
         match &recv.kind {
-            ExprKind::Ident(n) if matches!(n.as_str(), "Math" | "Random" | "Time" | "Thread") && cx.lookup(n).is_none() => Some(n.clone()),
+            ExprKind::Ident(n) if matches!(n.as_str(), "Math" | "Random" | "Time" | "Thread" | "Async") && cx.lookup(n).is_none() => Some(n.clone()),
             _ => None,
         }
     }
@@ -633,6 +658,34 @@ impl<'a> Gen<'a> {
             ("Thread", "cores") => {
                 arity(0)?;
                 Ok(("__cores()".into(), Type::Int))
+            }
+            ("Time", "wait") => {
+                arity(1)?;
+                let secs = self.float_arg(cx, &args[0], &what)?;
+                Ok((format!("__Async::new(__sleep({}))", secs), Type::Async(Box::new(Type::Void))))
+            }
+            ("Async", "spawn" | "run") => {
+                arity(1)?;
+                let (code, t) = self.expr(cx, &args[0], None)?;
+                let Type::Async(inner) = t else {
+                    return err(format!("`{}` needs the result of calling an `async fn`, not `{}`", what, t), args[0].pos);
+                };
+                if name == "spawn" {
+                    Ok((format!("__async_spawn({})", code), Type::Async(inner)))
+                } else {
+                    Ok((format!("__block_on({})", code), *inner))
+                }
+            }
+            ("Async", "all") => {
+                arity(1)?;
+                let (code, t) = self.expr(cx, &args[0], None)?;
+                let Type::Array(elem) = &t else {
+                    return err(format!("`Async.all` needs an array of `Async<T>` values, not `{}`", t), args[0].pos);
+                };
+                let Type::Async(inner) = &**elem else {
+                    return err(format!("`Async.all` needs an array of `Async<T>` values, not `{}`", t), args[0].pos);
+                };
+                Ok((format!("__async_all({})", code), Type::Async(Box::new(Type::Array(inner.clone())))))
             }
             ("Time", "now") => {
                 arity(0)?;
@@ -908,7 +961,7 @@ impl<'a> Gen<'a> {
                 "    fn __s_{}({}){} {{\n{}    }}",
                 mname,
                 self.params_decl(sig),
-                self.ret_suffix(&sig.ret),
+                self.fn_ret(&sig.ret, info.async_statics.contains(mname)),
                 method_bodies[&(cname.to_string(), format!("static {}", mname))]
             )
             .unwrap();
@@ -1121,7 +1174,10 @@ impl<'a> Gen<'a> {
                 if let ExprKind::SuperInit(args) = &e.kind {
                     return self.super_init(cx, args, e.pos);
                 }
-                let (code, _) = self.expr(cx, e, None)?;
+                let (code, t) = self.expr(cx, e, None)?;
+                if matches!(t, Type::Async(_)) {
+                    return err("calling an `async fn` only prepares it: put `await` in front, or start it with `Async.spawn(...)`", e.pos);
+                }
                 Ok(format!("{};", code))
             }
         }
@@ -1570,7 +1626,8 @@ impl<'a> Gen<'a> {
         };
         self.check_method_access(cx, &owner, name, pos)?;
         let (binds, names) = self.args(cx, &sig, args, pos, name)?;
-        Ok((format!("{{ {}{}::__s_{}({}) }}", binds, owner, name, names), sig.ret))
+        let ret = if self.m.classes[&owner].async_statics.contains(name) { Type::Async(Box::new(sig.ret)) } else { sig.ret };
+        Ok((format!("{{ {}{}::__s_{}({}) }}", binds, owner, name, names), ret))
     }
 
     /// Receiver for a method call or field access: (setup statements, Rust expression, type).
@@ -1681,6 +1738,17 @@ impl<'a> Gen<'a> {
             }
             ExprKind::Downcast { value, class, test_only } => self.downcast(cx, value, class, *test_only, e.pos),
             ExprKind::Lambda { params, ret, body } => self.lambda(cx, params, ret.as_ref(), body, expected, e.pos),
+            ExprKind::Await(inner) => {
+                if !cx.is_async || !cx.lambdas.is_empty() {
+                    return err("`await` can only be used inside an `async fn` (not inside a lambda)", e.pos);
+                }
+                let (code, t) = self.expr(cx, inner, None)?;
+                match t {
+                    Type::Async(v) => Ok((format!("({}).await", code), *v)),
+                    Type::Task(v) => Ok((format!("__task_wait({}).await", code), *v)),
+                    other => err(format!("`await` needs an `Async<T>` (from an `async fn`) or a `Task<T>`, not `{}`", other), e.pos),
+                }
+            }
             ExprKind::Try(inner) => {
                 let (code, t) = self.expr(cx, inner, None)?;
                 match (&t, &cx.ret) {
@@ -1707,6 +1775,9 @@ impl<'a> Gen<'a> {
             }
             ExprKind::Ident(name) => match cx.lookup(name) {
                 Some(v) => Ok((clone_if(v.rust.clone(), &v.ty), v.ty.clone())),
+                None if self.m.async_fns.contains(name) => {
+                    err(format!("`{}` is an `async fn`; call it (`{}(...)`) instead of using it as a value", name, name), e.pos)
+                }
                 None if self.m.functions.contains_key(name) => {
                     let sig = &self.m.functions[name];
                     let ty = Type::Func(sig.params.iter().map(|(_, t)| t.clone()).collect(), Box::new(sig.ret.clone()));
@@ -2188,6 +2259,7 @@ impl<'a> Gen<'a> {
             let tparams = self.m.fn_tparams[name].clone();
             let sig = self.m.functions[name].clone();
             let (binds, names, bound, ret) = self.infer_call(cx, &tparams, targs, &sig, args, expected, pos, name)?;
+            let ret = if self.m.async_fns.contains(name) { Type::Async(Box::new(ret)) } else { ret };
             return Ok((format!("{{ {}{}{}({}) }}", binds, fn_id(name), self.turbofish(&bound), names), ret));
         }
         if let Some(v) = cx.lookup(name) {
@@ -2253,7 +2325,8 @@ impl<'a> Gen<'a> {
             None => return err(format!("unknown function `{}`", name), pos),
         };
         let (binds, names) = self.args(cx, &sig, args, pos, name)?;
-        Ok((format!("{{ {}{}({}) }}", binds, fn_id(name), names), sig.ret))
+        let ret = if self.m.async_fns.contains(name) { Type::Async(Box::new(sig.ret)) } else { sig.ret };
+        Ok((format!("{{ {}{}({}) }}", binds, fn_id(name), names), ret))
     }
 
     fn builtin(&self, cx: &mut Ctx, name: &str, args: &[Expr], pos: Pos) -> Result<(String, Type)> {
@@ -2356,10 +2429,12 @@ impl<'a> Gen<'a> {
                 let tparams = self.m.structs[n].tparams.clone();
                 if !tparams.is_empty() {
                     let (binds, names, bound, ret) = self.infer_call(cx, &tparams, &[], &m.sig, args, None, pos, name)?;
+                    let ret = if m.is_async { Type::Async(Box::new(ret)) } else { ret };
                     return Ok((format!("{{ {}{}{}::__s_{}({}) }}", binds, n, self.turbofish(&bound), name, names), ret));
                 }
                 let (binds, names) = self.args(cx, &m.sig, args, pos, name)?;
-                return Ok((format!("{{ {}{}::__s_{}({}) }}", binds, n, name, names), m.sig.ret));
+                let ret = if m.is_async { Type::Async(Box::new(m.sig.ret)) } else { m.sig.ret };
+                return Ok((format!("{{ {}{}::__s_{}({}) }}", binds, n, name, names), ret));
             }
         }
         if matches!(recv.kind, ExprKind::SelfRef) {
@@ -2696,6 +2771,11 @@ fn rust_module_name(path: &str) -> String {
         .collect()
 }
 
+/// Wraps a function body so it runs as `async` code and returns an `__Async<T>`.
+fn async_body(body: &str) -> String {
+    format!("    __Async::new(async move {{\n{}    }})\n", body)
+}
+
 /// `<T: Clone + 'static, U: ...>` for a Rust generic item (empty when not generic).
 fn generic_params(tparams: &[String]) -> String {
     if tparams.is_empty() {
@@ -2853,22 +2933,216 @@ fn __cores() -> i64 {
 }
 struct __Task<T> {
     handle: Rc<RefCell<Option<std::thread::JoinHandle<T>>>>,
+    done: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    waker: std::sync::Arc<std::sync::Mutex<Option<std::task::Waker>>>,
 }
 impl<T> Clone for __Task<T> {
-    fn clone(&self) -> Self { __Task { handle: self.handle.clone() } }
+    fn clone(&self) -> Self { __Task { handle: self.handle.clone(), done: self.done.clone(), waker: self.waker.clone() } }
 }
 impl<T: Send + 'static> __Task<T> {
     fn spawn<F: FnOnce() -> T + Send + 'static>(f: F) -> __Task<T> {
-        let h = std::thread::Builder::new().stack_size(64 * 1024 * 1024).spawn(f).expect("cannot start a thread");
-        __Task { handle: Rc::new(RefCell::new(Some(h))) }
+        let done = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let waker: std::sync::Arc<std::sync::Mutex<Option<std::task::Waker>>> = Default::default();
+        let (d, w) = (done.clone(), waker.clone());
+        let h = std::thread::Builder::new()
+            .stack_size(64 * 1024 * 1024)
+            .spawn(move || {
+                struct Finish(std::sync::Arc<std::sync::atomic::AtomicBool>, std::sync::Arc<std::sync::Mutex<Option<std::task::Waker>>>);
+                impl Drop for Finish {
+                    fn drop(&mut self) {
+                        self.0.store(true, std::sync::atomic::Ordering::SeqCst);
+                        if let Some(w) = self.1.lock().unwrap_or_else(|e| e.into_inner()).take() { w.wake(); }
+                    }
+                }
+                let _finish = Finish(d, w);
+                f()
+            })
+            .expect("cannot start a thread");
+        __Task { handle: Rc::new(RefCell::new(Some(h))), done, waker }
     }
     fn join(&self) -> T {
         let h = self.handle.borrow_mut().take().unwrap_or_else(|| panic!("this task was already joined"));
         match h.join() { Ok(v) => v, Err(_) => panic!("a thread stopped with an error (see above)") }
     }
     fn is_done(&self) -> bool {
-        self.handle.borrow().as_ref().map(|h| h.is_finished()).unwrap_or(true)
+        self.done.load(std::sync::atomic::Ordering::SeqCst)
     }
+}
+
+// Async: a small single-threaded executor (ready queue + timers + wakers).
+struct __Async<T> {
+    fut: Rc<RefCell<Option<std::pin::Pin<Box<dyn std::future::Future<Output = T>>>>>>,
+}
+impl<T> Clone for __Async<T> {
+    fn clone(&self) -> Self { __Async { fut: self.fut.clone() } }
+}
+impl<T: 'static> __Async<T> {
+    fn new(f: impl std::future::Future<Output = T> + 'static) -> Self { __Async { fut: Rc::new(RefCell::new(Some(Box::pin(f)))) } }
+}
+impl<T> std::future::Future for __Async<T> {
+    type Output = T;
+    fn poll(self: std::pin::Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> std::task::Poll<T> {
+        let mut slot = self.fut.borrow_mut();
+        let f = slot.as_mut().unwrap_or_else(|| panic!("this async value was already awaited"));
+        match f.as_mut().poll(cx) {
+            std::task::Poll::Ready(v) => {
+                *slot = None;
+                std::task::Poll::Ready(v)
+            }
+            std::task::Poll::Pending => std::task::Poll::Pending,
+        }
+    }
+}
+type __Queue = std::sync::Arc<(std::sync::Mutex<Vec<usize>>, std::sync::Condvar)>;
+struct __Wake {
+    queue: __Queue,
+    id: usize,
+}
+impl std::task::Wake for __Wake {
+    fn wake(self: std::sync::Arc<Self>) {
+        let (q, cv) = &*self.queue;
+        q.lock().unwrap_or_else(|e| e.into_inner()).push(self.id);
+        cv.notify_one();
+    }
+}
+struct __Exec {
+    queue: __Queue,
+    tasks: Vec<Option<std::pin::Pin<Box<dyn std::future::Future<Output = ()>>>>>,
+    timers: Vec<(std::time::Instant, std::task::Waker)>,
+}
+thread_local! {
+    static __EXEC: RefCell<Option<__Exec>> = RefCell::new(None);
+}
+fn __block_on<T: 'static>(main: impl std::future::Future<Output = T> + 'static) -> T {
+    use std::task::{Context, Poll, Waker};
+    if __EXEC.with(|e| e.borrow().is_some()) {
+        panic!("Async.run cannot be used inside async code; use `await` instead");
+    }
+    let queue: __Queue = std::sync::Arc::new((std::sync::Mutex::new(vec![0]), std::sync::Condvar::new()));
+    __EXEC.with(|e| *e.borrow_mut() = Some(__Exec { queue: queue.clone(), tasks: vec![None], timers: vec![] }));
+    let mut main = Box::pin(main);
+    let main_waker = Waker::from(std::sync::Arc::new(__Wake { queue: queue.clone(), id: 0 }));
+    let result = loop {
+        let ready: Vec<usize> = std::mem::take(&mut *queue.0.lock().unwrap_or_else(|e| e.into_inner()));
+        let mut finished = None;
+        for id in ready {
+            if id == 0 {
+                if let Poll::Ready(v) = main.as_mut().poll(&mut Context::from_waker(&main_waker)) {
+                    finished = Some(v);
+                    break;
+                }
+                continue;
+            }
+            let task = __EXEC.with(|e| e.borrow_mut().as_mut().unwrap().tasks.get_mut(id).and_then(|t| t.take()));
+            if let Some(mut t) = task {
+                let w = Waker::from(std::sync::Arc::new(__Wake { queue: queue.clone(), id }));
+                if t.as_mut().poll(&mut Context::from_waker(&w)).is_pending() {
+                    __EXEC.with(|e| e.borrow_mut().as_mut().unwrap().tasks[id] = Some(t));
+                }
+            }
+        }
+        if let Some(v) = finished {
+            break v;
+        }
+        let now = std::time::Instant::now();
+        let next = __EXEC.with(|e| {
+            let mut b = e.borrow_mut();
+            let ex = b.as_mut().unwrap();
+            let (due, later): (Vec<_>, Vec<_>) = ex.timers.drain(..).partition(|(t, _)| *t <= now);
+            ex.timers = later;
+            for (_, w) in due {
+                w.wake();
+            }
+            ex.timers.iter().map(|(t, _)| *t).min()
+        });
+        let (q, cv) = &*queue;
+        let guard = q.lock().unwrap_or_else(|e| e.into_inner());
+        if guard.is_empty() {
+            let wait = match next {
+                Some(t) => t.saturating_duration_since(std::time::Instant::now()),
+                None => std::time::Duration::from_millis(500),
+            };
+            let _ = cv.wait_timeout(guard, wait);
+        }
+    };
+    __EXEC.with(|e| *e.borrow_mut() = None);
+    result
+}
+fn __sleep(seconds: f64) -> impl std::future::Future<Output = ()> {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs_f64(seconds.max(0.0));
+    std::future::poll_fn(move |cx| {
+        if std::time::Instant::now() >= deadline {
+            return std::task::Poll::Ready(());
+        }
+        __EXEC.with(|e| match e.borrow_mut().as_mut() {
+            Some(ex) => ex.timers.push((deadline, cx.waker().clone())),
+            None => panic!("Time.wait needs async code to be running (`async fn main` or `Async.run`)"),
+        });
+        std::task::Poll::Pending
+    })
+}
+fn __async_spawn<T: 'static>(job: __Async<T>) -> __Async<T> {
+    let state: Rc<RefCell<(Option<T>, Option<std::task::Waker>)>> = Rc::new(RefCell::new((None, None)));
+    let s2 = state.clone();
+    let task: std::pin::Pin<Box<dyn std::future::Future<Output = ()>>> = Box::pin(async move {
+        let v = job.await;
+        let w = {
+            let mut st = s2.borrow_mut();
+            st.0 = Some(v);
+            st.1.take()
+        };
+        if let Some(w) = w {
+            w.wake();
+        }
+    });
+    __EXEC.with(|e| {
+        let mut b = e.borrow_mut();
+        let ex = b.as_mut().unwrap_or_else(|| panic!("Async.spawn needs async code to be running (`async fn main` or `Async.run`)"));
+        ex.tasks.push(Some(task));
+        let id = ex.tasks.len() - 1;
+        ex.queue.0.lock().unwrap_or_else(|e| e.into_inner()).push(id);
+    });
+    __Async::new(std::future::poll_fn(move |cx| {
+        let mut st = state.borrow_mut();
+        match st.0.take() {
+            Some(v) => std::task::Poll::Ready(v),
+            None => {
+                st.1 = Some(cx.waker().clone());
+                std::task::Poll::Pending
+            }
+        }
+    }))
+}
+fn __async_all<T: 'static>(jobs: Vec<__Async<T>>) -> __Async<Vec<T>> {
+    let mut jobs: Vec<Option<__Async<T>>> = jobs.into_iter().map(Some).collect();
+    let mut out: Vec<Option<T>> = (0..jobs.len()).map(|_| None).collect();
+    __Async::new(std::future::poll_fn(move |cx| {
+        let mut pending = false;
+        for (i, j) in jobs.iter_mut().enumerate() {
+            if let Some(f) = j {
+                match std::pin::Pin::new(f).poll(cx) {
+                    std::task::Poll::Ready(v) => {
+                        out[i] = Some(v);
+                        *j = None;
+                    }
+                    std::task::Poll::Pending => pending = true,
+                }
+            }
+        }
+        if pending { std::task::Poll::Pending } else { std::task::Poll::Ready(out.iter_mut().map(|o| o.take().unwrap()).collect()) }
+    }))
+}
+fn __task_wait<T: Send + 'static>(t: __Task<T>) -> impl std::future::Future<Output = T> {
+    std::future::poll_fn(move |cx| {
+        if t.is_done() {
+            return std::task::Poll::Ready(t.join());
+        }
+        *t.waker.lock().unwrap_or_else(|e| e.into_inner()) = Some(cx.waker().clone());
+        if t.is_done() {
+            return std::task::Poll::Ready(t.join());
+        }
+        std::task::Poll::Pending
+    })
 }
 struct __ChanState<T> {
     queue: std::collections::VecDeque<T>,

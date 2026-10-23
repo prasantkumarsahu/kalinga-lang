@@ -38,6 +38,8 @@ pub struct FnDecl {
     pub is_abstract: bool,
     /// `mut fn` in a struct: the method may change `self`.
     pub is_mut: bool,
+    /// `async fn`: calling it gives an `Async<T>` to `await`.
+    pub is_async: bool,
     pub pos: Pos,
 }
 
@@ -245,6 +247,8 @@ pub enum ExprKind {
     SuperCall(String, Vec<Expr>),
     /// `x as Dog` (an optional) or `x is Dog` (a bool)
     Downcast { value: Box<Expr>, class: String, test_only: bool },
+    /// `await expr`
+    Await(Box<Expr>),
     /// `expr?`: unwrap an `Ok` / non-`none` value or return the error / `none` early.
     Try(Box<Expr>),
     /// `fn(x: int) -> int { ... }` or `fn(x) => x * 2`

@@ -478,3 +478,22 @@ fn threads() {
     assert_eq!(out, "before join\n");
     assert!(err.contains("a thread stopped with an error"), "{}", err);
 }
+
+#[test]
+fn async_runtime() {
+    let (code, out, err) = run_file("tests/async.kl");
+    assert_eq!(code, 0, "{}", err);
+    assert_eq!(
+        out,
+        "[slow, fast, medium] [fast, medium, slow] concurrent: true\nstarted background\nbackground result: background\nthread result ok: true loader: 40\n"
+    );
+    assert_runs(
+        "async_run",
+        "async fn answer() -> int {\n    await Time.wait(0.01)\n    return 42\n}\n\nfn main() {\n    print(\"sync main got\", Async.run(answer()))\n}\n",
+        "sync main got 42\n",
+    );
+    let a = "async fn job() -> int {\n    return 1\n}\n";
+    assert_compile_error("await_sync", &format!("{}fn main() {{ let x = await job() }}", a), "can only be used inside an `async fn`");
+    assert_compile_error("async_unused", &format!("{}async fn main() {{\n    job()\n}}", a), "only prepares it");
+    assert_compile_error("async_method", "class C {\n    async fn m() {}\n}\nfn main() {}", "only `static async fn`");
+}
