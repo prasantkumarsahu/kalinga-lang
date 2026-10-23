@@ -395,7 +395,10 @@ impl Lexer {
         let tok = match (c, next) {
             ('-', Some('>')) => two(self, Tok::Arrow),
             ('=', Some('>')) => two(self, Tok::FatArrow),
-            ('.', Some('.')) => two(self, Tok::DotDot),
+            ('.', Some('.')) => {
+                self.bump();
+                if self.peek() == Some('=') { two(self, Tok::DotDotEq) } else { Tok::DotDot }
+            }
             ('+', Some('=')) => two(self, Tok::PlusAssign),
             ('-', Some('=')) => two(self, Tok::MinusAssign),
             ('*', Some('=')) => two(self, Tok::StarAssign),

@@ -45,6 +45,24 @@ with a clear error instead of reading random memory:
 runtime error: index out of bounds: the len is 3 but the index is 7
 ```
 
+### Slices
+
+`xs[a..b]` is a new array with the elements from index `a` up to, but not including, `b`.
+Either end may be left out, and `a..=b` includes `b`:
+
+```kalinga
+fn main() {
+    let xs = [10, 20, 30, 40, 50]
+    println(xs[1..3], xs[..2], xs[3..], xs[1..=3])
+}
+```
+
+```text
+[20, 30] [10, 20] [40, 50] [20, 30, 40]
+```
+
+A slice past the end stops the program, like an index does.
+
 ### Array methods
 
 | Method | Returns | Description |
@@ -211,22 +229,38 @@ For objects, insert a field or a method result: `"{user.name}"`.
 | `s.lower()` | `str` | Lowercase copy |
 | `s.trim()` | `str` | Copy without leading/trailing whitespace |
 | `s.contains(t)` | `bool` | Whether `t` occurs in `s` |
+| `s.starts_with(t)`, `s.ends_with(t)` | `bool` | Whether `s` begins / ends with `t` |
+| `s.find(t)` | `int?` | Index of the first `t`, or `none` |
+| `s.replace(a, b)` | `str` | Copy with every `a` replaced by `b` |
+| `s.split(sep)` | `[str]` | The parts between each `sep` |
+| `s.chars()` | `[str]` | The characters |
+| `s.code_at(i)` | `int` | Code point of the character at `i` |
+| `s.parse_int()`, `s.parse_float()` | `int?`, `float?` | The number in `s`, or `none` |
+| `words.join(sep)` | `str` | An array of strings joined with `sep` |
 
 ```kalinga
 fn main() {
     let raw = "  Hello World  "
     let clean = raw.trim()
     println(clean.upper(), clean.lower(), clean.contains("World"))
+    let parts = "a,b,c".split(",")
+    println(parts, parts.join(" + "), "3 cats".replace("cats", "dogs"))
+    if let n = "42".parse_int() {
+        println(n + 1)
+    }
 }
 ```
 
 ```text
 HELLO WORLD hello world true
+[a, b, c] a + b + c 3 dogs
+43
 ```
 
 ### Characters
 
-Strings cannot be indexed with `s[i]`. Loop over them instead; each character is a `str`:
+A character is a one-character `str`. `s[i]` is the character at index `i` (counting
+characters, not bytes), and slices work as for arrays:
 
 ```kalinga
 fn reverse(s: str) -> str {
@@ -238,15 +272,20 @@ fn reverse(s: str) -> str {
 }
 
 fn main() {
-    println(reverse("stressed"))
+    let word = "kalinga"
+    println(word[0], word[1..4], reverse("stressed"))
+    println(word.code_at(0), chr(75))
 }
 ```
 
 ```text
-desserts
+k ali desserts
+107 K
 ```
 
-Strings are values, like arrays: `+=` on one variable never changes another.
+A string cannot be changed in place (`word[0] = "K"` is an error); build a new one with
+`+`, a slice or `replace`. Strings are values, like arrays: `+=` on one variable never
+changes another.
 
 ---
 

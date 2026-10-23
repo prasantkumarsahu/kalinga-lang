@@ -1,0 +1,6 @@
+tests/ui/errors/loop_names.kl:2:5: error: a range gives one number at a time: write `for i in a..b`
+2 |     for i, x in 0..5 {
+  |     ^^^
+tests/ui/errors/loop_names.kl:8:19: error: `while let` needs an optional value (`T?`), found `int`
+8 |     while let x = 5 {
+  |                   ^

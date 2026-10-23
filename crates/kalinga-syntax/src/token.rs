@@ -64,6 +64,8 @@ pub enum Tok {
     Comma,
     Dot,
     DotDot,
+    /// `..=`
+    DotDotEq,
     Colon,
     Semi,
     Arrow,
@@ -197,6 +199,7 @@ impl Tok {
             Tok::Comma => ",",
             Tok::Dot => ".",
             Tok::DotDot => "..",
+            Tok::DotDotEq => "..=",
             Tok::Colon => ":",
             Tok::Semi => ";",
             Tok::Arrow => "->",
@@ -252,6 +255,7 @@ impl Tok {
                 | Tok::Comma
                 | Tok::Dot
                 | Tok::DotDot
+                | Tok::DotDotEq
                 | Tok::Arrow
                 | Tok::FatArrow
                 | Tok::Colon

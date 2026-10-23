@@ -37,13 +37,7 @@ impl Checker<'_> {
                 Ok(TStmt::If { cond, then, otherwise })
             }
             StmtKind::IfLet { name, value, then, otherwise } => {
-                let value_t = self.expr(cx, value, None)?;
-                let inner = match &value_t.ty {
-                    Type::Optional(i) => (**i).clone(),
-                    other => {
-                        return err(format!("`if let` needs an optional value (`T?`), found `{}`", other), value.pos);
-                    }
-                };
+                let (value_t, inner) = self.optional_value(cx, value, "if let")?;
                 let then = cx.scoped(|cx| {
                     cx.declare(name, inner, false, s.pos)?;
                     self.block(cx, then)
@@ -57,7 +51,12 @@ impl Checker<'_> {
                 let body = self.in_loop(cx, |cx| self.block(cx, body))?;
                 Ok(TStmt::While { cond, body })
             }
-            StmtKind::For { var, iter, body } => self.for_stmt(cx, var, iter, body, s.pos),
+            StmtKind::WhileLet { name, value, body } => {
+                let (value, inner) = self.optional_value(cx, value, "while let")?;
+                let body = self.loop_body(cx, &[(name, inner)], body, s.pos)?;
+                Ok(TStmt::WhileLet { name: name.clone(), value, body })
+            }
+            StmtKind::For { index, var, iter, body } => self.for_stmt(cx, index.as_deref(), var, iter, body, s.pos),
             StmtKind::Return(value) => match (value, cx.ret.clone()) {
                 (None, Type::Void) => Ok(TStmt::Return(None)),
                 (None, t) => err(format!("this function must return a `{}`", t), s.pos),
@@ -120,36 +119,65 @@ impl Checker<'_> {
         r
     }
 
-    fn for_stmt(&self, cx: &mut Ctx, var: &str, iter: &ForIter, body: &[Stmt], pos: Span) -> Result<TStmt> {
+    /// The value of `if let` / `while let`, which must be optional, and the type inside.
+    fn optional_value(&self, cx: &mut Ctx, value: &Expr, what: &str) -> Result<(TExpr, Type)> {
+        let value_t = self.expr(cx, value, None)?;
+        match &value_t.ty {
+            Type::Optional(i) => {
+                let inner = (**i).clone();
+                Ok((value_t, inner))
+            }
+            other => err(format!("`{}` needs an optional value (`T?`), found `{}`", what, other), value.pos),
+        }
+    }
+
+    fn for_stmt(
+        &self,
+        cx: &mut Ctx,
+        index: Option<&str>,
+        var: &str,
+        iter: &ForIter,
+        body: &[Stmt],
+        pos: Span,
+    ) -> Result<TStmt> {
         match iter {
-            ForIter::Range(a, b) => {
+            ForIter::Range(a, b, inclusive) => {
+                if index.is_some() {
+                    return err("a range gives one number at a time: write `for i in a..b`", pos);
+                }
                 let from = self.expr_to(cx, a, &Type::Int)?;
                 let to = self.expr_to(cx, b, &Type::Int)?;
-                let body = self.loop_body(cx, var, Type::Int, body, pos)?;
-                Ok(TStmt::ForRange { var: var.to_string(), from, to, body })
+                let body = self.loop_body(cx, &[(var, Type::Int)], body, pos)?;
+                Ok(TStmt::ForRange { var: var.to_string(), from, to, inclusive: *inclusive, body })
             }
             ForIter::Each(e) => {
                 let iter = self.expr(cx, e, None)?;
-                let elem = match &iter.ty {
-                    Type::Array(inner) => (**inner).clone(),
-                    Type::Map(k, _) => (**k).clone(),
-                    Type::Str => Type::Str,
+                // (type of the first name when there are two, type of `var`)
+                let (first, elem) = match &iter.ty {
+                    Type::Array(inner) => (Type::Int, (**inner).clone()),
+                    Type::Map(k, v) if index.is_some() => ((**k).clone(), (**v).clone()),
+                    Type::Map(k, _) => (Type::Int, (**k).clone()),
+                    Type::Str => (Type::Int, Type::Str),
                     other => {
                         return err(
-                            format!("cannot loop over `{}` (expected an array, string or `a..b` range)", other),
+                            format!("cannot loop over `{}` (expected an array, map, string or `a..b` range)", other),
                             e.pos,
                         );
                     }
                 };
-                let body = self.loop_body(cx, var, elem, body, pos)?;
-                Ok(TStmt::ForEach { var: var.to_string(), iter, body })
+                let names: Vec<(&str, Type)> = index.map(|i| (i, first)).into_iter().chain([(var, elem)]).collect();
+                let body = self.loop_body(cx, &names, body, pos)?;
+                Ok(TStmt::ForEach { index: index.map(str::to_string), var: var.to_string(), iter, body })
             }
         }
     }
 
-    fn loop_body(&self, cx: &mut Ctx, var: &str, ty: Type, body: &[Stmt], pos: Span) -> Result<Vec<TStmt>> {
+    /// A loop's body, with the loop variables declared.
+    fn loop_body(&self, cx: &mut Ctx, vars: &[(&str, Type)], body: &[Stmt], pos: Span) -> Result<Vec<TStmt>> {
         cx.scoped(|cx| {
-            cx.declare(var, ty, false, pos)?;
+            for (name, ty) in vars {
+                cx.declare(name, ty.clone(), false, pos)?;
+            }
             self.in_loop(cx, |cx| self.block(cx, body))
         })
     }

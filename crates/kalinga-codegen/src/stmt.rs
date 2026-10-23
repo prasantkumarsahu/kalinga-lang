@@ -88,22 +88,21 @@ impl Gen<'_> {
                     format!("while {} {}", self.expr(cond), self.block(body, depth))
                 }
             }
-            TStmt::ForRange { var, from, to, body } => {
-                format!("for {} in ({})..({}) {}", rid(var), self.expr(from), self.expr(to), self.block(body, depth))
+            TStmt::WhileLet { name, value, body } => {
+                format!("while let Some({}) = {} {}", rid(name), self.expr(value), self.block(body, depth))
             }
-            TStmt::ForEach { var, iter, body } => {
-                let code = self.expr(iter);
-                match &iter.ty {
-                    Type::Map(..) => format!("for {} in ({}).into_keys() {}", rid(var), code, self.block(body, depth)),
-                    Type::Str => format!(
-                        "for __c in ({}).chars() {{ let {} = __c.to_string(); {} }}",
-                        code,
-                        rid(var),
-                        self.block(body, depth)
-                    ),
-                    _ => format!("for {} in {} {}", rid(var), code, self.block(body, depth)),
-                }
+            TStmt::ForRange { var, from, to, inclusive, body } => {
+                let dots = if *inclusive { "..=" } else { ".." };
+                format!(
+                    "for {} in ({}){}({}) {}",
+                    rid(var),
+                    self.expr(from),
+                    dots,
+                    self.expr(to),
+                    self.block(body, depth)
+                )
             }
+            TStmt::ForEach { index, var, iter, body } => self.for_each(index.as_deref(), var, iter, body, depth),
             TStmt::Return(None) => "return;".into(),
             TStmt::Return(Some(v)) => format!("return {};", self.expr(v)),
             TStmt::Break => "break;".into(),
@@ -162,6 +161,29 @@ impl Gen<'_> {
                     (format!("{}let __i{} = __idx({}); ", pre, at, i), format!("{}[__i{}]", b, at))
                 }
             }
+        }
+    }
+
+    fn for_each(&self, index: Option<&str>, var: &str, iter: &TExpr, body: &[TStmt], depth: usize) -> String {
+        let code = self.expr(iter);
+        let (body, var) = (self.block(body, depth), rid(var));
+        let Some(index) = index.map(rid) else {
+            return match &iter.ty {
+                Type::Map(..) => format!("for {} in ({}).into_keys() {}", var, code, body),
+                Type::Str => format!("for __c in ({}).chars() {{ let {} = __c.to_string(); {} }}", code, var, body),
+                _ => format!("for {} in {} {}", var, code, body),
+            };
+        };
+        match &iter.ty {
+            Type::Map(..) => format!("for ({}, {}) in ({}).into_iter() {}", index, var, code, body),
+            Type::Str => format!(
+                "for (__i, __c) in ({}).chars().enumerate() {{ let {} = __i as i64; let {} = __c.to_string(); {} }}",
+                code, index, var, body
+            ),
+            _ => format!(
+                "for (__i, {}) in ({}).into_iter().enumerate() {{ let {} = __i as i64; {} }}",
+                var, code, index, body
+            ),
         }
     }
 

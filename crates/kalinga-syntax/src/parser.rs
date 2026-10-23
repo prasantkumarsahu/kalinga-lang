@@ -787,6 +787,14 @@ impl Parser {
             Tok::Match => return self.match_stmt(),
             Tok::While => {
                 self.advance();
+                if self.eat(&Tok::Let) {
+                    let (name, _) = self.ident("variable name")?;
+                    self.expect(Tok::Assign, "`=`")?;
+                    let value = self.expr()?;
+                    let body = self.block()?;
+                    self.skip_newlines();
+                    return Ok(Stmt { kind: StmtKind::WhileLet { name, value, body }, pos });
+                }
                 let cond = self.expr()?;
                 let body = self.block()?;
                 self.skip_newlines();
@@ -794,14 +802,24 @@ impl Parser {
             }
             Tok::For => {
                 self.advance();
-                let (var, _) = self.ident("loop variable name")?;
+                let (first_name, _) = self.ident("loop variable name")?;
+                let (index, var) = if self.eat(&Tok::Comma) {
+                    (Some(first_name), self.ident("a second loop variable name")?.0)
+                } else {
+                    (None, first_name)
+                };
                 self.expect(Tok::In, "`in`")?;
                 let first = self.expr()?;
-                let iter =
-                    if self.eat(&Tok::DotDot) { ForIter::Range(first, self.expr()?) } else { ForIter::Each(first) };
+                let iter = match self.peek() {
+                    Tok::DotDot | Tok::DotDotEq => {
+                        let inclusive = self.advance().tok == Tok::DotDotEq;
+                        ForIter::Range(first, self.expr()?, inclusive)
+                    }
+                    _ => ForIter::Each(first),
+                };
                 let body = self.block()?;
                 self.skip_newlines();
-                return Ok(Stmt { kind: StmtKind::For { var, iter, body }, pos });
+                return Ok(Stmt { kind: StmtKind::For { index, var, iter, body }, pos });
             }
             Tok::Return => {
                 self.advance();
@@ -1053,7 +1071,14 @@ impl Parser {
                 e = Expr { kind: ExprKind::Try(Box::new(e)), pos };
             } else if self.eat(&Tok::LBracket) {
                 let from = if self.check(&Tok::DotDot) { None } else { Some(Box::new(self.expr()?)) };
-                if self.eat(&Tok::DotDot) {
+                if self.eat(&Tok::DotDotEq) {
+                    // `xs[a..=b]` is `xs[a..b + 1]`.
+                    let last = self.expr()?;
+                    let one = Expr { kind: ExprKind::Int(1), pos: last.pos };
+                    let to = Expr { pos: last.pos, kind: ExprKind::Binary(BinOp::Add, Box::new(last), Box::new(one)) };
+                    self.expect(Tok::RBracket, "`]`")?;
+                    e = Expr { kind: ExprKind::Slice(Box::new(e), from, Some(Box::new(to))), pos };
+                } else if self.eat(&Tok::DotDot) {
                     let to = if self.check(&Tok::RBracket) { None } else { Some(Box::new(self.expr()?)) };
                     self.expect(Tok::RBracket, "`]`")?;
                     e = Expr { kind: ExprKind::Slice(Box::new(e), from, to), pos };

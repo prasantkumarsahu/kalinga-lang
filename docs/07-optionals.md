@@ -60,6 +60,8 @@ no pink
 ```
 
 Inside the first block, `i` is a plain `int`. It only exists inside that block.
+`while let` works the same way and repeats until the value is `none` (see
+[Control flow](03-control-flow.md#while-let)).
 
 ## Comparing with none
 

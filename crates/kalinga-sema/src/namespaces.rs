@@ -390,13 +390,21 @@ impl<'a> Resolver<'a> {
                 self.expr(cond, sc)?;
                 self.block(body, sc)?;
             }
+            StmtKind::WhileLet { name, value, body } => {
+                self.expr(value, sc)?;
+                sc.push();
+                sc.add(name);
+                let r = self.block(body, sc);
+                sc.pop();
+                r?;
+            }
             StmtKind::Match { value, arms } => {
                 self.expr(value, sc)?;
                 self.arms(arms, sc)?;
             }
-            StmtKind::For { var, iter, body } => {
+            StmtKind::For { index, var, iter, body } => {
                 match iter {
-                    ForIter::Range(a, b) => {
+                    ForIter::Range(a, b, _) => {
                         self.expr(a, sc)?;
                         self.expr(b, sc)?;
                     }
@@ -404,6 +412,9 @@ impl<'a> Resolver<'a> {
                 }
                 sc.push();
                 sc.add(var);
+                if let Some(i) = index {
+                    sc.add(i);
+                }
                 let r = self.block(body, sc);
                 sc.pop();
                 r?;

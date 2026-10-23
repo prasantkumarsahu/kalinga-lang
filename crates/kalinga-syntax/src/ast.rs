@@ -385,7 +385,8 @@ pub enum AssignOp {
 
 #[derive(Debug, Clone)]
 pub enum ForIter {
-    Range(Expr, Expr),
+    /// `a..b`, or `a..=b` when the flag is set.
+    Range(Expr, Expr, bool),
     Each(Expr),
 }
 
@@ -414,13 +415,49 @@ pub struct Stmt {
 
 #[derive(Debug, Clone)]
 pub enum StmtKind {
-    Let { name: String, mutable: bool, ty: Option<TypeExpr>, value: Expr },
-    Assign { target: Expr, op: AssignOp, value: Expr },
-    If { cond: Expr, then: Vec<Stmt>, otherwise: Option<Vec<Stmt>> },
-    IfLet { name: String, value: Expr, then: Vec<Stmt>, otherwise: Option<Vec<Stmt>> },
-    While { cond: Expr, body: Vec<Stmt> },
-    Match { value: Expr, arms: Vec<MatchArm> },
-    For { var: String, iter: ForIter, body: Vec<Stmt> },
+    Let {
+        name: String,
+        mutable: bool,
+        ty: Option<TypeExpr>,
+        value: Expr,
+    },
+    Assign {
+        target: Expr,
+        op: AssignOp,
+        value: Expr,
+    },
+    If {
+        cond: Expr,
+        then: Vec<Stmt>,
+        otherwise: Option<Vec<Stmt>>,
+    },
+    IfLet {
+        name: String,
+        value: Expr,
+        then: Vec<Stmt>,
+        otherwise: Option<Vec<Stmt>>,
+    },
+    While {
+        cond: Expr,
+        body: Vec<Stmt>,
+    },
+    /// `while let name = optional { ... }`: runs while the value is not `none`.
+    WhileLet {
+        name: String,
+        value: Expr,
+        body: Vec<Stmt>,
+    },
+    Match {
+        value: Expr,
+        arms: Vec<MatchArm>,
+    },
+    /// `for var in iter` or `for index, var in iter` (index or key, then element or value).
+    For {
+        index: Option<String>,
+        var: String,
+        iter: ForIter,
+        body: Vec<Stmt>,
+    },
     Return(Option<Expr>),
     Break,
     Continue,

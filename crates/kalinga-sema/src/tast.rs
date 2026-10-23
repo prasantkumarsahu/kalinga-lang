@@ -396,14 +396,23 @@ pub enum TStmt {
         cond: TExpr,
         body: Vec<TStmt>,
     },
+    WhileLet {
+        name: String,
+        value: TExpr,
+        body: Vec<TStmt>,
+    },
     ForRange {
         var: String,
         from: TExpr,
         to: TExpr,
+        /// `a..=b`
+        inclusive: bool,
         body: Vec<TStmt>,
     },
-    /// Over an array's elements, a map's keys or a string's characters.
+    /// Over an array's elements, a map's keys or a string's characters; with `index`, also
+    /// the position (arrays, strings) or the key, `var` then being the value (maps).
     ForEach {
+        index: Option<String>,
         var: String,
         iter: TExpr,
         body: Vec<TStmt>,

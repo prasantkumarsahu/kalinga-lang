@@ -80,6 +80,22 @@ c = 3
 [a, b, c] [1, 2, 3]
 ```
 
+With two names, the loop gives each key and its value:
+
+```kalinga
+fn main() {
+    let stock = {"pens": 12, "ink": 3}
+    for item, count in stock {
+        println("{item}: {count}")
+    }
+}
+```
+
+```text
+ink: 3
+pens: 12
+```
+
 ## Counting with a map
 
 A common pattern: count how often each item appears.

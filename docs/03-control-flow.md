@@ -85,6 +85,26 @@ fn main() {
 
 `while true { }` is an endless loop; leave it with `break` or `return`.
 
+### while let
+
+`while let name = value` repeats while an optional value is not `none`, with `name` holding
+the value inside (see [Optionals](07-optionals.md)):
+
+```kalinga
+fn main() {
+    var todo = ["wash", "cook", "shop"]
+    while let task = todo.pop() {
+        println("doing", task)
+    }
+}
+```
+
+```text
+doing shop
+doing cook
+doing wash
+```
+
 ## for over a range
 
 `for i in a..b` counts from `a` up to, but not including, `b`:
@@ -104,7 +124,21 @@ step 2
 ```
 
 The bounds can be any `int` expressions, for example `for i in 0..len(items)`.
-If `b <= a`, the loop body never runs.
+If `b <= a`, the loop body never runs. `a..=b` includes `b`:
+
+```kalinga
+fn main() {
+    var total = 0
+    for i in 1..=10 {
+        total += i
+    }
+    println(total)
+}
+```
+
+```text
+55
+```
 
 ## for over an array
 
@@ -125,6 +159,25 @@ KIWI
 
 The loop works on a copy of the array, so changing the original variable inside the loop
 does not affect the iteration.
+
+With two names, the first is the position (from `0`) and the second the element:
+
+```kalinga
+fn main() {
+    let podium = ["Asha", "Ravi", "Mira"]
+    for i, name in podium {
+        println(i + 1, name)
+    }
+}
+```
+
+```text
+1 Asha
+2 Ravi
+3 Mira
+```
+
+`for i, ch in text` does the same for the characters of a string.
 
 ## for over a string
 

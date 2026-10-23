@@ -111,8 +111,11 @@ if let NAME = OPTIONAL_EXPR { ... } [else { ... }]
 match EXPR { PATTERN => STATEMENT_OR_BLOCK ... }     arms on one line need `,` between them
     PATTERN = Variant | Variant(name, _, ...) | Enum.Variant(...) | INT | STRING | true | false | _
 while EXPR { ... }
-for NAME in EXPR..EXPR { ... }
-for NAME in ARRAY_OR_STR { ... }
+while let NAME = OPTIONAL_EXPR { ... }
+for NAME in EXPR..EXPR { ... }                       EXPR..=EXPR includes the end
+for NAME in ARRAY_OR_STR_OR_MAP { ... }              a map gives its keys
+for INDEX, NAME in ARRAY_OR_STR { ... }              position from 0, then element
+for KEY, VALUE in MAP { ... }
 return [EXPR]
 break
 continue
@@ -270,8 +273,8 @@ block       = "{" { statement } "}" ;
 statement   = ( "let" | "var" ) IDENT [ ":" type ] "=" expr
             | expr [ assign_op expr ]
             | "if" ( expr | "let" IDENT "=" expr ) block [ "else" ( block | if_stmt ) ]
-            | "while" expr block
-            | "for" IDENT "in" expr [ ".." expr ] block
+            | "while" [ "let" IDENT "=" ] expr block
+            | "for" IDENT [ "," IDENT ] "in" expr [ ( ".." | "..=" ) expr ] block
             | "match" expr "{" { pattern "=>" ( block | statement ) [ "," ] } "}"
             | "return" [ expr ] | "break" | "continue" ;
 pattern     = "_" | [ IDENT "." ] IDENT [ "(" IDENT { "," IDENT } ")" ] | [ "-" ] INT | STRING | "true" | "false" ;
@@ -286,7 +289,7 @@ additive    = term { ( "+" | "-" ) term } ;
 term        = unary { ( "*" | "/" | "%" ) unary } ;
 unary       = ( "-" | "!" | "await" ) unary | cast ;
 cast        = postfix { ( "as" | "is" ) IDENT } ;
-postfix     = primary { "." IDENT [ args ] | "[" expr "]" | "?" } ;
+postfix     = primary { "." IDENT [ args ] | "[" expr "]" | "[" [ expr ] ( ".." | "..=" ) [ expr ] "]" | "?" } ;
 primary     = INT | FLOAT | STRING | "true" | "false" | "none" | "self"
             | IDENT [ "<" type { "," type } ">" ] [ args ]
             | "super" ( args | "." IDENT args )
