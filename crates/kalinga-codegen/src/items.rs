@@ -132,7 +132,11 @@ impl Gen<'_> {
             if fields.is_empty() {
                 let _ = writeln!(out, "    {},", v);
             } else {
-                let ts: Vec<String> = fields.iter().map(|(_, t)| self.rty(t)).collect();
+                let ts: Vec<String> = fields
+                    .iter()
+                    .enumerate()
+                    .map(|(i, (_, t))| if info.is_boxed(v, i) { format!("Box<{}>", self.rty(t)) } else { self.rty(t) })
+                    .collect();
                 let _ = writeln!(out, "    {}({}),", v, ts.join(", "));
             }
         }

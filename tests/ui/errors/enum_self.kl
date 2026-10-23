@@ -1,2 +1,0 @@
-enum T { Leaf, Node(l: T) }
-fn main() {}

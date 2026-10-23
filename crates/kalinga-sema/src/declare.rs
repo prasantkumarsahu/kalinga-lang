@@ -83,7 +83,7 @@ impl Model {
                 let sig = signature(&v.fields, &TypeExpr::Void, &|t| resolve_type(t, &self.names, &[]))?;
                 variants.push((v.name.clone(), sig.params));
             }
-            self.enums.insert(e.name.clone(), EnumInfo { variants });
+            self.enums.insert(e.name.clone(), EnumInfo { variants, ..EnumInfo::default() });
             self.enum_order.push(e.name.clone());
         }
         Ok(())
@@ -99,27 +99,43 @@ impl Model {
         Ok(())
     }
 
-    /// Enums and structs must not contain themselves by value, and are "plain" (printable,
-    /// comparable) when all their parts are.
+    /// Enum fields that lead back to their enum are boxed; structs must not contain
+    /// themselves by value. Enums and structs are "plain" (printable, comparable) when all
+    /// their parts are.
     fn check_value_types(&mut self, prog: &Program) -> Result<()> {
-        let decls = prog
-            .enums
-            .iter()
-            .map(|e| (&e.name, e.pos, "enum"))
-            .chain(prog.structs.iter().map(|s| (&s.name, s.pos, "struct")));
-        for (name, pos, kind) in decls {
-            if self.value_contains(name, name, &mut HashSet::new()) {
+        self.find_boxed_fields();
+        for st in &prog.structs {
+            if self.value_contains(&st.name, &st.name, &mut HashSet::new()) {
                 return err(
                     format!(
-                        "{} `{}` contains itself; put the recursive part in an array (`[{}]`) or use a class",
-                        kind, name, name
+                        "struct `{}` contains itself; put the recursive part in an array (`[{}]`), an enum or a class",
+                        st.name, st.name
                     ),
-                    pos,
+                    st.pos,
                 );
             }
         }
         self.find_plain_types();
         Ok(())
+    }
+
+    /// Decided for every enum before any is marked, so the result does not depend on order.
+    fn find_boxed_fields(&mut self) {
+        let boxed: Vec<(String, HashSet<(String, usize)>)> = self
+            .enums
+            .iter()
+            .map(|(name, info)| {
+                let fields =
+                    info.variants.iter().flat_map(|(v, fs)| fs.iter().enumerate().map(move |(i, f)| (v, i, f)));
+                let set = fields.filter(|(_, _, (_, t))| self.type_contains(t, name)).map(|(v, i, _)| (v.clone(), i));
+                (name.clone(), set.collect())
+            })
+            .collect();
+        for (name, set) in boxed {
+            if let Some(info) = self.enums.get_mut(&name) {
+                info.boxed = set;
+            }
+        }
     }
 
     /// Iterates to a fixpoint, since enums and structs can contain each other.

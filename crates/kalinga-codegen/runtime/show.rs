@@ -50,6 +50,11 @@ impl __KlShow for () {
         String::new()
     }
 }
+impl<T: __KlShow> __KlShow for Box<T> {
+    fn __show(&self) -> String {
+        (**self).__show()
+    }
+}
 impl<T: __KlShow> __KlShow for Option<T> {
     fn __show(&self) -> String {
         match self {

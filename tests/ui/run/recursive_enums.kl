@@ -1,0 +1,51 @@
+struct Pair {
+    left: Shape
+    right: Shape
+}
+
+enum Shape {
+    Dot
+    Both(p: Pair)
+    Maybe(inner: Shape?)
+}
+
+enum List {
+    Empty
+    Cons(head: int, tail: List)
+}
+
+fn sum(l: List) -> int {
+    match l {
+        Empty => return 0
+        Cons(h, t) => return h + sum(t)
+    }
+}
+
+fn size(s: Shape) -> int {
+    match s {
+        Dot => return 1
+        Both(p) => return size(p.left) + size(p.right)
+        Maybe(i) => {
+            if i == none {
+                return 0
+            }
+            return 0
+        }
+    }
+}
+
+fn main() {
+    var l = List.Empty
+    for i in 1..4 {
+        l = List.Cons(i, l)
+    }
+    println(sum(l))
+    println(l)
+    let s = Shape.Both(Pair(Shape.Dot, Shape.Both(Pair(Shape.Dot, Shape.Maybe(none)))))
+    println(size(s))
+    println(s)
+    match l {
+        Cons(_, t) => println(t)
+        _ => println("empty")
+    }
+}

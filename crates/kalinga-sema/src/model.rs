@@ -38,14 +38,21 @@ pub struct InterfaceInfo {
     pub supers: Vec<String>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct EnumInfo {
     pub variants: Vec<(String, Vec<(String, Type)>)>,
+    /// `(variant, field index)` of the fields that lead back to this enum by value
+    /// (`Add(a: Expr, b: Expr)`); they are boxed in Rust so the enum has a finite size.
+    pub boxed: HashSet<(String, usize)>,
 }
 
 impl EnumInfo {
     pub fn variant(&self, name: &str) -> Option<&Vec<(String, Type)>> {
         self.variants.iter().find(|(n, _)| n == name).map(|(_, f)| f)
+    }
+
+    pub fn is_boxed(&self, variant: &str, field: usize) -> bool {
+        self.boxed.contains(&(variant.to_string(), field))
     }
 }
 
@@ -386,32 +393,34 @@ impl Model {
     }
 
     /// Does the enum or struct `current` hold `target` by value (not behind an array,
-    /// map or object)? Such a type would be infinitely large.
+    /// map, object or boxed enum field)? Such a type would be infinitely large.
     pub(crate) fn value_contains(&self, current: &str, target: &str, seen: &mut HashSet<String>) -> bool {
         if !seen.insert(current.to_string()) {
             return false;
         }
-        fn direct(t: &Type, out: &mut Vec<String>) {
-            match t {
-                Type::Enum(e) | Type::Struct(e, _) => out.push(e.clone()),
-                Type::Optional(i) => direct(i, out),
-                _ => {}
-            }
-        }
         let mut inner = vec![];
         if let Some(en) = self.enums.get(current) {
-            for (_, fs) in &en.variants {
-                for (_, t) in fs {
-                    direct(t, &mut inner);
+            for (v, fs) in &en.variants {
+                for (i, (_, t)) in fs.iter().enumerate() {
+                    if !en.is_boxed(v, i) {
+                        held_by_value(t, &mut inner);
+                    }
                 }
             }
         }
         if let Some(st) = self.structs.get(current) {
             for (_, t) in &st.fields {
-                direct(t, &mut inner);
+                held_by_value(t, &mut inner);
             }
         }
         inner.iter().any(|e| e == target || self.value_contains(e, target, seen))
+    }
+
+    /// Does a value of type `t` hold the enum or struct `target` by value?
+    pub(crate) fn type_contains(&self, t: &Type, target: &str) -> bool {
+        let mut inner = vec![];
+        held_by_value(t, &mut inner);
+        inner.iter().any(|e| e == target || self.value_contains(e, target, &mut HashSet::new()))
     }
 
     /// Can a value of type `from` be used where `to` is expected?
@@ -566,4 +575,13 @@ fn resolve_named(n: &str, args: &[TypeExpr], pos: Span, names: &TypeNames, tpara
     } else {
         return err(format!("unknown type `{}`", n), pos);
     })
+}
+
+/// The enums and structs a value of type `t` holds directly (not behind an array, map or object).
+fn held_by_value(t: &Type, out: &mut Vec<String>) {
+    match t {
+        Type::Enum(e) | Type::Struct(e, _) => out.push(e.clone()),
+        Type::Optional(i) => held_by_value(i, out),
+        _ => {}
+    }
 }

@@ -209,8 +209,37 @@ owned by Asha
 
 ## Recursive enums
 
-An enum cannot contain itself directly — that would be infinitely large. Put the
-recursive part in an array:
+A variant can hold its own enum, which describes trees and lists naturally:
+
+```kalinga
+enum Expr {
+    Num(value: int)
+    Add(left: Expr, right: Expr)
+    Neg(inner: Expr)
+}
+
+fn eval(e: Expr) -> int {
+    match e {
+        Num(n) => return n
+        Add(a, b) => return eval(a) + eval(b)
+        Neg(x) => return -eval(x)
+    }
+}
+
+fn main() {
+    let e = Expr.Add(Expr.Num(2), Expr.Neg(Expr.Num(5)))
+    println(e)
+    println(eval(e))
+}
+```
+
+```text
+Add(Num(2), Neg(Num(5)))
+-3
+```
+
+(Kalinga stores such fields behind a pointer, a `Box` in the generated Rust, so the
+enum keeps a fixed size.) For any number of children, use an array:
 
 ```kalinga
 enum Tree {

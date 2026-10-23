@@ -54,10 +54,7 @@ impl Gen<'_> {
                 _ => "f64::INFINITY".into(),
             },
             TExprKind::Variant { enum_name, variant, args } if args.is_empty() => format!("{}::{}", enum_name, variant),
-            TExprKind::Variant { enum_name, variant, args } => {
-                let (binds, names) = self.bind_args(args);
-                format!("{{ {}{}::{}({}) }}", binds, enum_name, variant, names)
-            }
+            TExprKind::Variant { enum_name, variant, args } => self.variant(enum_name, variant, args),
             TExprKind::Index { base, index } => self.index(base, index, &e.ty),
             TExprKind::Slice { base, from, to } => self.slice(base, from.as_deref(), to.as_deref()),
             TExprKind::Call { callee, args } => self.call(callee, args, &e.ty),
@@ -65,6 +62,18 @@ impl Gen<'_> {
             TExprKind::BuiltinMethod { op, recv, args } => self.builtin_method(op, recv, args),
             TExprKind::Mutate { place, op, args } => self.mutate(place, op, args),
         }
+    }
+
+    /// `Enum.Variant(args)`, boxing the fields that lead back to the enum.
+    fn variant(&self, enum_name: &str, variant: &str, args: &[TExpr]) -> String {
+        let (binds, _) = self.bind_args(args);
+        let names: Vec<String> = (0..args.len())
+            .map(|i| match self.m.enums.get(enum_name) {
+                Some(info) if info.is_boxed(variant, i) => format!("Box::new(__a{})", i),
+                _ => format!("__a{}", i),
+            })
+            .collect();
+        format!("{{ {}{}::{}({}) }}", binds, enum_name, variant, names.join(", "))
     }
 
     fn map_literal(&self, entries: &[(TExpr, TExpr)]) -> String {

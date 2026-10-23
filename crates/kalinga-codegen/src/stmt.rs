@@ -169,24 +169,44 @@ impl Gen<'_> {
         let scrutinee = if value.ty == Type::Str { format!("({}).as_str()", code) } else { code };
         let mut out = format!("match {} {{\n", scrutinee);
         for arm in arms {
-            let pattern = match &arm.pattern {
-                TPattern::Wildcard => "_".to_string(),
-                TPattern::Variant { enum_name, variant, binds } => {
-                    let names: Vec<String> = binds.iter().map(|b| b.as_deref().map_or("_".to_string(), rid)).collect();
-                    match (names.is_empty(), enum_name.as_str()) {
-                        (true, "Result") => format!("Result::{}(_)", variant),
-                        (true, _) => format!("{}::{}", enum_name, variant),
-                        _ => format!("{}::{}({})", enum_name, variant, names.join(", ")),
-                    }
-                }
-                TPattern::Int(n) => format!("{}i64", n),
-                TPattern::Str(s) => format!("{:?}", s),
-                TPattern::Bool(b) => b.to_string(),
-            };
-            let _ = writeln!(out, "{}{} => {}", indent(depth + 1), pattern, self.block(&arm.body, depth + 1));
+            let (pattern, unbox) = self.pattern(&arm.pattern);
+            let body = self.block(&arm.body, depth + 1);
+            let body = if unbox.is_empty() { body } else { format!("{{ {}{} }}", unbox, body) };
+            let _ = writeln!(out, "{}{} => {}", indent(depth + 1), pattern, body);
         }
         let _ = write!(out, "{}}}", indent(depth));
         out
+    }
+}
+
+impl Gen<'_> {
+    /// A match pattern, and the `let x = *x;` lines that take boxed fields out of their box.
+    fn pattern(&self, pattern: &TPattern) -> (String, String) {
+        let TPattern::Variant { enum_name, variant, binds } = pattern else {
+            let text = match pattern {
+                TPattern::Int(n) => format!("{}i64", n),
+                TPattern::Str(s) => format!("{:?}", s),
+                TPattern::Bool(b) => b.to_string(),
+                TPattern::Wildcard | TPattern::Variant { .. } => "_".to_string(),
+            };
+            return (text, String::new());
+        };
+        let names: Vec<String> = binds.iter().map(|b| b.as_deref().map_or("_".to_string(), rid)).collect();
+        let unbox: String = match self.m.enums.get(enum_name) {
+            Some(info) => binds
+                .iter()
+                .enumerate()
+                .filter_map(|(i, b)| b.as_deref().filter(|_| info.is_boxed(variant, i)))
+                .map(|b| format!("let {0} = *{0}; ", rid(b)))
+                .collect(),
+            None => String::new(),
+        };
+        let text = match (names.is_empty(), enum_name.as_str()) {
+            (true, "Result") => format!("Result::{}(_)", variant),
+            (true, _) => format!("{}::{}", enum_name, variant),
+            _ => format!("{}::{}({})", enum_name, variant, names.join(", ")),
+        };
+        (text, unbox)
     }
 }
 

@@ -286,5 +286,6 @@ struct Coverage {
 /// `Ok` and `Err` as enum variants, for matching on a `Result<t, e>`.
 fn result_variants(t: &Type, e: &Type) -> EnumInfo {
     let ok = if *t == Type::Void { vec![] } else { vec![("value".to_string(), t.clone())] };
-    EnumInfo { variants: vec![("Ok".to_string(), ok), ("Err".to_string(), vec![("error".to_string(), e.clone())])] }
+    let variants = vec![("Ok".to_string(), ok), ("Err".to_string(), vec![("error".to_string(), e.clone())])];
+    EnumInfo { variants, ..EnumInfo::default() }
 }
