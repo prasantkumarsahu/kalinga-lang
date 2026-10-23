@@ -151,10 +151,18 @@ pub struct EnumDecl {
     pub pos: Pos,
 }
 
+#[derive(Debug, Clone)]
+pub struct Import {
+    /// The path as written.
+    pub path: String,
+    pub alias: Option<String>,
+    pub pos: Pos,
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct Program {
-    /// `import "path"` declarations: (path as written, position).
-    pub imports: Vec<(String, Pos)>,
+    /// `import "path"` / `import "path" as alias` declarations.
+    pub imports: Vec<Import>,
     /// Set by the driver when the program uses `std/game`: `main` must then run on the
     /// process's main thread, which owns the window.
     pub main_thread: bool,

@@ -1,12 +1,4 @@
-mod ast;
-mod checker;
-mod codegen;
-mod driver;
-mod error;
-mod lexer;
-mod parser;
-mod stdlib;
-mod token;
+use kalinga_lang::driver;
 
 use std::path::PathBuf;
 use std::process::exit;

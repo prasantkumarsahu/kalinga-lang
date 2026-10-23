@@ -192,7 +192,10 @@ impl Parser {
                 Tok::Import => {
                     let pos = self.advance().pos;
                     match self.advance().tok {
-                        Tok::Str(path) => prog.imports.push((path, pos)),
+                        Tok::Str(path) => {
+                            let alias = if self.eat(&Tok::As) { Some(self.ident("a name after `as`")?.0) } else { None };
+                            prog.imports.push(Import { path, alias, pos });
+                        }
                         other => return err(format!("expected a file name in quotes after `import`, found {}", other.describe()), pos),
                     }
                     self.end_of_statement()?;
@@ -566,6 +569,8 @@ impl Parser {
                 "str" => TypeExpr::Str,
                 "void" => TypeExpr::Void,
                 _ => {
+                    // `alias.Name` for a type from `import "pkg" as alias`.
+                    let n = if self.eat(&Tok::Dot) { format!("{}.{}", n, self.ident("a type name after `.`")?.0) } else { n };
                     let args = if self.check(&Tok::Lt) { self.targs()? } else { vec![] };
                     TypeExpr::Named(n, args, pos)
                 }

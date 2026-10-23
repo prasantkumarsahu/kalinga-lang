@@ -6,37 +6,73 @@ use std::process::Command;
 
 use crate::ast::Program;
 use crate::error::CompileError;
-use crate::{checker, codegen, lexer, parser};
+use crate::{checker, codegen, lexer, namespaces, parser};
 
 /// Every source file taking part in a compilation: (display name, text).
 /// `Pos::file` indexes into it.
 struct SourceMap {
     files: Vec<(String, String)>,
+    /// Renamed declarations (`Vec2__mathx`) and how to show them (`mathx.Vec2`).
+    display: namespaces::DisplayNames,
 }
 
 impl SourceMap {
     fn render(&self, e: &CompileError) -> String {
         let (name, text) = &self.files[e.pos.file as usize];
-        e.render(name, text)
+        let mut msg = e.render(name, text);
+        for (mangled, shown) in &self.display {
+            msg = msg.replace(mangled.as_str(), shown);
+        }
+        msg
     }
+}
+
+/// The utkal project a file belongs to (if any) and its packages.
+#[derive(Default)]
+struct Packages {
+    /// Package name → folder.
+    dirs: std::collections::BTreeMap<String, PathBuf>,
+    rust_deps: Vec<crate::ast::CrateDep>,
+    in_project: bool,
+}
+
+/// Finds the `utkal.toml` above `file` and the packages it uses, from the lock file and
+/// the local cache (never the network: `utkal build` downloads).
+fn packages_for(file: &str) -> Result<Packages, String> {
+    let Some(project) = crate::project::find_project(Path::new(file)) else { return Ok(Packages::default()) };
+    let r = crate::project::resolve(&project, crate::project::Mode::Offline)?;
+    Ok(Packages { dirs: r.packages, rust_deps: r.rust_deps, in_project: true })
 }
 
 /// Parses `root` and, transitively, every file it imports, into one program.
 /// Each file is loaded once, so import cycles are harmless.
 fn load(root_name: &str, root_source: &str) -> Result<(Program, SourceMap), String> {
-    let mut map = SourceMap { files: vec![] };
+    let pkgs = packages_for(root_name)?;
+    let mut map = SourceMap { files: vec![], display: vec![] };
+    let mut units = namespaces::Units::default();
     let mut program = Program::default();
+    for c in &pkgs.rust_deps {
+        crate::project::merge_crate(&mut program.crates, c)?;
+    }
     let root_path = PathBuf::from(root_name);
     let mut seen: HashSet<PathBuf> = HashSet::new();
     seen.insert(std::fs::canonicalize(&root_path).unwrap_or_else(|_| root_path.clone()));
-    let mut queue = vec![(root_path, root_name.to_string(), root_source.to_string())];
+    // (path, display name, text, unit)
+    let mut queue = vec![(root_path, root_name.to_string(), root_source.to_string(), String::new())];
+    // Canonical path → unit, for files imported more than once.
+    let mut file_units: std::collections::HashMap<PathBuf, String> = std::collections::HashMap::new();
 
     while !queue.is_empty() {
-        let (path, name, source) = queue.remove(0);
+        let (path, name, source, unit) = queue.remove(0);
         let id = map.files.len() as u32;
         map.files.push((name, source));
+        units.file_unit.push(unit.clone());
+        units.file_aliases.push(Default::default());
         let text = &map.files[id as usize].1;
         let parsed = lexer::lex(text, id).and_then(parser::parse).map_err(|e| map.render(&e))?;
+        if !parsed.rust_files.is_empty() || parsed.extern_fns.iter().any(|x| x.body.is_some()) {
+            units.rust_units.insert(unit.clone());
+        }
 
         let dir = path.parent().map(Path::to_path_buf).unwrap_or_default();
         for (file, pos) in &parsed.rust_files {
@@ -58,60 +94,65 @@ fn load(root_name: &str, root_source: &str) -> Result<(Program, SourceMap), Stri
             program.rust_files.push((shown, *pos));
         }
         for dep in &parsed.crates {
-            if let Some(existing) = program.crates.iter_mut().find(|c| c.name == dep.name) {
-                if existing.version != dep.version {
-                    let e = CompileError::new(
-                        format!("crate `{}` is used with two versions: \"{}\" and \"{}\"", dep.name, existing.version, dep.version),
-                        dep.pos,
-                    );
-                    return Err(map.render(&e));
-                }
-                for f in &dep.features {
-                    if !existing.features.contains(f) {
-                        existing.features.push(f.clone());
-                    }
-                }
-                continue;
-            }
-            program.crates.push(dep.clone());
+            crate::project::merge_crate(&mut program.crates, dep).map_err(|m| map.render(&CompileError::new(m, dep.pos)))?;
         }
         program.extern_types.extend(parsed.extern_types);
         program.extern_fns.extend(parsed.extern_fns);
-        for (import, pos) in &parsed.imports {
-            let target = match import.strip_prefix("std/") {
-                Some(module) => {
-                    let module = module.strip_suffix(".kl").unwrap_or(module);
-                    if module == "game" {
-                        program.main_thread = true;
-                    }
-                    if !crate::stdlib::has(module) {
-                        let e = CompileError::new(format!("there is no standard module `std/{}`", module), *pos);
-                        return Err(map.render(&e));
-                    }
-                    crate::stdlib::dir()?.join(format!("{}.kl", module))
+        for import in &parsed.imports {
+            let fail = |m: String| map.render(&CompileError::new(m, import.pos));
+            let (target, target_unit) = if let Some(module) = import.path.strip_prefix("std/") {
+                let module = module.strip_suffix(".kl").unwrap_or(module);
+                if module == "game" {
+                    program.main_thread = true;
                 }
-                None => dir.join(import),
+                if !crate::stdlib::has(module) {
+                    return Err(fail(format!("there is no standard module `std/{}`", module)));
+                }
+                (crate::stdlib::dir()?.join(format!("{}.kl", module)), format!("std_{}", module))
+            } else if import.path.ends_with(".kl") {
+                (dir.join(&import.path), unit.clone())
+            } else {
+                let (pkg, rest) = import.path.split_once('/').unwrap_or((&import.path, "lib"));
+                match pkgs.dirs.get(pkg) {
+                    Some(pdir) => (pdir.join("src").join(format!("{}.kl", rest)), crate::project::unit_name(pkg)),
+                    None if pkgs.in_project => {
+                        return Err(fail(format!(
+                            "unknown package `{}`: add it to utkal.toml (`utkal add {} --git <url>` or `--path <folder>`); files are imported with a `.kl` ending",
+                            pkg, pkg
+                        )))
+                    }
+                    None => {
+                        return Err(fail(format!(
+                            "unknown package `{}`: packages need a utkal.toml project (`utkal new`); files are imported with a `.kl` ending",
+                            pkg
+                        )))
+                    }
+                }
             };
             let canonical = match std::fs::canonicalize(&target) {
                 Ok(c) => c,
-                Err(_) => {
-                    let e = CompileError::new(format!("cannot find `{}` (looked for {})", import, target.display()), *pos);
-                    return Err(map.render(&e));
-                }
+                Err(_) => return Err(fail(format!("cannot find `{}` (looked for {})", import.path, target.display()))),
             };
+            let target_unit = file_units.get(&canonical).cloned().unwrap_or(target_unit);
+            if let Some(alias) = &import.alias {
+                units.file_aliases[id as usize].insert(alias.clone(), target_unit.clone());
+            } else if target_unit != unit {
+                units.imports.entry(unit.clone()).or_default().insert(target_unit.clone());
+            }
             if seen.insert(canonical.clone()) {
-                let text = std::fs::read_to_string(&canonical).map_err(|err| {
-                    map.render(&CompileError::new(format!("cannot read `{}`: {}", import, err), *pos))
-                })?;
-                queue.push((target.clone(), target.display().to_string(), text));
+                let text = std::fs::read_to_string(&canonical).map_err(|err| fail(format!("cannot read `{}`: {}", import.path, err)))?;
+                file_units.insert(canonical, target_unit.clone());
+                queue.push((target.clone(), target.display().to_string(), text, target_unit));
             }
         }
+        program.imports.extend(parsed.imports);
         program.functions.extend(parsed.functions);
         program.classes.extend(parsed.classes);
         program.interfaces.extend(parsed.interfaces);
         program.enums.extend(parsed.enums);
         program.structs.extend(parsed.structs);
     }
+    map.display = namespaces::apply(&mut program, &units).map_err(|e| map.render(&e))?;
     Ok((program, map))
 }
 
