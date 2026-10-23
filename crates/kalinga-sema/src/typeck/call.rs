@@ -523,6 +523,7 @@ impl Checker<'_> {
                 }
                 intrinsic(Builtin::Args, vec![], Type::Array(Box::new(Type::Str)))
             }
+            "assert" | "assert_eq" => self.assertion(cx, name, args, pos),
             "input" => {
                 let prompt = match args.len() {
                     0 => vec![],
@@ -532,6 +533,31 @@ impl Checker<'_> {
                 intrinsic(Builtin::Input, prompt, Type::Str)
             }
             _ => err(format!("unknown function `{}`", name), pos),
+        }
+    }
+
+    /// `assert(condition[, message])` and `assert_eq(a, b)`.
+    fn assertion(&self, cx: &mut Ctx, name: &str, args: &[Expr], pos: Span) -> Result<TExpr> {
+        let done = |op, args| Ok(texpr(TExprKind::Builtin { op, args }, Type::Void, pos));
+        match (name, args) {
+            ("assert", [cond]) => done(Builtin::Assert, vec![self.expr_to(cx, cond, &Type::Bool)?]),
+            ("assert", [cond, message]) => {
+                let checked = vec![self.expr_to(cx, cond, &Type::Bool)?, self.expr_to(cx, message, &Type::Str)?];
+                done(Builtin::Assert, checked)
+            }
+            ("assert", _) => err("`assert` takes a condition and an optional message", pos),
+            ("assert_eq", [a, b]) => {
+                let left = self.expr(cx, a, None)?;
+                let right = self.expr_to(cx, b, &left.ty)?;
+                if !self.m.is_plain(&left.ty) {
+                    return err(
+                        format!("`assert_eq` needs values that can be compared and printed, not `{}`", left.ty),
+                        a.pos,
+                    );
+                }
+                done(Builtin::AssertEq, vec![left, right])
+            }
+            _ => err("`assert_eq` takes 2 arguments: the value and what it should be", pos),
         }
     }
 

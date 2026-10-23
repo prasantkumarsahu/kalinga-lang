@@ -76,6 +76,9 @@ Nessie is imaginary
   and ML libraries.
 - **Fast and safe**: compiles to Rust and then native code; no null, no unchecked
   indexing, no silent overflow, no `unsafe` in generated code.
+- **Tooling**: `test fn` with `assert` / `assert_eq` (`kalinga test`), a formatter
+  (`kalinga fmt`), a language server (`kalinga lsp`), and `kalinga fix` to update code for
+  a new version.
 
 ## Documentation
 
@@ -109,7 +112,8 @@ cargo run -- emit examples/oop.kl
 ```
 
 `emit` prints the generated Rust so you can see exactly what your program becomes.
-`check <file> [--stdin]` only reports errors, which editors use for live diagnostics.
+`check <file>` only reports errors, `test <file>` runs the file's `test fn`s, and
+`fmt <files or folders>` lays code out in the standard style.
 
 ```bash
 cargo run -- run examples/pong/main.kl

@@ -1,0 +1,13 @@
+running 5 tests
+test push_then_pop ... ok
+test statics_start_over ... ok
+test wrong_on_purpose ... FAILED
+test fails_with_message ... FAILED
+test runtime_error ... FAILED
+
+failures:
+    wrong_on_purpose: assert_eq failed at tests/ui/tests/stack.kl:38: got 2, expected 3
+    fails_with_message: assertion failed at tests/ui/tests/stack.kl:43: a new stack has nothing to pop
+    runtime_error: index out of bounds: the len is 1 but the index is 5
+
+test result: FAILED. 2 passed; 3 failed

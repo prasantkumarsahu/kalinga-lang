@@ -38,6 +38,7 @@ impl Model {
             m.declare_functions(prog)?;
             m.declare_consts(prog)?;
             rules.extend(m.check_main(prog, require_main).err());
+            rules.extend(check_tests(prog).err());
             m.declare_classes(prog)?;
             m.order_classes(prog)?;
             Ok(m)
@@ -764,6 +765,19 @@ fn signature(params: &[Param], ret: &TypeExpr, resolve: &dyn Fn(&TypeExpr) -> Re
         ps.push((p.name.clone(), t));
     }
     Ok(Signature { params: ps, ret: resolve(ret)? })
+}
+
+/// `test fn`s take nothing and return nothing, and have different names (per file).
+fn check_tests(prog: &Program) -> Result<()> {
+    for (i, t) in prog.tests.iter().enumerate() {
+        if !t.params.is_empty() || t.ret != TypeExpr::Void || !t.tparams.is_empty() || t.is_async {
+            return err(format!("`test fn {}` must take no parameters and return nothing", t.name), t.pos);
+        }
+        if prog.tests[..i].iter().any(|o| o.name == t.name && o.pos.file == t.pos.file) {
+            return err(format!("there are two tests named `{}`", t.name), t.pos);
+        }
+    }
+    Ok(())
 }
 
 /// The `const` and `static var` members of `owner`; `taken` says which names its other

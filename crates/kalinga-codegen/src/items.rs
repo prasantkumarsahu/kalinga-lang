@@ -60,7 +60,11 @@ impl Gen<'_> {
             );
         }
         self.statics(&mut out, prog);
-        self.main_fn(&mut out, prog.main_thread);
+        if self.tests {
+            self.test_runner(&mut out);
+        } else {
+            self.main_fn(&mut out, prog.main_thread);
+        }
         out
     }
 
@@ -72,6 +76,17 @@ impl Gen<'_> {
         } else {
             body
         }
+    }
+
+    /// The analysed file's `test fn`s, and a `main` that runs each and reports.
+    fn test_runner(&self, out: &mut String) {
+        let tests: Vec<_> = self.t.tests.iter().filter(|t| t.pos.file == 0).collect();
+        let mut list = vec![];
+        for (i, t) in tests.iter().enumerate() {
+            let _ = writeln!(out, "\n// test fn {}\nfn __t_{}() {{\n{}}}", t.name, i, self.body(&t.body, 1));
+            list.push(format!("({:?}, __t_{} as fn())", t.name, i));
+        }
+        let _ = writeln!(out, "\nfn main() {{\n    __kl_run_tests(&[{}]);\n}}", list.join(", "));
     }
 
     fn main_fn(&self, out: &mut String, main_thread: bool) {

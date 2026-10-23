@@ -64,6 +64,11 @@ impl Parser {
         }
     }
 
+    /// Is the token after the current one `tok`?
+    fn next_is(&self, tok: &Tok) -> bool {
+        self.tokens.get(self.i + 1).is_some_and(|t| t.tok == *tok)
+    }
+
     fn expect(&mut self, tok: Tok, what: &str) -> Result<Span> {
         if self.check(&tok) {
             Ok(self.advance().pos)
@@ -136,7 +141,8 @@ impl Parser {
                     | Tok::Extern
                     | Tok::Import
             );
-            if at_line_start && starts_item {
+            let starts_test = matches!(self.peek(), Tok::Ident(n) if n == "test") && self.next_is(&Tok::Fn);
+            if at_line_start && (starts_item || starts_test) {
                 return;
             }
             self.advance();
@@ -169,6 +175,11 @@ impl Parser {
                 let pos = self.advance().pos;
                 prog.consts.push(self.static_decl(false, pos)?);
             }
+            // `test` is only special before `fn` at the top level.
+            Tok::Ident(n) if n == "test" && self.next_is(&Tok::Fn) => {
+                self.advance();
+                prog.tests.push(self.function(Mods::default())?);
+            }
             Tok::Use => self.use_decl(prog)?,
             Tok::Extern => self.extern_decl(prog)?,
             Tok::Import => {
@@ -190,7 +201,7 @@ impl Parser {
             other => {
                 return err(
                     format!(
-                        "expected `fn`, `class`, `struct`, `interface`, `enum`, `const` or `import` at top level, found {}",
+                        "expected `fn`, `test fn`, `class`, `struct`, `interface`, `enum`, `const` or `import` at top level, found {}",
                         other.describe()
                     ),
                     self.pos(),

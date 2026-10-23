@@ -2,7 +2,8 @@
 //!
 //! Every `tests/ui/<group>/<name>.kl` (one level deep; deeper folders hold helper files) is
 //! a test. It is run with `kalinga run`, or `kalinga check` when its first line is
-//! `// ui: check`, and its output is compared with the files next to it:
+//! `// ui: check` (`kalinga test` for `// ui: test`), and its output is compared with the
+//! files next to it:
 //! `<name>.stdout`, `<name>.stderr` (both default to empty) and `<name>.exit` (defaults
 //! to 0). Programs from `examples/` are snapshotted under `tests/ui/examples/`.
 //!
@@ -29,6 +30,7 @@ const EXAMPLES: &[(&str, &str)] = &[
 enum Mode {
     Run,
     Check,
+    Test,
 }
 
 struct Case {
@@ -62,7 +64,11 @@ fn cases() -> Vec<Case> {
             let first = std::fs::read_to_string(&source).unwrap().lines().next().unwrap_or("").trim().to_string();
             out.push(Case {
                 snapshot: source.with_extension(""),
-                mode: if first == "// ui: check" { Mode::Check } else { Mode::Run },
+                mode: match first.as_str() {
+                    "// ui: check" => Mode::Check,
+                    "// ui: test" => Mode::Test,
+                    _ => Mode::Run,
+                },
                 network: first == "// ui: network",
                 source,
             });
@@ -87,7 +93,11 @@ fn normalize(bytes: &[u8]) -> String {
 }
 
 fn run(case: &Case) -> Outcome {
-    let cmd = if case.mode == Mode::Check { "check" } else { "run" };
+    let cmd = match case.mode {
+        Mode::Run => "run",
+        Mode::Check => "check",
+        Mode::Test => "test",
+    };
     let source = case.source.to_str().unwrap().replace('\\', "/");
     let out = Command::new(env!("CARGO_BIN_EXE_kalinga")).args([cmd, &source]).output().expect("failed to run kalinga");
     Outcome { stdout: normalize(&out.stdout), stderr: normalize(&out.stderr), exit: out.status.code().unwrap_or(-1) }

@@ -36,6 +36,7 @@ compiler itself, so what the editor shows is exactly what the compiler sees:
   (such as Even Better TOML)
 - Commands:
   - **Kalinga: Run File**: the ▶ button in the editor title, or `Ctrl+F5`
+  - **Kalinga: Run Tests in File** (`kalinga test`)
   - **Kalinga: Build Executable**
   - **Kalinga: Show Generated Rust**
   - **Kalinga: Restart Language Server**

@@ -289,6 +289,10 @@ impl<'a> Resolver<'a> {
         for c in &mut prog.consts {
             c.name = self.final_name(&unit_of(c.pos), &c.name);
         }
+        // Tests are not referred to by name, so they keep theirs.
+        for t in &mut prog.tests {
+            self.func(t, &[])?;
+        }
         self.statics(&mut prog.consts)
     }
 

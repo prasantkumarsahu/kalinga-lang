@@ -225,6 +225,7 @@ impl<'a> Loader<'a> {
         p.enums.extend(parsed.enums);
         p.structs.extend(parsed.structs);
         p.consts.extend(parsed.consts);
+        p.tests.extend(parsed.tests);
         Ok(())
     }
 
@@ -324,10 +325,21 @@ fn canonical(path: &Path) -> PathBuf {
     std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
 }
 
+/// What a compilation is for.
+#[derive(Clone, Copy, PartialEq)]
+enum Purpose {
+    /// A program, which needs `fn main()`.
+    Program,
+    /// Only finding errors; `fn main()` is optional.
+    Check,
+    /// A program running the file's `test fn`s.
+    Tests,
+}
+
 /// Compiles Kalinga source (plus its imports) to Rust source.
 /// `file` is the name used for the root file and to resolve its imports.
 pub fn to_rust(file: &str, source: &str) -> Result<String> {
-    compile(file, source, true).map(|(rust, _)| rust)
+    compile(file, source, Purpose::Program).map(|(rust, _)| rust)
 }
 
 /// What the Rust build needs besides the generated source.
@@ -343,12 +355,12 @@ struct Native {
 /// Reports errors without requiring `fn main()`, so files meant to be imported can be
 /// checked on their own (this is what editors run).
 pub fn check(file: &str, source: &str) -> Result<()> {
-    compile(file, source, false).map(|_| ())
+    compile(file, source, Purpose::Check).map(|_| ())
 }
 
-fn compile(file: &str, source: &str, require_main: bool) -> Result<(String, Native)> {
+fn compile(file: &str, source: &str, purpose: Purpose) -> Result<(String, Native)> {
     let (program, map) = load(file, source)?;
-    let model = match kalinga_sema::Model::build(&program, require_main) {
+    let model = match kalinga_sema::Model::build(&program, purpose == Purpose::Program) {
         Ok(m) => m,
         Err(d) => return Err(DriverError::compile(map, d)),
     };
@@ -356,7 +368,9 @@ fn compile(file: &str, source: &str, require_main: bool) -> Result<(String, Nati
         Ok(t) => t,
         Err(ds) => return Err(DriverError::compile_all(map, ds)),
     };
-    let rust = kalinga_codegen::generate(&program, &model, &typed);
+    let files: Vec<String> = map.files.iter().map(|(name, _)| name.clone()).collect();
+    let target = kalinga_codegen::Target { tests: purpose == Purpose::Tests, files: &files };
+    let rust = kalinga_codegen::generate(&program, &model, &typed, &target);
     let native = Native {
         crates: program.crates.clone(),
         uses_rust: !program.rust_files.is_empty() || !program.extern_fns.is_empty() || !program.crates.is_empty(),
@@ -388,10 +402,14 @@ fn build_name(input: &Path) -> String {
 
 /// Compiles `input` to a native executable at `output` (or a temp location).
 pub fn build(input: &Path, output: Option<PathBuf>) -> Result<PathBuf> {
-    let source = std::fs::read_to_string(input).map_err(DriverError::io("read", input))?;
-    let (rust, native) = compile(&input.display().to_string(), &source, true)?;
+    build_for(input, output, Purpose::Program)
+}
 
-    let name = build_name(input);
+fn build_for(input: &Path, output: Option<PathBuf>, purpose: Purpose) -> Result<PathBuf> {
+    let source = std::fs::read_to_string(input).map_err(DriverError::io("read", input))?;
+    let (rust, native) = compile(&input.display().to_string(), &source, purpose)?;
+
+    let name = if purpose == Purpose::Tests { format!("{}_tests", build_name(input)) } else { build_name(input) };
     let work = std::env::temp_dir().join("kalinga-build");
     std::fs::create_dir_all(&work).map_err(DriverError::io("create", &work))?;
     let exe = output.unwrap_or_else(|| work.join(format!("{}{}", name, std::env::consts::EXE_SUFFIX)));
@@ -517,4 +535,27 @@ pub fn run(input: &Path) -> Result<i32> {
     let exe = build(input, None)?;
     let status = Command::new(&exe).status().map_err(|source| DriverError::Run { exe: exe.clone(), source })?;
     Ok(status.code().unwrap_or(1))
+}
+
+/// Builds and runs the `test fn`s of `input` (not those of the files it imports),
+/// returning the exit code: 0 when every test passed.
+pub fn test(input: &Path) -> Result<i32> {
+    let exe = build_tests(input)?;
+    let status = Command::new(&exe).status().map_err(|source| DriverError::Run { exe: exe.clone(), source })?;
+    Ok(status.code().unwrap_or(1))
+}
+
+/// Compiles a program that runs the `test fn`s of `input` and reports which fail.
+pub fn build_tests(input: &Path) -> Result<PathBuf> {
+    build_for(input, None, Purpose::Tests)
+}
+
+/// Does `source` declare a `test fn`?
+pub fn has_tests(source: &str) -> bool {
+    lexer::lex(source, 0).is_ok_and(|ts| {
+        ts.windows(2).any(|w| {
+            matches!(&w[0].tok, kalinga_syntax::token::Tok::Ident(n) if n == "test")
+                && w[1].tok == kalinga_syntax::token::Tok::Fn
+        })
+    })
 }

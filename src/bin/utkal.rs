@@ -23,7 +23,8 @@ usage:
   utkal check                       report errors (src/main.kl or src/lib.kl)
   utkal fix                         update src/ and tests/ for this Kalinga version
   utkal fmt [--check]               lay out src/ and tests/ in the standard style
-  utkal test                        run every tests/*.kl; a test passes when it exits with 0
+  utkal test                        run the `test fn`s in src/ and tests/, and every other
+                                    tests/*.kl program (it passes when it exits with 0)
   utkal update                      fetch the newest allowed versions and rewrite utkal.lock
   utkal -v | --version              print the installed version";
 
@@ -112,7 +113,7 @@ fn new(args: &[&str]) -> CliResult<i32> {
         std::fs::create_dir_all(dir.join("tests")).map_err(|e| e.to_string())?;
         write(
             dir.join("tests").join("greet.kl"),
-            "// A test passes when main returns Ok (exit code 0).\nimport \"../src/lib.kl\"\n\nfn main() -> Result<void, str> {\n    if greet(\"utkal\") != \"Hello, utkal!\" {\n        return Err(\"greet is wrong\")\n    }\n    return Ok()\n}\n",
+            "// `utkal test` runs every `test fn`.\nimport \"../src/lib.kl\"\n\ntest fn greets_by_name() {\n    assert_eq(greet(\"utkal\"), \"Hello, utkal!\")\n}\n",
         )?;
     } else {
         write(src.join("main.kl"), "fn main() {\n    println(\"Hello from Kalinga!\")\n}\n")?;
@@ -339,43 +340,62 @@ fn check() -> CliResult<i32> {
     Ok(0)
 }
 
+/// Runs the `test fn`s of every file in `src/` and `tests/` that has some, and every other
+/// `tests/*.kl` program (which passes when it exits with 0).
 fn test() -> CliResult<i32> {
     let dir = project_dir()?;
     project::resolve(&dir, Mode::Fetch)?;
-    let mut tests: Vec<PathBuf> = std::fs::read_dir(dir.join("tests"))
-        .map(|rd| {
-            rd.filter_map(|e| e.ok().map(|e| e.path())).filter(|p| p.extension().is_some_and(|x| x == "kl")).collect()
-        })
-        .unwrap_or_default();
-    tests.sort();
-    if tests.is_empty() {
-        println!("no tests (put programs in tests/*.kl)");
-        return Ok(0);
-    }
-    let mut failed = vec![];
-    for t in &tests {
-        let name = t.file_name().unwrap().to_string_lossy().to_string();
-        let ok = match driver::build(t, None) {
-            Ok(exe) => {
-                let out = Command::new(&exe)
-                    .current_dir(&dir)
-                    .output()
-                    .map_err(|e| format!("cannot run {}: {}", exe.display(), e))?;
-                if !out.status.success() {
-                    eprint!("{}", String::from_utf8_lossy(&out.stderr));
-                }
-                out.status.success()
-            }
-            Err(e) => {
-                eprintln!("{}", e);
-                false
-            }
-        };
-        println!("test {} ... {}", name, if ok { "ok" } else { "FAILED" });
-        if !ok {
-            failed.push(name);
+    let mut files = vec![];
+    for folder in ["src", "tests"] {
+        if dir.join(folder).is_dir() {
+            files.extend(driver::kl_files(&dir.join(folder))?.into_iter().map(|f| (folder, f)));
         }
     }
-    println!("\n{} passed, {} failed", tests.len() - failed.len(), failed.len());
+    let mut ran = 0;
+    let mut failed = vec![];
+    for (folder, file) in &files {
+        let source = std::fs::read_to_string(file).map_err(|e| format!("cannot read {}: {}", file.display(), e))?;
+        let shown = file.strip_prefix(&dir).unwrap_or(file).display().to_string();
+        let ok = if driver::has_tests(&source) {
+            println!("\n{}", shown);
+            run_file(&dir, driver::build_tests(file))?
+        } else if *folder == "tests" {
+            let ok = run_file(&dir, driver::build(file, None))?;
+            let name = file.file_name().map_or(shown.clone(), |n| n.to_string_lossy().into_owned());
+            println!("test {} ... {}", name, if ok { "ok" } else { "FAILED" });
+            ok
+        } else {
+            continue;
+        };
+        ran += 1;
+        if !ok {
+            failed.push(shown);
+        }
+    }
+    if ran == 0 {
+        println!("no tests (write `test fn`s, or put programs in tests/*.kl)");
+        return Ok(0);
+    }
+    println!("\n{} file(s) passed, {} failed", ran - failed.len(), failed.len());
+    for f in &failed {
+        println!("    {}", f);
+    }
     Ok(if failed.is_empty() { 0 } else { 1 })
+}
+
+/// Runs a built test program in the project folder; `true` when it passed.
+fn run_file(dir: &Path, built: driver::Result<PathBuf>) -> CliResult<bool> {
+    match built {
+        Ok(exe) => {
+            let status = Command::new(&exe)
+                .current_dir(dir)
+                .status()
+                .map_err(|e| format!("cannot run {}: {}", exe.display(), e))?;
+            Ok(status.success())
+        }
+        Err(e) => {
+            eprintln!("{}", e);
+            Ok(false)
+        }
+    }
 }

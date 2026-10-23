@@ -5,6 +5,7 @@
 | Command | What it does |
 |---|---|
 | `kalinga run <file.kl>` | Compile and run immediately. Exits with the program's exit code. |
+| `kalinga test <file.kl>` | Run the file's `test fn`s (see [Testing](#testing)). Exits with 1 when one fails. |
 | `kalinga build <file.kl>` | Compile to an executable next to the source (`file.exe` on Windows). |
 | `kalinga build <file.kl> -o <name>` | Compile to the given output path. |
 | `kalinga emit <file.kl>` | Print the generated Rust code. |
@@ -70,7 +71,7 @@ checks work there too.
 | `utkal check` | Report errors in `src/main.kl` and `src/lib.kl` |
 | `utkal fmt [--check]` | Format (or check) every `.kl` file in `src/` and `tests/` |
 | `utkal fix` | Update `src/` and `tests/` for this Kalinga version |
-| `utkal test` | Build and run every `tests/*.kl`; exit code 0 means passed |
+| `utkal test` | Run the `test fn`s in `src/` and `tests/`, and every other `tests/*.kl` program (passes with exit code 0) |
 | `utkal update` | Pick the newest allowed package versions and rewrite `utkal.lock` |
 | `utkal -v` | Print the installed version |
 
@@ -117,6 +118,56 @@ fn main() { println(area(2, 3)) }
 In VS Code, **Format Document** (`Shift+Alt+F`) does the same. In CI, `kalinga fmt --check`
 (or `utkal fmt --check`) fails when a file is not formatted.
 
+## Testing
+
+A `test fn` checks that code does what it should. It takes no parameters and returns
+nothing; `assert(condition)` and `assert_eq(value, expected)` say what must hold:
+
+```kalinga
+fn clamp(value: int, low: int, high: int) -> int {
+    if value < low {
+        return low
+    }
+    return if value > high { high } else { value }
+}
+
+test fn keeps_values_in_range() {
+    assert_eq(clamp(5, 0, 10), 5)
+    assert_eq(clamp(-3, 0, 10), 0)
+}
+
+test fn the_upper_bound() {
+    assert(clamp(99, 0, 10) == 10, "values above the range become the upper bound")
+    assert_eq(clamp(11, 0, 10), 11)
+}
+```
+
+`kalinga test clamp.kl` runs every `test fn` in the file and reports each one:
+
+```text
+running 2 tests
+test keeps_values_in_range ... ok
+test the_upper_bound ... FAILED
+
+failures:
+    the_upper_bound: assert_eq failed at main.kl:15: got 10, expected 11
+
+test result: FAILED. 1 passed; 1 failed
+```
+
+- A test fails at the first `assert` or `assert_eq` that does not hold, or at a runtime
+  error. `assert(condition, message)` adds `message`; `assert_eq` shows both values, which
+  must be printable and comparable (not objects).
+- Each test runs on its own thread, so one test's failure or its changes to `static var`s
+  do not affect the others.
+- `fn main()` is not run, and is not needed: a file can hold just code and its tests. The
+  `test fn`s of imported files are run only by testing those files.
+- The exit code is 0 when every test passed, 1 otherwise, so `kalinga test` works in CI.
+- `utkal test` runs the tests of every file in `src/` and `tests/`; in VS Code,
+  **Kalinga: Run Tests in File**.
+- `assert` and `assert_eq` work in any program too: a failure stops it with a runtime error
+  that says where.
+
 ## VS Code extension
 
 The extension lives in [`editors/vscode`](../editors/vscode/README.md).
@@ -147,7 +198,8 @@ Language Server Protocol (Neovim, Helix, Zed, Emacs, ...) can use it by running
 - **Format Document** with `kalinga fmt`
 - Syntax highlighting; inline `= rust { ... }` bodies are highlighted as Rust
 - ▶ **Run** button in the editor title bar, and `Ctrl+F5`
-- Commands (Ctrl+Shift+P): **Kalinga: Run File**, **Kalinga: Build Executable**,
+- Commands (Ctrl+Shift+P): **Kalinga: Run File**, **Kalinga: Run Tests in File**,
+  **Kalinga: Build Executable**,
   **Kalinga: Show Generated Rust**, **Kalinga: Restart Language Server**
 - Comment toggling (`Ctrl+/`), bracket matching, auto-closing pairs, auto-indent
 - Hints for `utkal.toml` keys and values (with a TOML extension that reads JSON schemas,
@@ -214,7 +266,8 @@ cargo test
 This runs:
 
 - **snapshot tests**: every `tests/ui/<group>/<name>.kl` is run (or checked, when its first
-  line is `// ui: check`), and its output must match `<name>.stdout`, `<name>.stderr` and
+  line is `// ui: check`, or tested with `kalinga test` for `// ui: test`), and its output
+  must match `<name>.stdout`, `<name>.stderr` and
   `<name>.exit` next to it. After an intended change, `BLESS=1 cargo test --test ui`
   rewrites the snapshots; review them with `git diff` before committing;
 - **documentation tests**: every complete example in these docs must compile and print

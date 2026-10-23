@@ -65,6 +65,11 @@
         "icon": "$(play)"
       },
       {
+        "command": "kalinga.test",
+        "title": "Run Tests in File",
+        "category": "Kalinga"
+      },
+      {
         "command": "kalinga.emit",
         "title": "Show Generated Rust",
         "category": "Kalinga"
@@ -98,6 +103,10 @@
         },
         {
           "command": "kalinga.build",
+          "when": "editorLangId == kalinga"
+        },
+        {
+          "command": "kalinga.test",
           "when": "editorLangId == kalinga"
         }
       ]

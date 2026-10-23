@@ -1,0 +1,4 @@
+// ui: test
+test fn takes_a_value(n: int) {
+    assert(n > 0)
+}

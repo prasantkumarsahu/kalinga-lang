@@ -69,7 +69,7 @@ impl Gen<'_> {
             TExprKind::Index { base, index } => self.index(base, index, &e.ty),
             TExprKind::Slice { base, from, to } => self.slice(base, from.as_deref(), to.as_deref()),
             TExprKind::Call { callee, args } => self.call(callee, args, &e.ty),
-            TExprKind::Builtin { op, args } => self.builtin(op, args, &e.ty),
+            TExprKind::Builtin { op, args } => self.builtin(op, args, e),
             TExprKind::BuiltinMethod { op, recv, args } => self.builtin_method(op, recv, args),
             TExprKind::Mutate { place, op, args } => self.mutate(place, op, args),
         }
@@ -314,10 +314,41 @@ impl Gen<'_> {
         }
     }
 
-    fn builtin(&self, op: &Builtin, args: &[TExpr], ty: &Type) -> String {
+    /// `assert(...)` and `assert_eq(...)`: a failure stops the program (or the test) with
+    /// where it happened.
+    fn assertion(&self, op: &Builtin, args: &[TExpr], e: &TExpr) -> String {
+        let at = self.place_of(e.pos);
+        match (op, args) {
+            (Builtin::AssertEq, [value, expected]) => format!(
+                "{{ let __l = {}; let __r = {}; if __l != __r {{ __kl_fail(format!(\"{{}}: got {{}}, expected {{}}\", {:?}, __KlShow::__show(&__l), __KlShow::__show(&__r))); }} }}",
+                self.expr(value),
+                self.expr(expected),
+                format!("assert_eq failed at {}", at)
+            ),
+            (_, [cond, message]) => format!(
+                "{{ if !({}) {{ __kl_fail(format!(\"{{}}: {{}}\", {:?}, {})); }} }}",
+                self.expr(cond),
+                format!("assertion failed at {}", at),
+                self.expr(message)
+            ),
+            (_, [cond, ..]) => {
+                format!(
+                    "{{ if !({}) {{ __kl_fail({:?}.to_string()); }} }}",
+                    self.expr(cond),
+                    format!("assertion failed at {}", at)
+                )
+            }
+            _ => "()".into(),
+        }
+    }
+
+    /// A built-in function call `e`, with `op` and `args` taken from it.
+    fn builtin(&self, op: &Builtin, args: &[TExpr], e: &TExpr) -> String {
+        let ty = &e.ty;
         let a = |i: usize| self.expr(&args[i]);
         use Builtin::*;
         match op {
+            Assert | AssertEq => self.assertion(op, args, e),
             Print | Println => {
                 let parts: Vec<String> = args.iter().map(|x| format!("__KlShow::__show(&{})", self.expr(x))).collect();
                 match (op, parts.is_empty()) {

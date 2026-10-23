@@ -330,6 +330,7 @@ pub fn bases(snap: &Snapshot) -> Vec<CompletionItem> {
 pub fn top_level() -> Vec<CompletionItem> {
     let snippets = [
         ("fn", "fn ${1:name}(${2}) {\n\t$0\n}"),
+        ("test fn", "test fn ${1:name}() {\n\tassert_eq(${2:value}, ${3:expected})$0\n}"),
         ("async fn", "async fn ${1:name}(${2}) -> ${3:int} {\n\t$0\n}"),
         ("class", "class ${1:Name} {\n\t$0\n}"),
         ("abstract class", "abstract class ${1:Name} {\n\t$0\n}"),

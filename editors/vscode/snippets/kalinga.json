@@ -259,5 +259,10 @@
       "}"
     ],
     "description": "A complete std/game program"
+  },
+  "test": {
+    "prefix": "test",
+    "body": ["test fn ${1:name}() {", "\tassert_eq(${2:value}, ${3:expected})$0", "}"],
+    "description": "A test, run by `kalinga test` / `utkal test`"
   }
 }

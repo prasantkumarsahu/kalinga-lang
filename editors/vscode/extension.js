@@ -94,6 +94,11 @@ async function runFile() {
   if (file) runTask(`run ${path.basename(file)}`, ["run", file], path.dirname(file));
 }
 
+async function testFile() {
+  const file = await activeKalingaFile();
+  if (file) runTask(`test ${path.basename(file)}`, ["test", file], path.dirname(file));
+}
+
 async function buildFile() {
   const file = await activeKalingaFile();
   if (file) runTask(`build ${path.basename(file)}`, ["build", file], path.dirname(file));
@@ -116,6 +121,7 @@ async function emitRust() {
 async function activate(context) {
   context.subscriptions.push(
     vscode.commands.registerCommand("kalinga.run", runFile),
+    vscode.commands.registerCommand("kalinga.test", testFile),
     vscode.commands.registerCommand("kalinga.build", buildFile),
     vscode.commands.registerCommand("kalinga.emit", emitRust),
     vscode.commands.registerCommand("kalinga.restartServer", () => restartClient(context)),

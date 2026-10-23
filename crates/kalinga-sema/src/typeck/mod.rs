@@ -47,6 +47,14 @@ pub fn analyze(prog: &Program, m: &Model) -> (std::result::Result<TypedProgram, 
         c.struct_bodies(sname, &mut out, &mut errors);
     }
     c.static_values(prog, &mut out, &mut errors);
+    for t in &prog.tests {
+        let mut cx = Ctx::new(None, Type::Void, false);
+        let sig = Signature { params: vec![], ret: Type::Void };
+        match c.body(&mut cx, sig, BodyDecl::of_fn(t)) {
+            Ok(body) => out.tests.push(TTest { name: t.name.clone(), body, pos: t.pos }),
+            Err(e) => errors.push(e),
+        }
+    }
     for f in &prog.functions {
         let sig = m.functions[&f.name].clone();
         let mut cx = Ctx::new(None, sig.ret.clone(), false);

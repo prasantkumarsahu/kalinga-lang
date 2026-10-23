@@ -197,6 +197,8 @@ pub struct Program {
     pub structs: Vec<StructDecl>,
     /// Top-level `const NAME: Type = value`.
     pub consts: Vec<StaticDecl>,
+    /// `test fn name() { ... }`, run by `kalinga test`.
+    pub tests: Vec<FnDecl>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

@@ -19,6 +19,7 @@ fn argument(param: &str) -> &'static str {
     let ty = param.split_once(": ").map_or(param, |(_, t)| t);
     match ty {
         "float" | "int or float" => "1.0",
+        "bool" => "true",
         "int" | "T" | "values..." | "x" => "1",
         "str" | "K" | "[T], {K: V} or str" => "\"k\"",
         "[T]" => "items",

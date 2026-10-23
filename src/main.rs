@@ -8,6 +8,7 @@ const USAGE: &str = "Kalinga — a simple, safe, fast object-oriented language t
 usage:
   kalinga run   <file.kl>              compile and run
   kalinga build <file.kl> [-o <exe>]   compile to a native executable
+  kalinga test  <file.kl>              run the file's `test fn`s and report which fail
   kalinga emit  <file.kl>              print the generated Rust code
   kalinga check <file.kl> [--stdin]    report errors only; `fn main()` is optional, so files
                                        meant to be imported can be checked (--stdin reads the
@@ -84,6 +85,7 @@ fn main() {
 
     let result: CliResult<i32> = match cmd {
         "run" => driver::run(&file).map_err(Into::into),
+        "test" => driver::test(&file).map_err(Into::into),
         "build" => {
             let out = match args.get(2).map(String::as_str) {
                 Some("-o") => match args.get(3) {

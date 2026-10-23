@@ -78,6 +78,18 @@ pub const FUNCTIONS: &[Function] = &[
         "Prints the values separated by spaces, then a newline. `println()` prints an empty line.",
     ),
     f("len", &["x: [T], {K: V} or str"], "int", "Number of elements in an array or map, or characters in a string."),
+    f(
+        "assert",
+        &["condition: bool"],
+        "void",
+        "Stops the program (or fails the test) with the file and line when `condition` is false. `assert(condition, message)` adds `message`.",
+    ),
+    f(
+        "assert_eq",
+        &["value: T", "expected: T"],
+        "void",
+        "Stops the program (or fails the test) when `value` is not `expected`, showing both.",
+    ),
     f("str", &["x"], "str", "Text form of a printable value."),
     f("int", &["x"], "int", "Converts a float (drops the fraction), bool or str to int."),
     f("float", &["x"], "float", "Converts an int or str to float."),
