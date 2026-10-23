@@ -222,7 +222,8 @@ impl Tok {
         }
     }
 
-    /// A newline right after one of these tokens continues the statement.
+    /// A newline right after one of these tokens continues the statement. (`>` is not one:
+    /// a generic type such as `Result<int, str>` often ends a line.)
     pub fn continues_line(&self) -> bool {
         matches!(
             self,
@@ -241,7 +242,6 @@ impl Tok {
                 | Tok::Ne
                 | Tok::Lt
                 | Tok::Le
-                | Tok::Gt
                 | Tok::Ge
                 | Tok::And
                 | Tok::Or

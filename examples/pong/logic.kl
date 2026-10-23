@@ -1,0 +1,66 @@
+// Pong rules, kept apart from drawing so they can be tested without a window.
+import "std/math2d"
+
+struct Ball {
+    pos: Vec2
+    vel: Vec2
+    radius: float = 8.0
+
+    fn rect() -> Rect {
+        return Rect(self.pos.x - self.radius, self.pos.y - self.radius, self.radius * 2.0, self.radius * 2.0)
+    }
+}
+
+// Moves the ball and bounces it off the top and bottom walls.
+fn move_ball(b: Ball, dt: float, height: float) -> Ball {
+    var next = b
+    next.pos += b.vel * dt
+    if next.pos.y - b.radius < 0.0 {
+        next.pos.y = b.radius
+        next.vel.y = Math.abs(next.vel.y)
+    }
+    if next.pos.y + b.radius > height {
+        next.pos.y = height - b.radius
+        next.vel.y = -Math.abs(next.vel.y)
+    }
+    return next
+}
+
+// Sends the ball back from a paddle. Hitting near the paddle's ends gives a steeper
+// angle, and every hit makes the ball a little faster.
+fn bounce_off(b: Ball, paddle: Rect, to_right: bool) -> Ball {
+    var next = b
+    let offset = Math.clamp((b.pos.y - paddle.center().y) / (paddle.h / 2.0), -1.0, 1.0)
+    let speed = b.vel.length() * 1.05
+    let angle = offset * Math.PI / 3.0
+    var dir = Vec2.from_angle(angle, speed)
+    if !to_right {
+        dir.x = -dir.x
+    }
+    next.vel = dir
+    // Move the ball out of the paddle so it does not bounce twice.
+    if to_right {
+        next.pos.x = paddle.x + paddle.w + b.radius
+    } else {
+        next.pos.x = paddle.x - b.radius
+    }
+    return next
+}
+
+// A computer paddle that follows `target_y` at a limited speed.
+fn follow(paddle: Rect, target_y: float, speed: float, dt: float, height: float) -> Rect {
+    let center = paddle.center().y
+    let step = Math.clamp(target_y - center, -speed * dt, speed * dt)
+    let y = Math.clamp(paddle.y + step, 0.0, height - paddle.h)
+    return Rect(paddle.x, y, paddle.w, paddle.h)
+}
+
+// A new ball in the middle, heading towards the player who lost the last point.
+fn serve(width: float, height: float, to_right: bool) -> Ball {
+    let angle = (Random.float() - 0.5) * Math.PI / 3.0
+    var vel = Vec2.from_angle(angle, 360.0)
+    if !to_right {
+        vel.x = -vel.x
+    }
+    return Ball(Vec2(width / 2.0, height / 2.0), vel)
+}

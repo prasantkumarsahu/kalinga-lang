@@ -5,7 +5,11 @@
 use std::path::PathBuf;
 
 /// (file name inside `std/`, contents)
-const FILES: &[(&str, &str)] = &[("math2d.kl", include_str!("../std/math2d.kl"))];
+const FILES: &[(&str, &str)] = &[
+    ("math2d.kl", include_str!("../std/math2d.kl")),
+    ("game.kl", include_str!("../std/game.kl")),
+    ("game_glue.rs", include_str!("../std/game_glue.rs")),
+];
 
 /// The folder holding this compiler version's std files, written if missing or stale.
 pub fn dir() -> Result<PathBuf, String> {

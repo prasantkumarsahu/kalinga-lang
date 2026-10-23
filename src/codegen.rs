@@ -337,6 +337,10 @@ impl<'a> Gen<'a> {
         } else {
             writeln!(out, "\nfn main() {{\n    __kl_run({});\n}}", fn_id("main")).unwrap();
         }
+        if prog.main_thread {
+            // Windows and graphics must stay on the process's main thread.
+            out = out.replace("    __kl_run(", "    __kl_run_main(");
+        }
         Ok(out)
     }
 
@@ -433,6 +437,13 @@ impl<'a> Gen<'a> {
                     )
                     .unwrap();
                 }
+            }
+            for (c, decl) in info.consts.iter().zip(&info.decl.consts) {
+                let mut cx = Ctx::new(None, Type::Void, false);
+                cx.strukt = Some(name.clone());
+                cx.is_static = true;
+                let code = self.expr_to(&mut cx, decl.default.as_ref().unwrap(), &c.1)?;
+                writeln!(out, "    fn __c_{}() -> {} {{ {} }}", c.0, self.rty(&c.1), code).unwrap();
             }
             for (o, decl) in info.ops.iter().zip(&info.decl.ops) {
                 let sig = Signature {
@@ -1864,6 +1875,16 @@ impl<'a> Gen<'a> {
                 if let Some(t) = self.type_receiver(cx, recv) {
                     return self.variant_value(cx, &t, f, None, e.pos);
                 }
+                if let ExprKind::Ident(n) = &recv.kind {
+                    if cx.lookup(n).is_none() {
+                        if let Some(info) = self.m.structs.get(n) {
+                            if let Some((_, t)) = info.consts.iter().find(|(c, _)| c == f) {
+                                return Ok((format!("{}::__c_{}()", n, f), t.clone()));
+                            }
+                            return err(format!("`{}` has no constant `{}` (constants are declared `static {}: Type = value`)", n, f, f), e.pos);
+                        }
+                    }
+                }
                 if let Some(ns) = self.library_receiver(cx, recv) {
                     return match (ns.as_str(), f.as_str()) {
                         ("Math", "PI") => Ok(("std::f64::consts::PI".into(), Type::Float)),
@@ -3234,8 +3255,18 @@ fn __input(prompt: &str) -> String {
     std::io::stdin().read_line(&mut s).ok();
     s.trim_end_matches(['\r', '\n']).to_string()
 }
+fn __kl_run_main(f: fn()) {
+    __START.get_or_init(std::time::Instant::now);
+    __kl_panic_hook();
+    if std::panic::catch_unwind(f).is_err() { std::process::exit(101); }
+}
 fn __kl_run(f: fn()) {
     __START.get_or_init(std::time::Instant::now);
+    __kl_panic_hook();
+    let worker = std::thread::Builder::new().stack_size(256 * 1024 * 1024).spawn(f).expect("failed to start");
+    if worker.join().is_err() { std::process::exit(101); }
+}
+fn __kl_panic_hook() {
     std::panic::set_hook(Box::new(|info| {
         let p = info.payload();
         let msg = if let Some(s) = p.downcast_ref::<&str>() { s.to_string() }
@@ -3246,7 +3277,5 @@ fn __kl_run(f: fn()) {
         } else { msg };
         eprintln!("runtime error: {}", msg);
     }));
-    let worker = std::thread::Builder::new().stack_size(256 * 1024 * 1024).spawn(f).expect("failed to start");
-    if worker.join().is_err() { std::process::exit(101); }
 }
 "#;

@@ -1,0 +1,248 @@
+// 2D games: a window, drawing, keyboard and mouse, images and sounds.
+// Use with `import "std/game"`. Built on the Rust library macroquad.
+//
+//     class MyGame : Game {
+//         fn update(input: Input, dt: float) { ... }
+//         fn draw(screen: Screen) { ... }
+//     }
+//     fn main() { Window.run("My Game", 800, 600, MyGame()) }
+
+import "std/math2d"
+
+use crate "macroquad" = "0.4"
+use rust "game_glue.rs"
+
+// ---------------------------------------------------------------- colours
+
+// A colour with red, green, blue and alpha (opacity) from 0.0 to 1.0.
+struct Color {
+    r: float
+    g: float
+    b: float
+    a: float = 1.0
+
+    static WHITE: Color = Color(1.0, 1.0, 1.0)
+    static BLACK: Color = Color(0.0, 0.0, 0.0)
+    static GRAY: Color = Color(0.5, 0.5, 0.5)
+    static DARK_GRAY: Color = Color(0.2, 0.2, 0.2)
+    static RED: Color = Color(0.9, 0.2, 0.2)
+    static GREEN: Color = Color(0.2, 0.8, 0.3)
+    static BLUE: Color = Color(0.2, 0.4, 0.9)
+    static YELLOW: Color = Color(1.0, 0.85, 0.1)
+    static ORANGE: Color = Color(1.0, 0.55, 0.1)
+    static PURPLE: Color = Color(0.6, 0.3, 0.8)
+    static SKY: Color = Color(0.4, 0.7, 1.0)
+    static CLEAR: Color = Color(0.0, 0.0, 0.0, 0.0)
+
+    // A colour from 0-255 values, e.g. `Color.rgb(255, 128, 0)`.
+    static fn rgb(r: int, g: int, b: int) -> Color {
+        return Color(float(r) / 255.0, float(g) / 255.0, float(b) / 255.0)
+    }
+
+    fn with_alpha(a: float) -> Color {
+        return Color(self.r, self.g, self.b, a)
+    }
+}
+
+// ---------------------------------------------------------------- the game
+
+// Implement this interface and pass the object to `Window.run`.
+interface Game {
+    // Called once per frame before drawing; `dt` is the time since the last frame in seconds.
+    fn update(input: Input, dt: float)
+    // Called once per frame to draw everything.
+    fn draw(screen: Screen)
+}
+
+class Window {
+    // Opens a window and runs `game` until the window is closed or `input.quit()` is called.
+    static fn run(title: str, width: int, height: int, game: Game) {
+        gk_run(title, width, height, game)
+    }
+}
+
+// ---------------------------------------------------------------- input
+
+// Keyboard and mouse. Key names: "a".."z", "0".."9", "left", "right", "up", "down",
+// "space", "enter", "escape", "shift", "ctrl", "tab", "backspace".
+class Input {
+    // Is the key held down right now?
+    fn key_down(key: str) -> bool {
+        return gk_key_down(key)
+    }
+
+    // Was the key pressed during this frame?
+    fn key_pressed(key: str) -> bool {
+        return gk_key_pressed(key)
+    }
+
+    // The mouse position in window pixels.
+    fn mouse() -> Vec2 {
+        return Vec2(gk_mouse_x(), gk_mouse_y())
+    }
+
+    // Mouse buttons: "left", "right", "middle".
+    fn mouse_down(button: str) -> bool {
+        return gk_mouse_down(button)
+    }
+
+    fn mouse_pressed(button: str) -> bool {
+        return gk_mouse_pressed(button)
+    }
+
+    // Closes the window after this frame.
+    fn quit() {
+        gk_quit()
+    }
+}
+
+// ---------------------------------------------------------------- drawing
+
+class Screen {
+    fn width() -> float {
+        return gk_screen_width()
+    }
+
+    fn height() -> float {
+        return gk_screen_height()
+    }
+
+    fn size() -> Vec2 {
+        return Vec2(gk_screen_width(), gk_screen_height())
+    }
+
+    fn clear(c: Color) {
+        gk_clear(c)
+    }
+
+    fn rect(r: Rect, c: Color) {
+        gk_rect(r, c)
+    }
+
+    fn rect_outline(r: Rect, thickness: float, c: Color) {
+        gk_rect_outline(r, thickness, c)
+    }
+
+    fn circle(center: Vec2, radius: float, c: Color) {
+        gk_circle(center, radius, c)
+    }
+
+    fn circle_outline(center: Vec2, radius: float, thickness: float, c: Color) {
+        gk_circle_outline(center, radius, thickness, c)
+    }
+
+    fn line(from: Vec2, to: Vec2, thickness: float, c: Color) {
+        gk_line(from, to, thickness, c)
+    }
+
+    fn triangle(a: Vec2, b: Vec2, c: Vec2, color: Color) {
+        gk_triangle(a, b, c, color)
+    }
+
+    // Text with its baseline starting at `pos`; `size` is in pixels.
+    fn text(s: str, pos: Vec2, size: float, c: Color) {
+        gk_text(s, pos, size, c)
+    }
+
+    // Width in pixels of `s` drawn at `size` (for centring text).
+    fn text_width(s: str, size: float) -> float {
+        return gk_text_width(s, size)
+    }
+
+    // Draws an image with its top-left corner at `pos`, at its own size.
+    fn image(img: Image, pos: Vec2) {
+        gk_image(img.handle, Rect(pos.x, pos.y, img.width(), img.height()), 0.0)
+    }
+
+    // Draws an image stretched into `dest`, rotated by `rotation` radians around its centre.
+    fn image_in(img: Image, dest: Rect, rotation: float) {
+        gk_image(img.handle, dest, rotation)
+    }
+
+    // Frames per second.
+    fn fps() -> int {
+        return gk_fps()
+    }
+
+    // Saves what has been drawn so far this frame as a PNG file.
+    fn screenshot(path: str) {
+        gk_screenshot(path)
+    }
+}
+
+// ---------------------------------------------------------------- images and sounds
+
+extern type GkImage
+extern type GkSound
+
+// An image loaded from a PNG or JPEG file.
+struct Image {
+    handle: GkImage
+
+    static fn load(path: str) -> Result<Image, str> {
+        let h = gk_image_load(path)?
+        return Ok(Image(h))
+    }
+
+    fn width() -> float {
+        return gk_image_width(self.handle)
+    }
+
+    fn height() -> float {
+        return gk_image_height(self.handle)
+    }
+}
+
+// A sound loaded from a WAV or OGG file.
+struct Sound {
+    handle: GkSound
+
+    static fn load(path: str) -> Result<Sound, str> {
+        let h = gk_sound_load(path)?
+        return Ok(Sound(h))
+    }
+
+    fn play() {
+        gk_sound_play(self.handle, false, 1.0)
+    }
+
+    // Plays over and over at `volume` (0.0 to 1.0), e.g. for music.
+    fn play_looped(volume: float) {
+        gk_sound_play(self.handle, true, volume)
+    }
+
+    fn stop() {
+        gk_sound_stop(self.handle)
+    }
+}
+
+// ---------------------------------------------------------------- the Rust side
+
+extern fn gk_run(title: str, width: int, height: int, game: Game)
+extern fn gk_key_down(key: str) -> bool
+extern fn gk_key_pressed(key: str) -> bool
+extern fn gk_mouse_x() -> float
+extern fn gk_mouse_y() -> float
+extern fn gk_mouse_down(button: str) -> bool
+extern fn gk_mouse_pressed(button: str) -> bool
+extern fn gk_quit()
+extern fn gk_screen_width() -> float
+extern fn gk_screen_height() -> float
+extern fn gk_clear(c: Color)
+extern fn gk_rect(r: Rect, c: Color)
+extern fn gk_rect_outline(r: Rect, thickness: float, c: Color)
+extern fn gk_circle(center: Vec2, radius: float, c: Color)
+extern fn gk_circle_outline(center: Vec2, radius: float, thickness: float, c: Color)
+extern fn gk_line(from: Vec2, to: Vec2, thickness: float, c: Color)
+extern fn gk_triangle(a: Vec2, b: Vec2, c: Vec2, color: Color)
+extern fn gk_text(s: str, pos: Vec2, size: float, c: Color)
+extern fn gk_text_width(s: str, size: float) -> float
+extern fn gk_fps() -> int
+extern fn gk_screenshot(path: str)
+extern fn gk_image_load(path: str) -> Result<GkImage, str>
+extern fn gk_image_width(img: GkImage) -> float
+extern fn gk_image_height(img: GkImage) -> float
+extern fn gk_image(img: GkImage, dest: Rect, rotation: float)
+extern fn gk_sound_load(path: str) -> Result<GkSound, str>
+extern fn gk_sound_play(s: GkSound, looped: bool, volume: float)
+extern fn gk_sound_stop(s: GkSound)

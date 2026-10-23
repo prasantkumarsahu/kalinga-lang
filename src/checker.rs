@@ -184,6 +184,8 @@ pub struct StructInfo {
     pub private_fields: HashSet<String>,
     pub methods: HashMap<String, StructMethod>,
     pub ops: Vec<StructOp>,
+    /// `static NAME: Type = value` constants.
+    pub consts: Vec<(String, Type)>,
 }
 
 impl StructInfo {
@@ -393,8 +395,21 @@ impl Model {
                 }
                 ops.push(StructOp { op: o.op, param, ret: sig.ret, index });
             }
+            let mut consts: Vec<(String, Type)> = Vec::new();
+            for c in &st.consts {
+                if !st.tparams.is_empty() {
+                    return err("generic structs cannot have `static` constants (yet)", c.pos);
+                }
+                if consts.iter().any(|(n, _)| n == &c.name) || fields.iter().any(|(n, _)| n == &c.name) || methods.contains_key(&c.name) {
+                    return err(format!("`{}` is defined twice in `{}`", c.name, st.name), c.pos);
+                }
+                consts.push((c.name.clone(), resolve(&c.ty).map_err(|e| at_pos(e, c.pos))?));
+            }
             let private_fields = st.fields.iter().filter(|f| f.is_private).map(|f| f.name.clone()).collect();
-            m.structs.insert(st.name.clone(), StructInfo { decl: st.clone(), tparams: st.tparams.clone(), fields, private_fields, methods, ops });
+            m.structs.insert(
+                st.name.clone(),
+                StructInfo { decl: st.clone(), tparams: st.tparams.clone(), fields, private_fields, methods, ops, consts },
+            );
             m.struct_order.push(st.name.clone());
         }
         for e in &prog.enums {

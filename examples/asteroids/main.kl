@@ -1,0 +1,5 @@
+import "asteroids.kl"
+
+fn main() {
+    Window.run("Kalinga Asteroids", 800, 600, Asteroids())
+}

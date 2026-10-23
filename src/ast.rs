@@ -111,6 +111,8 @@ pub struct StructDecl {
     pub fields: Vec<FieldDecl>,
     pub methods: Vec<FnDecl>,
     pub ops: Vec<OpDecl>,
+    /// `static NAME: Type = value` constants, used as `Struct.NAME`.
+    pub consts: Vec<FieldDecl>,
     pub pos: Pos,
 }
 
@@ -153,6 +155,9 @@ pub struct EnumDecl {
 pub struct Program {
     /// `import "path"` declarations: (path as written, position).
     pub imports: Vec<(String, Pos)>,
+    /// Set by the driver when the program uses `std/game`: `main` must then run on the
+    /// process's main thread, which owns the window.
+    pub main_thread: bool,
     /// `use rust "file.rs"`: Rust source files compiled into the program. After loading,
     /// the paths are absolute.
     pub rust_files: Vec<(String, Pos)>,

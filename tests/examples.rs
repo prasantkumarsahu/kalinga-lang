@@ -497,3 +497,46 @@ fn async_runtime() {
     assert_compile_error("async_unused", &format!("{}async fn main() {{\n    job()\n}}", a), "only prepares it");
     assert_compile_error("async_method", "class C {\n    async fn m() {}\n}\nfn main() {}", "only `static async fn`");
 }
+
+#[test]
+fn game_module() {
+    // Game rules run without a window (math2d only, no graphics crates).
+    let (code, out, err) = run_file("tests/game/pong_logic.kl");
+    assert_eq!(code, 0, "{}", err);
+    assert_eq!(
+        out,
+        "bounced off top: true true\nbounced off bottom: true true\ngoes right: true straight: true faster: true\n\
+         edge hit is steep: true outside paddle: true\ncpu stays on screen: true\nserve goes left from centre: true true\n"
+    );
+    // The games and the std/game module type-check (no Rust build needed).
+    for f in ["examples/pong/main.kl", "examples/asteroids/main.kl"] {
+        let out = kalinga(&["check", f]);
+        assert!(out.status.success(), "{}: {}", f, String::from_utf8_lossy(&out.stderr));
+    }
+    assert_compile_error("game_needs_methods", "import \"std/game\"\nclass G : Game {\n    fn draw(screen: Screen) {}\n}\nfn main() {}", "does not implement `Game.update");
+}
+
+/// Opens a real window for a few frames and checks the screenshot. Needs a display and
+/// the macroquad crate (internet the first time): `cargo test -- --ignored`.
+#[test]
+#[ignore]
+fn game_window_smoke() {
+    let dir = std::env::temp_dir().join("kalinga-tests").join("game");
+    std::fs::create_dir_all(&dir).unwrap();
+    let shot = dir.join("smoke.png");
+    let _ = std::fs::remove_file(&shot);
+    let src = dir.join("smoke.kl");
+    std::fs::write(
+        &src,
+        format!(
+            "import \"std/game\"\n\nclass Smoke : Game {{\n    frame: int\n\n    fn update(input: Input, dt: float) {{\n        self.frame += 1\n        if self.frame >= 5 {{\n            input.quit()\n        }}\n    }}\n\n    fn draw(screen: Screen) {{\n        screen.clear(Color.BLACK)\n        screen.rect(Rect(10.0, 10.0, 50.0, 50.0), Color.YELLOW)\n        if self.frame == 3 {{\n            screen.screenshot({:?})\n        }}\n    }}\n}}\n\nfn main() {{\n    let g = Smoke()\n    Window.run(\"smoke\", 200, 100, g)\n    print(\"frames\", g.frame)\n}}\n",
+            shot.to_str().unwrap()
+        ),
+    )
+    .unwrap();
+    let (code, out, err) = run_file(src.to_str().unwrap());
+    assert_eq!(code, 0, "{}", err);
+    assert_eq!(out, "frames 5\n");
+    let png = std::fs::read(&shot).expect("screenshot written");
+    assert!(png.starts_with(b"\x89PNG"), "not a PNG");
+}

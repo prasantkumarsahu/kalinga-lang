@@ -81,6 +81,9 @@ fn load(root_name: &str, root_source: &str) -> Result<(Program, SourceMap), Stri
             let target = match import.strip_prefix("std/") {
                 Some(module) => {
                     let module = module.strip_suffix(".kl").unwrap_or(module);
+                    if module == "game" {
+                        program.main_thread = true;
+                    }
                     if !crate::stdlib::has(module) {
                         let e = CompileError::new(format!("there is no standard module `std/{}`", module), *pos);
                         return Err(map.render(&e));
@@ -125,6 +128,8 @@ struct Native {
     crates: Vec<crate::ast::CrateDep>,
     /// Whether the program calls hand-written Rust (`use rust` / `extern fn`).
     uses_rust: bool,
+    /// `main` runs on the process's main thread (games), so it needs a big main stack.
+    main_thread: bool,
 }
 
 /// Reports errors without requiring `fn main()`, so files meant to be imported can be
@@ -140,6 +145,7 @@ fn compile(file: &str, source: &str, require_main: bool) -> Result<(String, Nati
     let native = Native {
         crates: program.crates.clone(),
         uses_rust: !program.rust_files.is_empty() || !program.extern_fns.is_empty() || !program.crates.is_empty(),
+        main_thread: program.main_thread,
     };
     Ok((rust, native))
 }
@@ -182,7 +188,7 @@ pub fn build(input: &Path, output: Option<PathBuf>) -> Result<PathBuf, String> {
 
     let result = Command::new("rustc")
         .args(["--edition", "2024", "-O", "-C", "overflow-checks=on", "--crate-name", &name])
-        .args(static_crt_flags())
+        .args(native_flags(native.main_thread))
         .arg(&rs_path)
         .arg("-o")
         .arg(&exe)
@@ -194,10 +200,19 @@ pub fn build(input: &Path, output: Option<PathBuf>) -> Result<PathBuf, String> {
     Ok(exe)
 }
 
-/// On Windows (MSVC), link the C runtime into the executable, so a finished game runs on
-/// any Windows PC without installing the Visual C++ runtime.
-fn static_crt_flags() -> Vec<&'static str> {
-    if cfg!(target_env = "msvc") { vec!["-C", "target-feature=+crt-static"] } else { vec![] }
+/// Extra rustc flags. On Windows (MSVC) the C runtime is linked into the executable, so
+/// a finished game runs on any Windows PC without installing the Visual C++ runtime; and
+/// programs whose `main` stays on the main thread (games) get a 256 MB main stack, like
+/// the worker thread other programs run on.
+fn native_flags(main_thread: bool) -> Vec<&'static str> {
+    let mut flags = vec![];
+    if cfg!(target_env = "msvc") {
+        flags.extend(["-C", "target-feature=+crt-static"]);
+        if main_thread {
+            flags.extend(["-C", "link-arg=/STACK:268435456"]);
+        }
+    }
+    flags
 }
 
 fn host_triple() -> Result<String, String> {
@@ -256,7 +271,7 @@ fn build_with_cargo(work: &Path, name: &str, rust: &str, native: &Native, exe: &
         .args(["build", "--release", "--quiet", "--target", &host, "--manifest-path"])
         .arg(project.join("Cargo.toml"))
         .env("CARGO_TARGET_DIR", &target)
-        .env("RUSTFLAGS", static_crt_flags().join(" "))
+        .env("RUSTFLAGS", native_flags(native.main_thread).join(" "))
         .output()
         .map_err(|e| format!("cannot run `cargo` (is Rust installed and on PATH?): {}", e))?;
     if !result.status.success() {

@@ -1,0 +1,101 @@
+// Pong: you (W / S keys) against the computer. First to 5 points wins.
+import "std/game"
+import "logic.kl"
+
+class Pong : Game {
+    width: float = 800.0
+    height: float = 600.0
+    player: Rect = Rect(30.0, 250.0, 14.0, 100.0)
+    cpu: Rect = Rect(756.0, 250.0, 14.0, 100.0)
+    ball: Ball = serve(800.0, 600.0, true)
+    player_score: int
+    cpu_score: int
+    waiting: bool = true
+    winner: str = ""
+
+    fn update(input: Input, dt: float) {
+        if input.key_pressed("escape") {
+            input.quit()
+        }
+        if self.waiting {
+            if input.key_pressed("space") {
+                if self.winner != "" {
+                    self.player_score = 0
+                    self.cpu_score = 0
+                    self.winner = ""
+                }
+                self.waiting = false
+            }
+            return
+        }
+
+        // Player paddle
+        let speed = 420.0
+        if input.key_down("w") || input.key_down("up") {
+            self.player.y -= speed * dt
+        }
+        if input.key_down("s") || input.key_down("down") {
+            self.player.y += speed * dt
+        }
+        self.player.y = Math.clamp(self.player.y, 0.0, self.height - self.player.h)
+
+        // Computer paddle (a bit slower than the ball, so it can be beaten)
+        self.cpu = follow(self.cpu, self.ball.pos.y, 330.0, dt, self.height)
+
+        // Ball
+        self.ball = move_ball(self.ball, dt, self.height)
+        if self.ball.vel.x < 0.0 && self.ball.rect().overlaps(self.player) {
+            self.ball = bounce_off(self.ball, self.player, true)
+        }
+        if self.ball.vel.x > 0.0 && self.ball.rect().overlaps(self.cpu) {
+            self.ball = bounce_off(self.ball, self.cpu, false)
+        }
+
+        // Points
+        if self.ball.pos.x < -20.0 {
+            self.cpu_score += 1
+            self.point(false)
+        }
+        if self.ball.pos.x > self.width + 20.0 {
+            self.player_score += 1
+            self.point(true)
+        }
+    }
+
+    private fn point(player_scored: bool) {
+        self.ball = serve(self.width, self.height, !player_scored)
+        self.waiting = true
+        if self.player_score == 5 {
+            self.winner = "You win!"
+        }
+        if self.cpu_score == 5 {
+            self.winner = "The computer wins"
+        }
+    }
+
+    fn draw(screen: Screen) {
+        screen.clear(Color.rgb(15, 20, 35))
+        // Centre line
+        var y = 10.0
+        while y < self.height {
+            screen.rect(Rect(self.width / 2.0 - 2.0, y, 4.0, 20.0), Color.DARK_GRAY)
+            y += 40.0
+        }
+        screen.rect(self.player, Color.SKY)
+        screen.rect(self.cpu, Color.ORANGE)
+        screen.circle(self.ball.pos, self.ball.radius, Color.WHITE)
+
+        self.centered(screen, "{self.player_score}   {self.cpu_score}", 70.0, 64.0, Color.WHITE)
+        if self.winner != "" {
+            self.centered(screen, self.winner, 260.0, 48.0, Color.YELLOW)
+            self.centered(screen, "space: play again   escape: quit", 320.0, 24.0, Color.GRAY)
+        } else if self.waiting {
+            self.centered(screen, "W / S to move   space to serve", 320.0, 24.0, Color.GRAY)
+        }
+    }
+
+    private fn centered(screen: Screen, text: str, y: float, size: float, c: Color) {
+        let w = screen.text_width(text, size)
+        screen.text(text, Vec2((self.width - w) / 2.0, y), size, c)
+    }
+}

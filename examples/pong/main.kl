@@ -1,0 +1,5 @@
+import "pong.kl"
+
+fn main() {
+    Window.run("Kalinga Pong", 800, 600, Pong())
+}

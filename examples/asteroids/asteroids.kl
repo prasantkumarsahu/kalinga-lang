@@ -1,0 +1,187 @@
+// Asteroids: turn with A / D (or arrows), thrust with W, fire with space.
+import "std/game"
+
+// Keeps a position on screen by wrapping around the edges.
+fn wrap(p: Vec2, w: float, h: float) -> Vec2 {
+    var q = p
+    if q.x < 0.0 { q.x += w }
+    if q.x > w { q.x -= w }
+    if q.y < 0.0 { q.y += h }
+    if q.y > h { q.y -= h }
+    return q
+}
+
+struct Bullet {
+    pos: Vec2
+    vel: Vec2
+    life: float = 1.2
+}
+
+struct Rock {
+    pos: Vec2
+    vel: Vec2
+    radius: float
+
+    // Two smaller rocks flying apart, or none if this one was already small.
+    fn split() -> [Rock] {
+        var parts: [Rock] = []
+        if self.radius > 15.0 {
+            for i in 0..2 {
+                let dir = Vec2.from_angle(Random.float() * Math.TAU, 40.0 + Random.float() * 60.0)
+                parts.push(Rock(self.pos, self.vel + dir, self.radius / 2.0))
+            }
+        }
+        return parts
+    }
+}
+
+class Ship {
+    pos: Vec2 = Vec2.zero()
+    vel: Vec2 = Vec2.zero()
+    angle: float = -Math.PI / 2.0
+    cooldown: float
+
+    init(pos: Vec2) {
+        self.pos = pos
+    }
+
+    fn nose() -> Vec2 {
+        return self.pos + Vec2.from_angle(self.angle, 16.0)
+    }
+
+    fn corners() -> [Vec2] {
+        return [self.nose(), self.pos + Vec2.from_angle(self.angle + 2.5, 12.0), self.pos + Vec2.from_angle(self.angle - 2.5, 12.0)]
+    }
+}
+
+class Asteroids : Game {
+    width: float = 800.0
+    height: float = 600.0
+    ship: Ship = Ship(Vec2(400.0, 300.0))
+    bullets: [Bullet]
+    rocks: [Rock]
+    score: int
+    lives: int = 3
+    level: int
+    over: bool
+
+    init() {
+        self.next_level()
+    }
+
+    fn next_level() {
+        self.level += 1
+        for i in 0..self.level + 3 {
+            // Start rocks away from the centre, where the ship is.
+            let edge = Vec2.from_angle(Random.float() * Math.TAU, 260.0)
+            let pos = Vec2(self.width / 2.0, self.height / 2.0) + edge
+            self.rocks.push(Rock(pos, Vec2.from_angle(Random.float() * Math.TAU, 30.0 + Random.float() * 40.0), 40.0))
+        }
+    }
+
+    fn fire() {
+        if self.ship.cooldown <= 0.0 {
+            self.bullets.push(Bullet(self.ship.nose(), self.ship.vel + Vec2.from_angle(self.ship.angle, 450.0)))
+            self.ship.cooldown = 0.2
+        }
+    }
+
+    fn update(input: Input, dt: float) {
+        if input.key_pressed("escape") {
+            input.quit()
+        }
+        if self.over {
+            if input.key_pressed("space") {
+                self.restart()
+            }
+            return
+        }
+
+        // Ship controls
+        if input.key_down("a") || input.key_down("left") { self.ship.angle -= 4.0 * dt }
+        if input.key_down("d") || input.key_down("right") { self.ship.angle += 4.0 * dt }
+        if input.key_down("w") || input.key_down("up") {
+            self.ship.vel += Vec2.from_angle(self.ship.angle, 300.0 * dt)
+        }
+        if input.key_down("space") { self.fire() }
+        self.step(dt)
+    }
+
+    // Everything that moves on its own, separate from input so it can be tested.
+    fn step(dt: float) {
+        self.ship.cooldown -= dt
+        self.ship.vel = self.ship.vel * (1.0 - 0.6 * dt)
+        self.ship.pos = wrap(self.ship.pos + self.ship.vel * dt, self.width, self.height)
+
+        var bullets: [Bullet] = []
+        for b in self.bullets {
+            var nb = b
+            nb.pos = wrap(b.pos + b.vel * dt, self.width, self.height)
+            nb.life -= dt
+            if nb.life > 0.0 { bullets.push(nb) }
+        }
+        self.bullets = bullets
+
+        // Bullets break rocks
+        var rocks: [Rock] = []
+        for r in self.rocks {
+            var moved = r
+            moved.pos = wrap(r.pos + r.vel * dt, self.width, self.height)
+            var hit = false
+            for i in 0..len(self.bullets) {
+                if !hit && self.bullets[i].life > 0.0 && self.bullets[i].pos.distance(moved.pos) < moved.radius {
+                    hit = true
+                    self.bullets[i].life = 0.0
+                }
+            }
+            if hit {
+                self.score += int(100.0 / moved.radius * 10.0)
+                for part in moved.split() { rocks.push(part) }
+            } else {
+                rocks.push(moved)
+            }
+        }
+        self.rocks = rocks
+
+        // Rocks hit the ship
+        for r in self.rocks {
+            if r.pos.distance(self.ship.pos) < r.radius + 10.0 {
+                self.lives -= 1
+                self.ship = Ship(Vec2(self.width / 2.0, self.height / 2.0))
+                if self.lives == 0 { self.over = true }
+                break
+            }
+        }
+        if len(self.rocks) == 0 {
+            self.next_level()
+        }
+    }
+
+    fn restart() {
+        self.score = 0
+        self.lives = 3
+        self.level = 0
+        self.over = false
+        self.rocks = []
+        self.bullets = []
+        self.ship = Ship(Vec2(self.width / 2.0, self.height / 2.0))
+        self.next_level()
+    }
+
+    fn draw(screen: Screen) {
+        screen.clear(Color.rgb(8, 10, 20))
+        for r in self.rocks {
+            screen.circle_outline(r.pos, r.radius, 2.0, Color.GRAY)
+        }
+        for b in self.bullets {
+            screen.circle(b.pos, 2.5, Color.YELLOW)
+        }
+        let c = self.ship.corners()
+        screen.triangle(c[0], c[1], c[2], Color.SKY)
+        screen.text("score {self.score}   lives {self.lives}   level {self.level}", Vec2(16.0, 30.0), 24.0, Color.WHITE)
+        if self.over {
+            let msg = "game over - space to play again"
+            screen.text(msg, Vec2((self.width - screen.text_width(msg, 32.0)) / 2.0, 300.0), 32.0, Color.ORANGE)
+        }
+    }
+}

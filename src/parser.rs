@@ -408,7 +408,7 @@ impl Parser {
             return err("structs cannot extend classes or implement interfaces (use a class for that)", self.pos());
         }
         self.expect(Tok::LBrace, "`{` to start struct body")?;
-        let mut s = StructDecl { name, tparams, fields: vec![], methods: vec![], ops: vec![], pos };
+        let mut s = StructDecl { name, tparams, fields: vec![], methods: vec![], ops: vec![], consts: vec![], pos };
         self.skip_newlines();
         while !self.check(&Tok::RBrace) {
             let mpos = self.pos();
@@ -444,14 +444,21 @@ impl Parser {
             mods.is_mut = is_mut;
             match self.peek().clone() {
                 Tok::Ident(fname) if !is_mut => {
-                    if mods.is_static || mods.is_abstract || mods.is_override {
-                        return err("fields can only be marked `private`", mpos);
+                    if mods.is_abstract || mods.is_override || mods.is_async {
+                        return err("fields can only be marked `private` (or `static` for a constant)", mpos);
                     }
                     let fpos = self.advance().pos;
                     self.expect(Tok::Colon, "`:` and a type after field name")?;
                     let ty = self.ty()?;
                     let default = if self.eat(&Tok::Assign) { Some(self.expr()?) } else { None };
-                    s.fields.push(FieldDecl { name: fname, ty, default, is_private: mods.is_private, pos: fpos });
+                    if mods.is_static {
+                        if default.is_none() {
+                            return err("a `static` constant needs a value: `static NAME: Type = value`", fpos);
+                        }
+                        s.consts.push(FieldDecl { name: fname, ty, default, is_private: mods.is_private, pos: fpos });
+                    } else {
+                        s.fields.push(FieldDecl { name: fname, ty, default, is_private: mods.is_private, pos: fpos });
+                    }
                     self.end_of_statement()?;
                 }
                 Tok::Fn => {
