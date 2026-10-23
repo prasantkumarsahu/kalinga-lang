@@ -1,0 +1,62 @@
+enum LoadError {
+    Missing(name: str)
+    Bad(line: int)
+}
+
+fn parse_level(text: str) -> Result<int, str> {
+    if text == "" {
+        return Err("empty")
+    }
+    let n = int(text)
+    if n < 1 {
+        return Err("level must be at least 1, got {n}")
+    }
+    return Ok(n)
+}
+
+fn load(name: str) -> Result<[int], LoadError> {
+    if name == "missing" {
+        return Err(LoadError.Missing(name))
+    }
+    return Ok([1, 2, 3])
+}
+
+fn total(name: str) -> Result<int, LoadError> {
+    let xs = load(name)?
+    var sum = 0
+    for x in xs { sum += x }
+    return Ok(sum)
+}
+
+fn first_even(xs: [int]) -> int? {
+    let f = xs.find(fn(x) => x % 2 == 0)?
+    return f * 10
+}
+
+fn setup(ok: bool) -> Result<void, str> {
+    if !ok { return Err("setup failed") }
+    return Ok()
+}
+
+fn main() -> Result<void, str> {
+    print(parse_level("3"), parse_level(""), parse_level("0"))
+    match total("game") {
+        Ok(t) => print("total", t)
+        Err(e) => print("failed")
+    }
+    match total("missing") {
+        Ok(t) => print("total", t)
+        Err(e) => match e {
+            Missing(n) => print("missing file:", n)
+            Bad(l) => print("bad line", l)
+        }
+    }
+    let r = parse_level("7")
+    print(r.is_ok(), r.unwrap_or(1), parse_level("").unwrap_or(1), r.ok(), parse_level("").err(), r.unwrap())
+    print(first_even([1, 3, 4]), first_even([1, 3]))
+    setup(true)?
+    print("setup ok")
+    setup(false)?
+    print("never printed")
+    return Ok()
+}

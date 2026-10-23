@@ -428,3 +428,22 @@ fn crate_features() {
     assert_eq!(code, 0, "{}", err);
     assert_eq!(out, "roll ok: true\n");
 }
+
+#[test]
+fn error_handling() {
+    let (code, out, err) = run_file("tests/results.kl");
+    assert_eq!(code, 1, "main returns Err, so the exit code is 1");
+    assert_eq!(
+        out,
+        "Ok(3) Err(empty) Err(level must be at least 1, got 0)\ntotal 6\nmissing file: missing\ntrue 7 1 7 empty 7\n40 none\nsetup ok\n"
+    );
+    assert!(err.contains("error: setup failed"), "{}", err);
+    let f = "fn f() -> Result<int, str> {\n    return Ok(1)\n}\n";
+    assert_compile_error("try_void", &format!("{}fn main() {{\n    let x = f()?\n}}", f), "can only be used in a function that returns a `Result`");
+    assert_compile_error("try_types", &format!("{}fn g() -> Result<int, int> {{\n    let x = f()?\n    return Ok(x)\n}}\nfn main() {{}}", f), "passes on a `str` error");
+    assert_compile_error("ok_untyped", "fn main() { let r = Ok(5) }", "cannot tell which `Result`");
+    assert_compile_error("result_match", &format!("{}fn main() {{\n    match f() {{\n        Ok(v) => print(v)\n    }}\n}}", f), "missing: Err");
+    let (code, _, err) = run_source("unwrap_err", "fn main() {\n    let r: Result<int, str> = Err(\"disk full\")\n    print(r.unwrap())\n}\n");
+    assert_eq!(code, 101);
+    assert!(err.contains("called unwrap() on an error: disk full"), "{}", err);
+}

@@ -153,6 +153,7 @@ impl<'a> Gen<'a> {
             Type::Array(i) => format!("Vec<{}>", self.rty(i)),
             Type::Map(k, v) => format!("BTreeMap<{}, {}>", self.rty(k), self.rty(v)),
             Type::Optional(i) => format!("Option<{}>", self.rty(i)),
+            Type::Result(t, e) => format!("Result<{}, {}>", self.rty(t), self.rty(e)),
             Type::Class(c) => {
                 if self.m.has_subclasses(c) {
                     format!("Rc<RefCell<dyn {}>>", class_trait(c))
@@ -201,6 +202,9 @@ impl<'a> Gen<'a> {
         }
         Ok(match (from, to) {
             (Type::NoneLit, Type::Optional(_)) => "None".into(),
+            (Type::Result(a, _), Type::Result(b, _)) => {
+                format!("({}).map(|__v| {})", code, self.coerce("__v".into(), a, b, pos)?)
+            }
             (Type::Optional(a), Type::Optional(b)) => {
                 format!("({}).map(|__v| {})", code, self.coerce("__v".into(), a, b, pos)?)
             }
@@ -290,7 +294,17 @@ impl<'a> Gen<'a> {
             self.class(&mut out, cname, &method_bodies, &init_bodies, &field_defaults);
         }
         out.push_str(&functions);
-        writeln!(out, "\nfn main() {{\n    __kl_run({});\n}}", fn_id("main")).unwrap();
+        if matches!(self.m.functions.get("main").map(|s| &s.ret), Some(Type::Result(..))) {
+            writeln!(
+                out,
+                "\nfn __kl_main_result() {{\n    if let Err(e) = {}() {{\n        eprintln!(\"error: {{}}\", __KlShow::__show(&e));\n        std::process::exit(1);\n    }}\n}}",
+                fn_id("main")
+            )
+            .unwrap();
+            writeln!(out, "\nfn main() {{\n    __kl_run(__kl_main_result);\n}}").unwrap();
+        } else {
+            writeln!(out, "\nfn main() {{\n    __kl_run({});\n}}", fn_id("main")).unwrap();
+        }
         Ok(out)
     }
 
@@ -1040,8 +1054,13 @@ impl<'a> Gen<'a> {
         let (code, ty) = self.expr(cx, value, None)?;
         let enum_info = match &ty {
             Type::Enum(e) => Some((e.clone(), self.m.enums[e].clone())),
+            Type::Result(t, e) => {
+                let ok = if **t == Type::Void { vec![] } else { vec![("value".to_string(), (**t).clone())] };
+                let variants = vec![("Ok".to_string(), ok), ("Err".to_string(), vec![("error".to_string(), (**e).clone())])];
+                Some(("Result".to_string(), crate::checker::EnumInfo { variants }))
+            }
             Type::Int | Type::Str | Type::Bool => None,
-            other => return err(format!("cannot `match` on `{}` (use an enum, int, str or bool)", other), value.pos),
+            other => return err(format!("cannot `match` on `{}` (use an enum, `Result`, int, str or bool)", other), value.pos),
         };
         let scrutinee = if ty == Type::Str { format!("({}).as_str()", code) } else { code };
         let mut out = format!("match {} {{\n", scrutinee);
@@ -1118,7 +1137,11 @@ impl<'a> Gen<'a> {
                         rust.push(cx.declare(b, t.clone(), false, arm.pos)?);
                     }
                 }
-                if fields.is_empty() { format!("{}::{}", ename, v) } else { format!("{}::{}({})", ename, v, rust.join(", ")) }
+                match (fields.is_empty(), ename.as_str()) {
+                    (true, "Result") => format!("Result::{}(_)", v),
+                    (true, _) => format!("{}::{}", ename, v),
+                    _ => format!("{}::{}({})", ename, v, rust.join(", ")),
+                }
             }
             (Pattern::Int(n), None) if *ty == Type::Int => format!("{}i64", n),
             (Pattern::Str(st), None) if *ty == Type::Str => format!("{:?}", st),
@@ -1579,6 +1602,30 @@ impl<'a> Gen<'a> {
             }
             ExprKind::Downcast { value, class, test_only } => self.downcast(cx, value, class, *test_only, e.pos),
             ExprKind::Lambda { params, ret, body } => self.lambda(cx, params, ret.as_ref(), body, expected, e.pos),
+            ExprKind::Try(inner) => {
+                let (code, t) = self.expr(cx, inner, None)?;
+                match (&t, &cx.ret) {
+                    (Type::Result(v, err_ty), Type::Result(_, ret_err)) => {
+                        if err_ty != ret_err {
+                            return err(
+                                format!("`?` passes on a `{}` error, but this function returns `{}` errors", err_ty, ret_err),
+                                e.pos,
+                            );
+                        }
+                        Ok((format!("({})?", code), (**v).clone()))
+                    }
+                    (Type::Optional(v), Type::Optional(_)) => Ok((format!("({})?", code), (**v).clone())),
+                    (Type::Result(..), other) => err(
+                        format!("`?` can only be used in a function that returns a `Result`; this one returns `{}`", other),
+                        e.pos,
+                    ),
+                    (Type::Optional(_), other) => err(
+                        format!("`?` on an optional needs a function that returns an optional; this one returns `{}`", other),
+                        e.pos,
+                    ),
+                    (other, _) => err(format!("`?` works on a `Result` or an optional, not on `{}`", other), e.pos),
+                }
+            }
             ExprKind::Ident(name) => match cx.lookup(name) {
                 Some(v) => Ok((clone_if(v.rust.clone(), &v.ty), v.ty.clone())),
                 None if self.m.functions.contains_key(name) => {
@@ -1931,6 +1978,33 @@ impl<'a> Gen<'a> {
 
     #[allow(clippy::too_many_arguments)]
     fn call(&self, cx: &mut Ctx, name: &str, targs: &[TypeExpr], args: &[Expr], expected: Option<&Type>, pos: Pos) -> Result<(String, Type)> {
+        if (name == "Ok" || name == "Err") && cx.lookup(name).is_none() {
+            let rt = match expected {
+                Some(t @ Type::Result(..)) => t.clone(),
+                _ => match &cx.ret {
+                    t @ Type::Result(..) if expected.is_none() => t.clone(),
+                    _ => {
+                        return err(
+                            format!("cannot tell which `Result` this `{}` belongs to; give the variable a type, e.g. `let r: Result<int, str> = {}(...)`", name, name),
+                            pos,
+                        )
+                    }
+                },
+            };
+            let Type::Result(t, e) = &rt else { unreachable!() };
+            let payload = if name == "Ok" { (**t).clone() } else { (**e).clone() };
+            if payload == Type::Void {
+                if !args.is_empty() {
+                    return err("`Ok()` of a `Result<void, E>` takes no value", pos);
+                }
+                return Ok(("Ok(())".into(), rt));
+            }
+            if args.len() != 1 {
+                return err(format!("`{}` takes exactly one value", name), pos);
+            }
+            let v = self.expr_to(cx, &args[0], &payload)?;
+            return Ok((format!("{}({})", name, v), rt));
+        }
         let generic_class = self.m.classes.get(name).is_some_and(|c| !c.tparams.is_empty());
         let generic_fn = self.m.fn_tparams.get(name).is_some_and(|t| !t.is_empty());
         if !targs.is_empty() && !generic_class && !generic_fn {
@@ -2143,6 +2217,31 @@ impl<'a> Gen<'a> {
 
         // Mutating array/map methods need a mutable place.
         let recv_ty = self.recv(cx, recv)?.1;
+        if let Type::Result(t, e) = &recv_ty {
+            let (setup, rcode, _) = self.receiver(cx, recv)?;
+            let (code, ty) = match (name, args.len()) {
+                ("is_ok", 0) => (format!("{}.is_ok()", rcode), Type::Bool),
+                ("is_err", 0) => (format!("{}.is_err()", rcode), Type::Bool),
+                ("ok", 0) => (format!("{}.clone().ok()", rcode), Type::Optional(t.clone())),
+                ("err", 0) => (format!("{}.clone().err()", rcode), Type::Optional(e.clone())),
+                ("unwrap_or", 1) => {
+                    let d = self.expr_to(cx, &args[0], t)?;
+                    (format!("{}.clone().unwrap_or({})", rcode, d), (**t).clone())
+                }
+                ("unwrap", 0) => {
+                    let show = if self.m.is_plain(e) { "__KlShow::__show(&__e)" } else { "String::from(\"an error\")" };
+                    (
+                        format!("match {}.clone() {{ Ok(__v) => __v, Err(__e) => panic!(\"called unwrap() on an error: {{}}\", {}) }}", rcode, show),
+                        (**t).clone(),
+                    )
+                }
+                ("is_ok" | "is_err" | "ok" | "err" | "unwrap" | "unwrap_or", _) => {
+                    return err(format!("wrong number of arguments for `{}`", name), pos)
+                }
+                _ => return err(format!("`Result` has no method `{}` (use is_ok, is_err, ok, err, unwrap, unwrap_or or `match`)", name), pos),
+            };
+            return Ok((format!("{{ {}{} }}", setup, code), ty));
+        }
         if let Type::Struct(st) = &recv_ty {
             return self.struct_method_call(cx, st, recv, name, args, pos);
         }
@@ -2461,6 +2560,10 @@ impl<K: __KlShow, V: __KlShow> __KlShow for BTreeMap<K, V> {
         format!("{{{}}}", parts.join(", "))
     }
 }
+impl<T: __KlShow, E: __KlShow> __KlShow for Result<T, E> {
+    fn __show(&self) -> String { match self { Ok(v) => format!("Ok({})", v.__show()), Err(e) => format!("Err({})", e.__show()) } }
+}
+impl __KlShow for () { fn __show(&self) -> String { String::new() } }
 impl<T: __KlShow> __KlShow for Option<T> {
     fn __show(&self) -> String { match self { Some(v) => v.__show(), None => "none".to_string() } }
 }

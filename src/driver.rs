@@ -155,12 +155,22 @@ fn stem(path: &Path) -> String {
     if s.starts_with(|c: char| c.is_ascii_digit()) { format!("kl_{}", s) } else { s }
 }
 
+/// Name for the build files of `input`: its stem plus a short hash of the full path, so
+/// two programs called `main.kl` in different folders can build at the same time.
+fn build_name(input: &Path) -> String {
+    use std::hash::{Hash, Hasher};
+    let full = std::fs::canonicalize(input).unwrap_or_else(|_| input.to_path_buf());
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    full.hash(&mut h);
+    format!("{}_{:08x}", stem(input), h.finish() as u32)
+}
+
 /// Compiles `input` to a native executable at `output` (or a temp location).
 pub fn build(input: &Path, output: Option<PathBuf>) -> Result<PathBuf, String> {
     let source = std::fs::read_to_string(input).map_err(|e| format!("cannot read {}: {}", input.display(), e))?;
     let (rust, native) = compile(&input.display().to_string(), &source, true)?;
 
-    let name = stem(input);
+    let name = build_name(input);
     let work = std::env::temp_dir().join("kalinga-build");
     std::fs::create_dir_all(&work).map_err(|e| format!("cannot create {}: {}", work.display(), e))?;
     let exe = output.unwrap_or_else(|| work.join(format!("{}{}", name, std::env::consts::EXE_SUFFIX)));

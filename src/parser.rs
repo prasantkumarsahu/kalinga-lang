@@ -814,6 +814,9 @@ impl Parser {
                 } else {
                     e = Expr { kind: ExprKind::Field(Box::new(e), name), pos };
                 }
+            } else if self.check(&Tok::Question) {
+                self.advance();
+                e = Expr { kind: ExprKind::Try(Box::new(e)), pos };
             } else if self.eat(&Tok::LBracket) {
                 let idx = self.expr()?;
                 self.expect(Tok::RBracket, "`]`")?;

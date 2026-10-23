@@ -25,6 +25,8 @@ pub enum Type {
     Struct(String),
     /// An opaque Rust type declared with `extern type`.
     Extern(String),
+    /// `Result<T, E>`: `Ok(T)` or `Err(E)`.
+    Result(Box<Type>, Box<Type>),
     /// `fn(A, B) -> R`
     Func(Vec<Type>, Box<Type>),
     /// Placeholder for "not known yet" in expected-type hints (lambda results).
@@ -62,6 +64,7 @@ impl fmt::Display for Type {
             Type::NoneLit => write!(f, "none"),
             Type::Unknown => write!(f, "_"),
             Type::Param(n) => write!(f, "{}", n),
+            Type::Result(t, e) => write!(f, "Result<{}, {}>", t, e),
             Type::Generic(n, args) => {
                 let a: Vec<String> = args.iter().map(|t| t.to_string()).collect();
                 write!(f, "{}<{}>", n, a.join(", "))
@@ -207,7 +210,7 @@ pub struct Model {
 
 pub const BUILTINS: &[&str] = &["print", "len", "str", "int", "float", "input"];
 const RESERVED_TYPES: &[&str] = &[
-    "Rc", "RefCell", "String", "Vec", "BTreeMap", "Math", "Random", "Time", "Option", "Some", "None", "Box", "Self", "std", "main",
+    "Rc", "RefCell", "String", "Vec", "BTreeMap", "Result", "Ok", "Err", "Math", "Random", "Time", "Option", "Some", "None", "Box", "Self", "std", "main",
     "int", "float", "bool", "str", "void",
 ];
 
@@ -487,9 +490,13 @@ impl Model {
         }
         match m.functions.get("main") {
             None if require_main => return err("program has no `fn main()`", Pos { line: 1, col: 1, file: 0 }),
-            Some(sig) if !sig.params.is_empty() || sig.ret != Type::Void => {
+            Some(sig)
+                if !sig.params.is_empty()
+                    || !matches!(&sig.ret, Type::Void)
+                        && !matches!(&sig.ret, Type::Result(t, e) if **t == Type::Void && m.is_plain(e)) =>
+            {
                 let pos = prog.functions.iter().find(|f| f.name == "main").unwrap().pos;
-                return err("`main` must take no parameters and return nothing", pos);
+                return err("`main` must take no parameters and return nothing (or `Result<void, E>` with a printable `E`)", pos);
             }
             _ => {}
         }
@@ -544,7 +551,9 @@ impl Model {
                 if ty == Type::Void {
                     return err("fields cannot have type void", f.pos);
                 }
-                if (ty.is_object() || matches!(ty, Type::Enum(_) | Type::Func(..) | Type::Struct(_) | Type::Extern(_))) && f.default.is_none() {
+                if (ty.is_object() || matches!(ty, Type::Enum(_) | Type::Func(..) | Type::Struct(_) | Type::Extern(_) | Type::Result(..)))
+                    && f.default.is_none()
+                {
                     return err(
                         format!("field `{}` of type `{}` needs a default value (or make it optional: `{}?`)", f.name, ty, ty),
                         f.pos,
@@ -937,6 +946,7 @@ impl Model {
             Type::Map(k, v) => self.is_plain(k) && self.is_plain(v),
             Type::Enum(e) => self.plain_enums.contains(e),
             Type::Struct(st) => self.plain_structs.contains(st),
+            Type::Result(t, e) => (**t == Type::Void || self.is_plain(t)) && self.is_plain(e),
             _ => false,
         }
     }
@@ -978,6 +988,7 @@ impl Model {
         match (from, to) {
             (Type::NoneLit, Type::Optional(_)) => true,
             (Type::Optional(a), Type::Optional(b)) => self.assignable(a, b),
+            (Type::Result(a, ea), Type::Result(b, eb)) => ea == eb && self.assignable(a, b),
             (f, Type::Optional(inner)) => self.assignable(f, inner),
             (Type::Class(d), Type::Class(c)) => self.is_subclass(d, c),
             (Type::Class(d), Type::Interface(i)) => self.all_interfaces(d).contains(i),
@@ -1120,6 +1131,17 @@ fn resolve_type(t: &TypeExpr, names: &TypeNames, tparams: &[String]) -> Result<T
                     return err(format!("type parameter `{}` does not take type arguments", n), *pos);
                 }
                 return Ok(Type::Param(n.clone()));
+            }
+            if n == "Result" {
+                if args.len() != 2 {
+                    return err("`Result` needs two types: `Result<T, E>` (value type, error type)", *pos);
+                }
+                let t = resolve_type(&args[0], names, tparams)?;
+                let e = resolve_type(&args[1], names, tparams)?;
+                if e == Type::Void {
+                    return err("the error type of a `Result` cannot be void", *pos);
+                }
+                return Ok(Type::Result(Box::new(t), Box::new(e)));
             }
             if let Some(&arity) = names.generic.get(n) {
                 if args.len() != arity {
