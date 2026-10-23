@@ -1045,7 +1045,17 @@ impl Parser {
         self.expect(Tok::LParen, "`(`")?;
         let mut args = Vec::new();
         while !self.check(&Tok::RParen) {
-            args.push(self.expr()?);
+            // `name: value`
+            if let Tok::Ident(name) = self.peek().clone()
+                && self.tokens.get(self.i + 1).is_some_and(|t| t.tok == Tok::Colon)
+            {
+                let pos = self.advance().pos;
+                self.advance();
+                let value = self.expr()?;
+                args.push(Expr { kind: ExprKind::Named(name, Box::new(value)), pos });
+            } else {
+                args.push(self.expr()?);
+            }
             if !self.eat(&Tok::Comma) {
                 break;
             }

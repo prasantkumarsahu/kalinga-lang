@@ -571,6 +571,8 @@ impl<'a> Resolver<'a> {
                     self.expr(a, sc)?;
                 }
             }
+            // The name is a parameter's, not a declaration's.
+            ExprKind::Named(_, value) => self.expr(value, sc)?,
             ExprKind::If { cond, then, otherwise } => {
                 self.expr(cond, sc)?;
                 self.block(then, sc)?;

@@ -1,0 +1,15 @@
+fn clamp(value: int, low: int, high: int) -> int {
+    return value
+}
+
+fn main() {
+    println(clamp(high: 1, low: 0, value: 3))
+}
+
+fn typo() {
+    println(clamp(1, lo: 0, high: 2))
+}
+
+fn missing() {
+    println(clamp(value: 1, high: 2))
+}

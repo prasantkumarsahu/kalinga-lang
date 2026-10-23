@@ -1,0 +1,9 @@
+tests/ui/errors/named_args.kl:6:28: error: `low` must come before `high`: named arguments follow the parameter order (value, low, high)
+6 |     println(clamp(high: 1, low: 0, value: 3))
+  |                            ^^^
+tests/ui/errors/named_args.kl:10:22: error: `clamp` has no parameter `lo` (its parameters: value, low, high)
+10 |     println(clamp(1, lo: 0, high: 2))
+   |                      ^^
+tests/ui/errors/named_args.kl:14:19: error: `clamp` needs an argument for `low`
+14 |     println(clamp(value: 1, high: 2))
+   |                   ^^^^^

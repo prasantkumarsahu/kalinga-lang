@@ -69,6 +69,35 @@ ok: 5
 negative, stopping
 ```
 
+## Named arguments
+
+An argument can be written with its parameter's name, which makes calls easier to read:
+
+```kalinga
+fn clamp(value: int, low: int, high: int) -> int {
+    if value < low {
+        return low
+    }
+    return if value > high { high } else { value }
+}
+
+fn main() {
+    println(clamp(15, low: 0, high: 10))
+    println(clamp(value: -3, low: 0, high: 10))
+}
+```
+
+```text
+10
+0
+```
+
+- Named arguments follow the parameter order, and come after any unnamed ones.
+- The names are checked: a misspelt or repeated name is a compile error.
+- They work for functions, methods, `static fn`s, `init`, struct fields and enum
+  variants (`Shape.Box(w: 2, h: 3)`), but not for a function stored in a variable, whose
+  parameters have no names.
+
 ## Parameters are values
 
 Parameters cannot be reassigned inside the function (they behave like `let`). Copy into a
@@ -191,8 +220,10 @@ fn main() {
 - No default parameter values and no overloading (two functions with the same name).
 - Functions themselves can be stored, passed and returned — see [Lambdas](12-lambdas.md) —
   and written once for many types — see [Generics](13-generics.md).
-- Built-in names (`print`, `len`, `str`, `int`, `float`, `input`) cannot be redefined.
-- There are no global variables; pass values as parameters or keep them in objects.
+- Built-in names (`print`, `println`, `len`, `str`, `int`, `float`, `input`, `chr`, `args`)
+  cannot be redefined.
+- There are no global variables to change; use a `const` for a fixed value and a
+  `static var` member for shared state (see [Classes](09-classes.md#constants-and-static-variables)).
 
 ---
 

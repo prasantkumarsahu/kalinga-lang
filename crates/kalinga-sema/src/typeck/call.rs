@@ -1,13 +1,14 @@
 //! Calls by name: functions, constructors, `Ok` / `Err`, `Channel` / `Shared`, built-in
 //! functions, static methods and enum variants, with type-argument inference.
 
+use std::borrow::Cow;
 use std::collections::HashMap;
 
 use kalinga_syntax::ast::*;
 use kalinga_syntax::error::{Result, Span, err};
 
 use super::{Checker, Ctx, texpr};
-use crate::model::{BUILTINS, at_pos};
+use crate::model::{BUILTINS, StructInfo, at_pos};
 use crate::tast::*;
 use crate::types::{Signature, Type, has_params, subst, unify};
 
@@ -187,6 +188,12 @@ impl Checker<'_> {
         pos: Span,
     ) -> Result<TExpr> {
         let info = self.m.structs[name].clone();
+        if info.tparams.is_empty()
+            && let Some(slots) = self.slots(args, &info.fields, name)?
+        {
+            return self.struct_from_slots(cx, name, &info, slots, pos);
+        }
+        let args = &*self.by_position(args, &info.fields, name)?;
         let (min, max) = (info.required_args(), info.fields.len());
         if args.len() < min || args.len() > max {
             let generic = !info.tparams.is_empty();
@@ -224,11 +231,102 @@ impl Checker<'_> {
         Ok(texpr(TExprKind::Call { callee, args: given }, ty, pos))
     }
 
+    /// A non-generic struct built with named fields; fields left out take their defaults.
+    fn struct_from_slots(
+        &self,
+        cx: &mut Ctx,
+        name: &str,
+        info: &StructInfo,
+        slots: Vec<Option<&Expr>>,
+        pos: Span,
+    ) -> Result<TExpr> {
+        let mut given = vec![];
+        for ((slot, (field, t)), decl) in slots.into_iter().zip(&info.fields).zip(&info.decl.fields) {
+            given.push(match (slot, &decl.default) {
+                (Some(a), _) => self.expr_to(cx, a, t)?,
+                (None, Some(default)) => self.expr_to(&mut Ctx::new(None, Type::Void, false), default, t)?,
+                (None, None) => return err(format!("`{}(...)` needs `{}` (it has no default)", name, field), pos),
+            });
+        }
+        let callee = Callee::StructNew { strukt: name.to_string(), targs: vec![] };
+        Ok(texpr(TExprKind::Call { callee, args: given }, Type::Struct(name.to_string(), vec![]), pos))
+    }
+
+    /// The arguments in parameter order, when some are named (`w: 10`); `None` when none
+    /// are. Named arguments come after positional ones and follow the parameter order; a
+    /// `None` slot is a parameter left out.
+    fn slots<'a>(
+        &self,
+        args: &'a [Expr],
+        params: &[(String, Type)],
+        what: &str,
+    ) -> Result<Option<Vec<Option<&'a Expr>>>> {
+        if !args.iter().any(|a| matches!(a.kind, ExprKind::Named(..))) {
+            return Ok(None);
+        }
+        let names: Vec<&str> = params.iter().map(|(n, _)| n.as_str()).collect();
+        let mut slots: Vec<Option<&Expr>> = vec![None; params.len()];
+        let mut next = 0;
+        let mut named = false;
+        for a in args {
+            let (i, value) = match &a.kind {
+                ExprKind::Named(n, value) => {
+                    named = true;
+                    let Some(i) = names.iter().position(|p| p == n) else {
+                        return err(
+                            format!("`{}` has no parameter `{}` (its parameters: {})", what, n, names.join(", ")),
+                            a.pos,
+                        );
+                    };
+                    (i, &**value)
+                }
+                _ if named => return err("an argument without a name cannot follow a named one", a.pos),
+                _ if next >= params.len() => {
+                    return err(format!("`{}` takes {} argument(s)", what, params.len()), a.pos);
+                }
+                _ => (next, a),
+            };
+            if slots[i].is_some() {
+                return err(format!("`{}` is given twice", names[i]), a.pos);
+            }
+            if i < next {
+                return err(
+                    format!(
+                        "`{}` must come before `{}`: named arguments follow the parameter order ({})",
+                        names[i],
+                        names[next - 1],
+                        names.join(", ")
+                    ),
+                    a.pos,
+                );
+            }
+            slots[i] = Some(value);
+            next = i + 1;
+        }
+        Ok(Some(slots))
+    }
+
+    /// The arguments in parameter order, with names removed; every parameter before the
+    /// last one given must be given.
+    fn by_position<'a>(&self, args: &'a [Expr], params: &[(String, Type)], what: &str) -> Result<Cow<'a, [Expr]>> {
+        let Some(slots) = self.slots(args, params, what)? else { return Ok(Cow::Borrowed(args)) };
+        let last = slots.iter().rposition(Option::is_some).map_or(0, |i| i + 1);
+        let mut out = vec![];
+        for (slot, (name, _)) in slots[..last].iter().zip(params) {
+            let Some(e) = slot else {
+                return err(format!("`{}` needs an argument for `{}`", what, name), args[0].pos);
+            };
+            out.push((*e).clone());
+        }
+        Ok(Cow::Owned(out))
+    }
+
     fn class_new(&self, cx: &mut Ctx, name: &str, args: &[Expr], pos: Span) -> Result<TExpr> {
         if self.m.classes[name].decl.is_abstract {
             return err(format!("`{}` is abstract and cannot be created; create one of its subclasses", name), pos);
         }
         let params = self.m.find_init(name).map(|(_, s)| s.params).unwrap_or_default();
+        let args = self.by_position(args, &params, name)?;
         if args.len() != params.len() {
             return err(
                 format!("`{}(...)` takes {} argument(s) but {} were given", name, params.len(), args.len()),
@@ -255,6 +353,12 @@ impl Checker<'_> {
         pos: Span,
         what: &str,
     ) -> Result<TExpr> {
+        if let Some(a) = args.iter().find(|a| matches!(a.kind, ExprKind::Named(..))) {
+            return err(
+                format!("`{}` is a function value, whose parameters have no names; pass the arguments in order", what),
+                a.pos,
+            );
+        }
         let sig = Signature {
             params: ps.iter().enumerate().map(|(i, t)| (format!("p{}", i), t.clone())).collect(),
             ret: ret.clone(),
@@ -272,6 +376,7 @@ impl Checker<'_> {
         pos: Span,
         what: &str,
     ) -> Result<Vec<TExpr>> {
+        let args = self.by_position(args, &sig.params, what)?;
         if args.len() != sig.params.len() {
             return err(
                 format!("`{}` takes {} argument(s) but {} were given", what, sig.params.len(), args.len()),
@@ -295,6 +400,7 @@ impl Checker<'_> {
         pos: Span,
         what: &str,
     ) -> Result<Inferred> {
+        let args = &*self.by_position(args, &sig.params, what)?;
         if args.len() != sig.params.len() {
             return err(
                 format!("`{}` takes {} argument(s) but {} were given", what, sig.params.len(), args.len()),

@@ -1,0 +1,63 @@
+struct Rect {
+    x: float = 0
+    y: float = 0
+    w: float
+    h: float
+
+    fn area() -> float {
+        return self.w * self.h
+    }
+
+    static fn square(side: float, at_x: float) -> Rect {
+        return Rect(at_x, 0, side, side)
+    }
+
+    fn moved(dx: float, dy: float) -> Rect {
+        return Rect(self.x + dx, self.y + dy, self.w, self.h)
+    }
+}
+
+class Player {
+    name: str
+    speed: float
+
+    init(name: str, speed: float) {
+        self.name = name
+        self.speed = speed
+    }
+
+    fn describe(prefix: str, loud: bool) -> str {
+        let s = "{prefix} {self.name} at {self.speed}"
+        return if loud { s.upper() } else { s }
+    }
+}
+
+enum Shape {
+    Circle(r: float)
+    Box(w: float, h: float)
+}
+
+fn clamp(value: int, low: int, high: int) -> int {
+    if value < low {
+        return low
+    }
+    return if value > high { high } else { value }
+}
+
+fn pick<T>(first: T, second: T, take_second: bool) -> T {
+    return if take_second { second } else { first }
+}
+
+fn main() {
+    let r = Rect(w: 10, h: 5)
+    println(r, r.area())
+    let r2 = Rect(1, y: 2, w: 3, h: 4)
+    println(r2)
+    println(Rect.square(side: 2, at_x: 7))
+    println(r.moved(dx: 1, dy: -1))
+    let p = Player(name: "Asha", speed: 2.5)
+    println(p.describe(prefix: "hi", loud: true))
+    println(Shape.Box(w: 2, h: 3))
+    println(clamp(15, low: 0, high: 10), clamp(value: -3, low: 0, high: 10))
+    println(pick(first: "a", second: "b", take_second: true))
+}

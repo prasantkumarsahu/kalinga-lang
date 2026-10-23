@@ -298,7 +298,8 @@ primary     = INT | FLOAT | STRING | "true" | "false" | "none" | "self"
             | "match" expr "{" { pattern "=>" ( value_block | expr ) [ "," ] } "}"
             | "(" expr ")" | "[" [ expr { "," expr } [ "," ] ] "]"
             | "{" [ expr ":" expr { "," expr ":" expr } [ "," ] ] "}" ;
-args        = "(" [ expr { "," expr } [ "," ] ] ")" ;
+args        = "(" [ arg { "," arg } [ "," ] ] ")" ;
+arg         = [ IDENT ":" ] expr ;                   (* named arguments come last, in parameter order *)
 value_block = "{" { statement } expr "}" ;
 ```
 

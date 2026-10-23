@@ -28,6 +28,9 @@ Vec2(x: 3.0, y: 4.0) Vec2(x: 10.0, y: 4.0) true
 - `Name(...)` takes the fields in the order they are declared. Fields with a default may be
   left off at the end: with `struct Light { color: str, on: bool = true }`, both
   `Light("red")` and `Light("red", false)` work.
+- Fields can be named, as [arguments](04-functions.md#named-arguments) are: with
+  `struct Rect { x: float = 0, y: float = 0, w: float, h: float }`, `Rect(w: 10, h: 5)`
+  leaves `x` and `y` at their defaults.
 - Structs have no `init`. For other ways to build one, write a `static fn` (below).
 - A struct whose fields are all printable can be printed and compared with `==`.
 - Changing a field needs a `var`: `let a = ...; a.x = 1.0` is an error, because `a` is a

@@ -300,6 +300,8 @@ pub enum ExprKind {
         value: Box<Expr>,
         arms: Vec<MatchArm>,
     },
+    /// `name: value`, a named argument of a call.
+    Named(String, Box<Expr>),
     /// `fn(x: int) -> int { ... }` or `fn(x) => x * 2`
     Lambda {
         params: Vec<(String, Option<TypeExpr>, Span)>,
@@ -337,7 +339,8 @@ impl Expr {
             | ExprKind::Field(a, _)
             | ExprKind::Await(a)
             | ExprKind::Try(a)
-            | ExprKind::Downcast { value: a, .. } => vec![a],
+            | ExprKind::Downcast { value: a, .. }
+            | ExprKind::Named(_, a) => vec![a],
             ExprKind::MethodCall(recv, _, args) => std::iter::once(&**recv).chain(args).collect(),
             ExprKind::Slice(base, from, to) => {
                 std::iter::once(&**base).chain(from.as_deref()).chain(to.as_deref()).collect()
