@@ -71,11 +71,21 @@ struct Ctx {
     tparams: Vec<String>,
 }
 
+/// A generated lambda before it is wrapped (as `Rc<dyn Fn>` or as a thread closure).
+struct LambdaParts {
+    captures: Vec<(String, String, Type)>,
+    params: Vec<String>,
+    ret_sig: String,
+    body: String,
+    ty: Type,
+}
+
 /// Variables from outside a lambda that its body uses (they are cloned into the closure).
 struct LambdaFrame {
     /// Scopes at or above this index belong to the lambda.
     boundary: usize,
-    captures: RefCell<Vec<String>>,
+    /// (Rust name, Kalinga name, type)
+    captures: RefCell<Vec<(String, String, Type)>>,
 }
 
 impl Ctx {
@@ -104,8 +114,8 @@ impl Ctx {
                 var.mutable = false;
                 var.captured = true;
                 let mut caps = frame.captures.borrow_mut();
-                if !caps.contains(&var.rust) {
-                    caps.push(var.rust.clone());
+                if !caps.iter().any(|(r, _, _)| r == &var.rust) {
+                    caps.push((var.rust.clone(), name.to_string(), var.ty.clone()));
                 }
             }
         }
@@ -154,6 +164,9 @@ impl<'a> Gen<'a> {
             Type::Map(k, v) => format!("BTreeMap<{}, {}>", self.rty(k), self.rty(v)),
             Type::Optional(i) => format!("Option<{}>", self.rty(i)),
             Type::Result(t, e) => format!("Result<{}, {}>", self.rty(t), self.rty(e)),
+            Type::Channel(t) => format!("__Channel<{}>", self.rty(t)),
+            Type::Shared(t) => format!("__Shared<{}>", self.rty(t)),
+            Type::Task(t) => format!("__Task<{}>", self.rty(t)),
             Type::Class(c) => {
                 if self.m.has_subclasses(c) {
                     format!("Rc<RefCell<dyn {}>>", class_trait(c))
@@ -499,7 +512,7 @@ impl<'a> Gen<'a> {
     /// `Math`, `Random` or `Time` used as a receiver (unless a variable shadows it).
     fn library_receiver(&self, cx: &Ctx, recv: &Expr) -> Option<String> {
         match &recv.kind {
-            ExprKind::Ident(n) if matches!(n.as_str(), "Math" | "Random" | "Time") && cx.lookup(n).is_none() => Some(n.clone()),
+            ExprKind::Ident(n) if matches!(n.as_str(), "Math" | "Random" | "Time" | "Thread") && cx.lookup(n).is_none() => Some(n.clone()),
             _ => None,
         }
     }
@@ -611,6 +624,15 @@ impl<'a> Gen<'a> {
                     return err(format!("`Random.shuffle` needs an array, found `{}`", t), args[0].pos);
                 }
                 Ok((format!("{{ {}__shuffle(&mut {}); }}", pre, place), Type::Void))
+            }
+            ("Thread", "spawn") => {
+                arity(1)?;
+                let (closure, rt) = self.thread_closure(cx, &args[0], vec![], "Thread.spawn")?;
+                Ok((format!("__Task::spawn({})", closure), Type::Task(Box::new(rt))))
+            }
+            ("Thread", "cores") => {
+                arity(0)?;
+                Ok(("__cores()".into(), Type::Int))
             }
             ("Time", "now") => {
                 arity(0)?;
@@ -1874,6 +1896,59 @@ impl<'a> Gen<'a> {
         expected: Option<&Type>,
         pos: Pos,
     ) -> Result<(String, Type)> {
+        let parts = self.lambda_parts(cx, params, ret, body, expected, pos)?;
+        let caps: String = parts.captures.iter().map(|(c, _, _)| format!("let {} = {}.clone(); ", c, c)).collect();
+        Ok((
+            format!(
+                "{{ {}let __f: {} = Rc::new(move |{}|{} {}); __f }}",
+                caps,
+                self.rty(&parts.ty),
+                parts.params.join(", "),
+                parts.ret_sig,
+                parts.body
+            ),
+            parts.ty,
+        ))
+    }
+
+    /// A lambda compiled as a plain `move` closure that may run on another thread: every
+    /// captured variable, parameter and the result must be sendable.
+    fn thread_closure(&self, cx: &mut Ctx, e: &Expr, params: Vec<Type>, what: &str) -> Result<(String, Type)> {
+        let ExprKind::Lambda { params: ps, ret, body } = &e.kind else {
+            return err(format!("`{}` needs a lambda written right here, e.g. `{}(fn() => ...)`", what, what), e.pos);
+        };
+        let hint = Type::Func(params, Box::new(Type::Unknown));
+        let parts = self.lambda_parts(cx, ps, ret.as_ref(), body, Some(&hint), e.pos)?;
+        for (_, name, t) in &parts.captures {
+            if !self.m.is_sendable(t) {
+                return err(
+                    format!(
+                        "`{}` cannot use `{}` here: a `{}` cannot move to another thread (pass plain values, a `Channel` or a `Shared`)",
+                        what, name, t
+                    ),
+                    e.pos,
+                );
+            }
+        }
+        let Type::Func(pts, rt) = &parts.ty else { unreachable!() };
+        for t in pts.iter().chain(std::iter::once(&**rt)) {
+            if !self.m.is_sendable(t) {
+                return err(format!("`{}` works with values that can move between threads; `{}` cannot", what, t), e.pos);
+            }
+        }
+        let caps: String = parts.captures.iter().map(|(c, _, _)| format!("let {} = {}.clone(); ", c, c)).collect();
+        Ok((format!("{{ {}move |{}|{} {} }}", caps, parts.params.join(", "), parts.ret_sig, parts.body), (**rt).clone()))
+    }
+
+    fn lambda_parts(
+        &self,
+        cx: &mut Ctx,
+        params: &[(String, Option<TypeExpr>, Pos)],
+        ret: Option<&TypeExpr>,
+        body: &LambdaBody,
+        expected: Option<&Type>,
+        pos: Pos,
+    ) -> Result<LambdaParts> {
         let hint = match expected {
             Some(Type::Func(ps, r)) if ps.len() == params.len() => Some((ps.clone(), (**r).clone())),
             _ => None,
@@ -1934,20 +2009,9 @@ impl<'a> Gen<'a> {
         let (rust_params, code, rt) = result?;
 
         let ty = Type::Func(ptypes, Box::new(rt.clone()));
-        let caps: String = frame.captures.borrow().iter().map(|c| format!("let {} = {}.clone(); ", c, c)).collect();
         let ret_sig = if rt == Type::Void { String::new() } else { format!(" -> {}", self.rty(&rt)) };
         let body_code = if code.starts_with('{') { code } else { format!("{{ {} }}", code) };
-        Ok((
-            format!(
-                "{{ {}let __f: {} = Rc::new(move |{}|{} {}); __f }}",
-                caps,
-                self.rty(&ty),
-                rust_params.join(", "),
-                ret_sig,
-                body_code
-            ),
-            ty,
-        ))
+        Ok(LambdaParts { captures: frame.captures.into_inner(), params: rust_params, ret_sig, body: body_code, ty })
     }
 
     fn downcast(&self, cx: &mut Ctx, value: &Expr, target: &str, test_only: bool, pos: Pos) -> Result<(String, Type)> {
@@ -2045,6 +2109,41 @@ impl<'a> Gen<'a> {
 
     #[allow(clippy::too_many_arguments)]
     fn call(&self, cx: &mut Ctx, name: &str, targs: &[TypeExpr], args: &[Expr], expected: Option<&Type>, pos: Pos) -> Result<(String, Type)> {
+        if (name == "Channel" || name == "Shared") && cx.lookup(name).is_none() {
+            let explicit = match targs {
+                [] => None,
+                [t] => Some(self.m.resolve(t, &cx.tparams).map_err(|e| crate::checker::at_pos(e, pos))?),
+                _ => return err(format!("`{}` takes one type argument", name), pos),
+            };
+            if name == "Channel" {
+                if !args.is_empty() {
+                    return err("`Channel<T>()` takes no arguments", pos);
+                }
+                let elem = match (explicit, expected) {
+                    (Some(t), _) => t,
+                    (None, Some(Type::Channel(t))) => (**t).clone(),
+                    _ => return err("cannot tell what the channel carries; write `Channel<int>()`", pos),
+                };
+                if !self.m.is_sendable(&elem) {
+                    return err(format!("a channel can only carry values that can move between threads, not `{}`", elem), pos);
+                }
+                return Ok((format!("__Channel::<{}>::new()", self.rty(&elem)), Type::Channel(Box::new(elem))));
+            }
+            if args.len() != 1 {
+                return err("`Shared(value)` takes the starting value", pos);
+            }
+            let (code, t) = match explicit.or_else(|| match expected {
+                Some(Type::Shared(t)) => Some((**t).clone()),
+                _ => None,
+            }) {
+                Some(t) => (self.expr_to(cx, &args[0], &t)?, t),
+                None => self.expr(cx, &args[0], None)?,
+            };
+            if !self.m.is_sendable(&t) {
+                return err(format!("`Shared` can only hold values that can move between threads, not `{}`", t), pos);
+            }
+            return Ok((format!("__Shared::new({})", code), Type::Shared(Box::new(t))));
+        }
         if (name == "Ok" || name == "Err") && cx.lookup(name).is_none() {
             let rt = match expected {
                 Some(t @ Type::Result(..)) => t.clone(),
@@ -2297,6 +2396,50 @@ impl<'a> Gen<'a> {
 
         // Mutating array/map methods need a mutable place.
         let recv_ty = self.recv(cx, recv)?.1;
+        if let Type::Task(t) | Type::Channel(t) | Type::Shared(t) = &recv_ty {
+            let (setup, rcode, _) = self.receiver(cx, recv)?;
+            let call = |s: String| format!("{{ {}{} }}", setup, s);
+            return match (&recv_ty, name, args.len()) {
+                (Type::Task(_), "join", 0) => Ok((call(format!("{}.join()", rcode)), (**t).clone())),
+                (Type::Task(_), "is_done", 0) => Ok((call(format!("{}.is_done()", rcode)), Type::Bool)),
+                (Type::Channel(_), "send", 1) => {
+                    let v = self.expr_to(cx, &args[0], t)?;
+                    Ok((format!("{{ let __v = {}; {}{}.send(__v) }}", v, setup, rcode), Type::Void))
+                }
+                (Type::Channel(_), "receive", 0) => Ok((call(format!("{}.receive()", rcode)), Type::Optional(t.clone()))),
+                (Type::Channel(_), "try_receive", 0) => Ok((call(format!("{}.try_receive()", rcode)), Type::Optional(t.clone()))),
+                (Type::Channel(_), "close", 0) => Ok((call(format!("{}.close()", rcode)), Type::Void)),
+                (Type::Shared(_), "get", 0) => Ok((call(format!("{}.get()", rcode)), (**t).clone())),
+                (Type::Shared(_), "set", 1) => {
+                    let v = self.expr_to(cx, &args[0], t)?;
+                    Ok((format!("{{ let __v = {}; {}{}.set(__v) }}", v, setup, rcode), Type::Void))
+                }
+                (Type::Shared(_), "update", 1) => {
+                    let fty = Type::Func(vec![(**t).clone()], t.clone());
+                    let f = self.expr_to(cx, &args[0], &fty)?;
+                    Ok((format!("{{ let __f = {}; {}{}.update(|__v| __f(__v)) }}", f, setup, rcode), Type::Void))
+                }
+                (Type::Task(_), _, _) => err(format!("`Task` has no method `{}` with {} argument(s) (use `join()` or `is_done()`)", name, args.len()), pos),
+                (Type::Channel(_), _, _) => {
+                    err(format!("`Channel` has no method `{}` with {} argument(s) (use send, receive, try_receive or close)", name, args.len()), pos)
+                }
+                _ => err(format!("`Shared` has no method `{}` with {} argument(s) (use get, set or update)", name, args.len()), pos),
+            };
+        }
+        if let (Type::Array(elem), "par_map") = (&recv_ty, name) {
+            if args.len() != 1 {
+                return err("`par_map` takes one function: `xs.par_map(fn(x) => ...)`", pos);
+            }
+            if !self.m.is_sendable(elem) {
+                return err(format!("`par_map` needs elements that can move between threads; `{}` cannot", elem), pos);
+            }
+            let (closure, rt) = self.thread_closure(cx, &args[0], vec![(**elem).clone()], "par_map")?;
+            if rt == Type::Void {
+                return err("the function given to `par_map` must return a value", args[0].pos);
+            }
+            let (setup, rcode, _) = self.receiver(cx, recv)?;
+            return Ok((format!("{{ let __f = {}; {}__par_map(&{}, &__f) }}", closure, setup, rcode), Type::Array(Box::new(rt))));
+        }
         if let Type::Result(t, e) = &recv_ty {
             let (setup, rcode, _) = self.receiver(cx, recv)?;
             let (code, ty) = match (name, args.len()) {
@@ -2669,8 +2812,11 @@ fn __clamp<T: PartialOrd>(x: T, lo: T, hi: T) -> T {
 // Random: xorshift64*, seeded from the clock (fast, not for cryptography).
 thread_local! {
     static __RNG: std::cell::Cell<u64> = std::cell::Cell::new({
+        use std::hash::{Hash, Hasher};
         let t = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos() as u64).unwrap_or(1);
-        (t ^ 0x9E37_79B9_7F4A_7C15) | 1
+        let mut h = std::collections::hash_map::DefaultHasher::new();
+        std::thread::current().id().hash(&mut h);
+        (t ^ h.finish() ^ 0x9E37_79B9_7F4A_7C15) | 1
     });
 }
 fn __rand_u64() -> u64 {
@@ -2699,6 +2845,90 @@ fn __shuffle<T>(xs: &mut Vec<T>) {
         let j = __rand_int(0, i as i64 + 1) as usize;
         xs.swap(i, j);
     }
+}
+
+// Threads: share-nothing tasks, channels and shared cells.
+fn __cores() -> i64 {
+    std::thread::available_parallelism().map(|n| n.get() as i64).unwrap_or(1)
+}
+struct __Task<T> {
+    handle: Rc<RefCell<Option<std::thread::JoinHandle<T>>>>,
+}
+impl<T> Clone for __Task<T> {
+    fn clone(&self) -> Self { __Task { handle: self.handle.clone() } }
+}
+impl<T: Send + 'static> __Task<T> {
+    fn spawn<F: FnOnce() -> T + Send + 'static>(f: F) -> __Task<T> {
+        let h = std::thread::Builder::new().stack_size(64 * 1024 * 1024).spawn(f).expect("cannot start a thread");
+        __Task { handle: Rc::new(RefCell::new(Some(h))) }
+    }
+    fn join(&self) -> T {
+        let h = self.handle.borrow_mut().take().unwrap_or_else(|| panic!("this task was already joined"));
+        match h.join() { Ok(v) => v, Err(_) => panic!("a thread stopped with an error (see above)") }
+    }
+    fn is_done(&self) -> bool {
+        self.handle.borrow().as_ref().map(|h| h.is_finished()).unwrap_or(true)
+    }
+}
+struct __ChanState<T> {
+    queue: std::collections::VecDeque<T>,
+    closed: bool,
+}
+struct __Channel<T> {
+    inner: std::sync::Arc<(std::sync::Mutex<__ChanState<T>>, std::sync::Condvar)>,
+}
+impl<T> Clone for __Channel<T> {
+    fn clone(&self) -> Self { __Channel { inner: self.inner.clone() } }
+}
+impl<T> __Channel<T> {
+    fn new() -> Self {
+        __Channel { inner: std::sync::Arc::new((std::sync::Mutex::new(__ChanState { queue: Default::default(), closed: false }), std::sync::Condvar::new())) }
+    }
+    fn send(&self, v: T) {
+        let mut st = self.inner.0.lock().unwrap();
+        if st.closed { panic!("send on a closed channel") }
+        st.queue.push_back(v);
+        self.inner.1.notify_one();
+    }
+    fn receive(&self) -> Option<T> {
+        let mut st = self.inner.0.lock().unwrap();
+        loop {
+            if let Some(v) = st.queue.pop_front() { return Some(v); }
+            if st.closed { return None; }
+            st = self.inner.1.wait(st).unwrap();
+        }
+    }
+    fn try_receive(&self) -> Option<T> {
+        self.inner.0.lock().unwrap().queue.pop_front()
+    }
+    fn close(&self) {
+        self.inner.0.lock().unwrap().closed = true;
+        self.inner.1.notify_all();
+    }
+}
+struct __Shared<T> {
+    inner: std::sync::Arc<std::sync::Mutex<T>>,
+}
+impl<T> Clone for __Shared<T> {
+    fn clone(&self) -> Self { __Shared { inner: self.inner.clone() } }
+}
+impl<T: Clone> __Shared<T> {
+    fn new(v: T) -> Self { __Shared { inner: std::sync::Arc::new(std::sync::Mutex::new(v)) } }
+    fn get(&self) -> T { self.inner.lock().unwrap_or_else(|e| e.into_inner()).clone() }
+    fn set(&self, v: T) { *self.inner.lock().unwrap_or_else(|e| e.into_inner()) = v; }
+    fn update(&self, f: impl FnOnce(T) -> T) {
+        let mut g = self.inner.lock().unwrap_or_else(|e| e.into_inner());
+        let v = (*g).clone();
+        *g = f(v);
+    }
+}
+fn __par_map<T: Clone + Sync, U: Send, F: Fn(T) -> U + Sync>(xs: &Vec<T>, f: &F) -> Vec<U> {
+    let workers = (__cores() as usize).max(1);
+    let chunk = ((xs.len() + workers - 1) / workers).max(1);
+    std::thread::scope(|s| {
+        let parts: Vec<_> = xs.chunks(chunk).map(|c| s.spawn(move || c.iter().map(|x| f(x.clone())).collect::<Vec<U>>())).collect();
+        parts.into_iter().flat_map(|p| p.join().unwrap_or_else(|_| panic!("a par_map worker stopped with an error (see above)"))).collect()
+    })
 }
 
 // Time

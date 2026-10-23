@@ -460,3 +460,21 @@ fn generic_structs_and_left_operators() {
     assert_compile_error("gstruct_arity", "struct B<T> { v: T }\nfn main() { let b: B = B(1) }", "needs 1 type argument");
     assert_compile_error("gstruct_print", "struct B<T> { v: T }\nclass C {}\nfn main() { print(B(C())) }", "cannot print");
 }
+
+#[test]
+fn threads() {
+    let (code, out, err) = run_file("tests/threads.kl");
+    assert_eq!(code, 0, "{}", err);
+    assert_eq!(out, "joined: 5050 true\nworker handled 5 jobs\ntotal 150\ncounter 8000\npar_map equal: true cores: true\n");
+    let p = "class Player {\n    hp: int\n}\n";
+    assert_compile_error("spawn_object", &format!("{}fn main() {{\n    let p = Player()\n    let t = Thread.spawn(fn() => p.hp)\n}}", p), "cannot use `p` here");
+    assert_compile_error("channel_object", &format!("{}fn main() {{ let c = Channel<Player>() }}", p), "a channel can only carry values");
+    assert_compile_error("spawn_fn_name", "fn work() -> int {\n    return 1\n}\nfn main() { let t = Thread.spawn(work) }", "needs a lambda written right here");
+    let (code, out, err) = run_source(
+        "thread_fail",
+        "fn main() {\n    let t = Thread.spawn(fn() -> int {\n        let xs = [1]\n        return xs[5]\n    })\n    print(\"before join\")\n    print(t.join())\n}\n",
+    );
+    assert_eq!(code, 101);
+    assert_eq!(out, "before join\n");
+    assert!(err.contains("a thread stopped with an error"), "{}", err);
+}

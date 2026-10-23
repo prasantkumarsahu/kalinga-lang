@@ -27,6 +27,12 @@ pub enum Type {
     Extern(String),
     /// `Result<T, E>`: `Ok(T)` or `Err(E)`.
     Result(Box<Type>, Box<Type>),
+    /// `Channel<T>`: a queue that threads use to pass values.
+    Channel(Box<Type>),
+    /// `Shared<T>`: a value several threads can read and change (behind a lock).
+    Shared(Box<Type>),
+    /// `Task<T>`: a running thread that will produce a `T`.
+    Task(Box<Type>),
     /// `fn(A, B) -> R`
     Func(Vec<Type>, Box<Type>),
     /// Placeholder for "not known yet" in expected-type hints (lambda results).
@@ -70,6 +76,9 @@ impl fmt::Display for Type {
             Type::Unknown => write!(f, "_"),
             Type::Param(n) => write!(f, "{}", n),
             Type::Result(t, e) => write!(f, "Result<{}, {}>", t, e),
+            Type::Channel(t) => write!(f, "Channel<{}>", t),
+            Type::Shared(t) => write!(f, "Shared<{}>", t),
+            Type::Task(t) => write!(f, "Task<{}>", t),
             Type::Generic(n, args) => {
                 let a: Vec<String> = args.iter().map(|t| t.to_string()).collect();
                 write!(f, "{}<{}>", n, a.join(", "))
@@ -218,7 +227,7 @@ pub struct Model {
 
 pub const BUILTINS: &[&str] = &["print", "len", "str", "int", "float", "input"];
 const RESERVED_TYPES: &[&str] = &[
-    "Rc", "RefCell", "String", "Vec", "BTreeMap", "Result", "Ok", "Err", "Math", "Random", "Time", "Option", "Some", "None", "Box", "Self", "std", "main",
+    "Rc", "RefCell", "String", "Vec", "BTreeMap", "Result", "Ok", "Err", "Thread", "Channel", "Shared", "Task", "Math", "Random", "Time", "Option", "Some", "None", "Box", "Self", "std", "main",
     "int", "float", "bool", "str", "void",
 ];
 
@@ -565,7 +574,8 @@ impl Model {
                 if ty == Type::Void {
                     return err("fields cannot have type void", f.pos);
                 }
-                if (ty.is_object() || matches!(ty, Type::Enum(_) | Type::Func(..) | Type::Struct(..) | Type::Extern(_) | Type::Result(..)))
+                if (ty.is_object()
+                    || matches!(ty, Type::Enum(_) | Type::Func(..) | Type::Struct(..) | Type::Extern(_) | Type::Result(..) | Type::Task(_)))
                     && f.default.is_none()
                 {
                     return err(
@@ -965,6 +975,23 @@ impl Model {
         }
     }
 
+    /// Can values of this type be moved to another thread? Plain data, channels and
+    /// shared cells can; objects, function values and type parameters cannot.
+    pub fn is_sendable(&self, t: &Type) -> bool {
+        match t {
+            Type::Int | Type::Float | Type::Bool | Type::Str | Type::Void | Type::Extern(_) => true,
+            Type::Channel(_) | Type::Shared(_) => true,
+            Type::Array(i) | Type::Optional(i) => self.is_sendable(i),
+            Type::Map(k, v) | Type::Result(k, v) => self.is_sendable(k) && self.is_sendable(v),
+            Type::Struct(st, args) => {
+                let map = self.struct_bindings(st, args);
+                self.structs[st].fields.iter().all(|(_, ft)| self.is_sendable(&subst(ft, &map)))
+            }
+            Type::Enum(e) => self.enums[e].variants.iter().all(|(_, fs)| fs.iter().all(|(_, ft)| self.is_sendable(ft))),
+            _ => false,
+        }
+    }
+
     /// `is_plain`, but type parameters count as plain (used for generic struct definitions).
     fn is_plain_params_ok(&self, t: &Type) -> bool {
         match t {
@@ -1067,6 +1094,9 @@ pub fn subst(t: &Type, map: &HashMap<String, Type>) -> Type {
         Type::Generic(n, args) => Type::Generic(n.clone(), args.iter().map(|a| subst(a, map)).collect()),
         Type::Struct(n, args) => Type::Struct(n.clone(), args.iter().map(|a| subst(a, map)).collect()),
         Type::Result(t, e) => Type::Result(Box::new(subst(t, map)), Box::new(subst(e, map))),
+        Type::Channel(t) => Type::Channel(Box::new(subst(t, map))),
+        Type::Shared(t) => Type::Shared(Box::new(subst(t, map))),
+        Type::Task(t) => Type::Task(Box::new(subst(t, map))),
         other => other.clone(),
     }
 }
@@ -1168,6 +1198,17 @@ fn resolve_type(t: &TypeExpr, names: &TypeNames, tparams: &[String]) -> Result<T
                     return err(format!("type parameter `{}` does not take type arguments", n), *pos);
                 }
                 return Ok(Type::Param(n.clone()));
+            }
+            if matches!(n.as_str(), "Channel" | "Shared" | "Task") {
+                if args.len() != 1 {
+                    return err(format!("`{}` needs one type: `{}<int>`", n, n), *pos);
+                }
+                let t = Box::new(resolve_type(&args[0], names, tparams)?);
+                return Ok(match n.as_str() {
+                    "Channel" => Type::Channel(t),
+                    "Shared" => Type::Shared(t),
+                    _ => Type::Task(t),
+                });
             }
             if n == "Result" {
                 if args.len() != 2 {
