@@ -170,12 +170,15 @@ of `init`, required when the base has an `init`), `super.method(...)`.
 
 | Signature | Notes |
 |---|---|
-| `print(values...)` | space-separated, newline at the end; objects are not printable |
+| `print(values...)` | space-separated, no newline (the text appears at once); objects are not printable |
+| `println(values...)` | like `print`, then a newline; `println()` prints an empty line |
 | `len(x: [T] or str) -> int` | characters for `str` |
 | `str(x) -> str` | `int`, `float`, `bool`, `str`, arrays and optionals of these |
 | `int(x) -> int` | from `float` (truncates), `bool`, `str` (runtime error if invalid) |
 | `float(x) -> float` | from `int`, `str` |
 | `input([prompt: str]) -> str` | one line from stdin, without the line ending |
+| `chr(code: int) -> str` | the character with that code point: `chr(65)` is `"A"` |
+| `args() -> [str]` | the command-line arguments, without the program's own name |
 
 `Math`, `Random` and `Time` functions are listed in [Standard Library](15-standard-library.md).
 
@@ -198,6 +201,14 @@ of `init`, required when the base has an `init`), `super.method(...)`.
 | `str` | `len()` | `int` |
 | `str` | `upper()` / `lower()` / `trim()` | `str` |
 | `str` | `contains(s: str)` | `bool` |
+| `str` | `split(sep: str)` | `[str]` (characters when `sep` is `""`) |
+| `str` | `replace(from: str, to: str)` | `str` |
+| `str` | `starts_with(s: str)` / `ends_with(s: str)` | `bool` |
+| `str` | `find(s: str)` | `int?`, the index of the first `s` |
+| `str` | `code_at(i: int)` | `int`, the code point at index `i` |
+| `str` | `chars()` | `[str]` |
+| `str` | `parse_int()` / `parse_float()` | `int?` / `float?` |
+| `[T]` | `join(sep: str)` | `str` (arrays of `str`) |
 | `[T]` | `par_map(f: fn(T) -> U)` | `[U]`, computed on all cores (values only) |
 | `Result<T, E>` | `is_ok()` / `is_err()` | `bool` |
 | `Result<T, E>` | `ok()` / `err()` | `T?` / `E?` |

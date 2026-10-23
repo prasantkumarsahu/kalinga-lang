@@ -19,25 +19,8 @@ impl Gen<'_> {
             TExprKind::ObjectSelf => format!("(self.__self.upgrade().unwrap() as {})", self.rty(&e.ty)),
             TExprKind::Convert(inner) => self.convert(self.expr(inner), &inner.ty, &e.ty),
             TExprKind::Array(items) => format!("vec![{}]", self.exprs(items)),
-            TExprKind::Map(entries) => {
-                let inserts: String =
-                    entries.iter().map(|(k, v)| format!("__m.insert({}, {}); ", self.expr(k), self.expr(v))).collect();
-                format!("{{ let mut __m = BTreeMap::new(); {}__m }}", inserts)
-            }
-            TExprKind::Interp(parts) => {
-                let mut fmt = String::new();
-                let mut args = vec![];
-                for p in parts {
-                    match p {
-                        TInterp::Lit(s) => fmt.push_str(&s.replace('{', "{{").replace('}', "}}")),
-                        TInterp::Expr(x) => {
-                            fmt.push_str("{}");
-                            args.push(format!("__KlShow::__show(&{})", self.expr(x)));
-                        }
-                    }
-                }
-                format!("format!({:?}, {})", fmt, args.join(", "))
-            }
+            TExprKind::Map(entries) => self.map_literal(entries),
+            TExprKind::Interp(parts) => self.interp(parts),
             TExprKind::Neg(v) => format!("(-{})", self.expr(v)),
             TExprKind::Not(v) => format!("(!{})", self.expr(v)),
             TExprKind::Binary(op, l, r) => {
@@ -50,24 +33,8 @@ impl Gen<'_> {
             TExprKind::IsNone { value, negated } => {
                 format!("{}({}).is_none()", if *negated { "!" } else { "" }, self.expr(value))
             }
-            TExprKind::StructOp { index, lhs, rhs: None, .. } => {
-                format!("{{ let __l = {}; __l.__op_{}() }}", self.expr(lhs), index)
-            }
-            TExprKind::StructOp { index, lhs, rhs: Some(rhs), swapped } => {
-                let call =
-                    if *swapped { format!("__r.__op_{}(__l)", index) } else { format!("__l.__op_{}(__r)", index) };
-                format!("{{ let __l = {}; let __r = {}; {} }}", self.expr(lhs), self.expr(rhs), call)
-            }
-            TExprKind::Downcast { value, target, via, test_only } => {
-                let code = self.expr(value);
-                let call = match via {
-                    Cast::Same => format!("Some({})", code),
-                    Cast::Hook(tr) => {
-                        format!("{{ let __x = {}; let __t = {}::__as_{}(&*__x.borrow()); __t }}", code, tr, target)
-                    }
-                };
-                if *test_only { format!("({}).is_some()", call) } else { call }
-            }
+            TExprKind::StructOp { index, lhs, rhs, swapped } => self.struct_op(*index, lhs, rhs.as_deref(), *swapped),
+            TExprKind::Downcast { value, target, via, test_only } => self.downcast(value, target, via, *test_only),
             TExprKind::Lambda(l) => self.lambda(l, &e.ty),
             TExprKind::Await(v) => match v.ty {
                 Type::Task(_) => format!("__task_wait({}).await", self.expr(v)),
@@ -91,19 +58,67 @@ impl Gen<'_> {
                 let (binds, names) = self.bind_args(args);
                 format!("{{ {}{}::{}({}) }}", binds, enum_name, variant, names)
             }
-            TExprKind::Index { base, index } => {
-                let b = self.recv(base);
-                if matches!(base.ty, Type::Map(..)) {
-                    format!("{{ let __k = {}; __map_get(&{}, &__k) }}", self.expr(index), b)
-                } else {
-                    format!("{{ let __i = __idx({}); {} }}", self.expr(index), clone_if(format!("{}[__i]", b), &e.ty))
-                }
-            }
+            TExprKind::Index { base, index } => self.index(base, index, &e.ty),
+            TExprKind::Slice { base, from, to } => self.slice(base, from.as_deref(), to.as_deref()),
             TExprKind::Call { callee, args } => self.call(callee, args, &e.ty),
             TExprKind::Builtin { op, args } => self.builtin(op, args, &e.ty),
             TExprKind::BuiltinMethod { op, recv, args } => self.builtin_method(op, recv, args),
             TExprKind::Mutate { place, op, args } => self.mutate(place, op, args),
         }
+    }
+
+    fn map_literal(&self, entries: &[(TExpr, TExpr)]) -> String {
+        let inserts: String =
+            entries.iter().map(|(k, v)| format!("__m.insert({}, {}); ", self.expr(k), self.expr(v))).collect();
+        format!("{{ let mut __m = BTreeMap::new(); {}__m }}", inserts)
+    }
+
+    /// `"text {x}"` as `format!`, showing each value the Kalinga way.
+    fn interp(&self, parts: &[TInterp]) -> String {
+        let mut fmt = String::new();
+        let mut args = vec![];
+        for p in parts {
+            match p {
+                TInterp::Lit(s) => fmt.push_str(&s.replace('{', "{{").replace('}', "}}")),
+                TInterp::Expr(x) => {
+                    fmt.push_str("{}");
+                    args.push(format!("__KlShow::__show(&{})", self.expr(x)));
+                }
+            }
+        }
+        format!("format!({:?}, {})", fmt, args.join(", "))
+    }
+
+    fn struct_op(&self, index: usize, lhs: &TExpr, rhs: Option<&TExpr>, swapped: bool) -> String {
+        let Some(rhs) = rhs else { return format!("{{ let __l = {}; __l.__op_{}() }}", self.expr(lhs), index) };
+        let call = if swapped { format!("__r.__op_{}(__l)", index) } else { format!("__l.__op_{}(__r)", index) };
+        format!("{{ let __l = {}; let __r = {}; {} }}", self.expr(lhs), self.expr(rhs), call)
+    }
+
+    fn downcast(&self, value: &TExpr, target: &str, via: &Cast, test_only: bool) -> String {
+        let code = self.expr(value);
+        let call = match via {
+            Cast::Same => format!("Some({})", code),
+            Cast::Hook(tr) => {
+                format!("{{ let __x = {}; let __t = {}::__as_{}(&*__x.borrow()); __t }}", code, tr, target)
+            }
+        };
+        if test_only { format!("({}).is_some()", call) } else { call }
+    }
+
+    fn index(&self, base: &TExpr, index: &TExpr, ty: &Type) -> String {
+        let b = self.recv(base);
+        match base.ty {
+            Type::Map(..) => format!("{{ let __k = {}; __map_get(&{}, &__k) }}", self.expr(index), b),
+            Type::Str => format!("__char_at(&{}, {})", b, self.expr(index)),
+            _ => format!("{{ let __i = __idx({}); {} }}", self.expr(index), clone_if(format!("{}[__i]", b), ty)),
+        }
+    }
+
+    fn slice(&self, base: &TExpr, from: Option<&TExpr>, to: Option<&TExpr>) -> String {
+        let bound = |b: Option<&TExpr>| b.map_or("None".into(), |x| format!("Some({})", self.expr(x)));
+        let f = if base.ty == Type::Str { "__slice_str" } else { "__slice_vec" };
+        format!("{}(&{}, {}, {})", f, self.recv(base), bound(from), bound(to))
     }
 
     fn exprs(&self, es: &[TExpr]) -> String {
@@ -308,6 +323,8 @@ impl Gen<'_> {
                 _ => format!("(({}) as f64)", a(0)),
             },
             Input => format!("__input(&{})", if args.is_empty() { "String::new()".to_string() } else { a(0) }),
+            Chr => format!("__chr({})", a(0)),
+            Args => "std::env::args().skip(1).collect::<Vec<String>>()".into(),
             MathUnary(f) => format!("({}).{}()", a(0), f),
             MathBinary(f) => format!("({}).{}({})", a(0), f, a(1)),
             Lerp => format!("{{ let __a = {}; __a + ({} - __a) * {} }}", a(0), a(1), a(2)),
@@ -402,6 +419,16 @@ impl Gen<'_> {
             Lower => wrap(format!("{}.to_lowercase()", r)),
             Trim => wrap(format!("{}.trim().to_string()", r)),
             StrContains => wrap(format!("{}.contains(({}).as_str())", r, a(0))),
+            Split => wrap(format!("__split(&{}, &{})", r, a(0))),
+            Replace => wrap(format!("{}.replace(({}).as_str(), ({}).as_str())", r, a(0), a(1))),
+            StartsWith => wrap(format!("{}.starts_with(({}).as_str())", r, a(0))),
+            EndsWith => wrap(format!("{}.ends_with(({}).as_str())", r, a(0))),
+            StrFind => wrap(format!("__str_find(&{}, &{})", r, a(0))),
+            CodeAt => wrap(format!("__code_at(&{}, {})", r, a(0))),
+            Chars => wrap(format!("{}.chars().map(|__c| __c.to_string()).collect::<Vec<_>>()", r)),
+            ParseInt => wrap(format!("{}.trim().parse::<i64>().ok()", r)),
+            ParseFloat => wrap(format!("{}.trim().parse::<f64>().ok()", r)),
+            ArrayJoin => wrap(format!("{}.join(({}).as_str())", r, a(0))),
         }
     }
 }

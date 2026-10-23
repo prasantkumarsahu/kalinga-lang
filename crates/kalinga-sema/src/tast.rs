@@ -94,10 +94,16 @@ pub enum TExprKind {
         variant: String,
         args: Vec<TExpr>,
     },
-    /// `base[index]` on an array or a map.
+    /// `base[index]` on an array, a map or a string (one character).
     Index {
         base: Box<TExpr>,
         index: Box<TExpr>,
+    },
+    /// `base[from..to]` on an array or a string; a missing end is the start or the end.
+    Slice {
+        base: Box<TExpr>,
+        from: Option<Box<TExpr>>,
+        to: Option<Box<TExpr>>,
     },
     Call {
         callee: Callee,
@@ -179,6 +185,10 @@ pub enum Builtin {
     ToInt,
     ToFloat,
     Input,
+    /// `chr(code)`: the character with that code point.
+    Chr,
+    /// `args()`: the program's command-line arguments.
+    Args,
     /// `Math.sqrt` and the other one-argument float functions; the Rust method name.
     MathUnary(String),
     /// `Math.pow`, `Math.atan2`, `Math.hypot`; the Rust method name.
@@ -241,6 +251,17 @@ pub enum BuiltinMethod {
     Lower,
     Trim,
     StrContains,
+    Split,
+    Replace,
+    StartsWith,
+    EndsWith,
+    StrFind,
+    CodeAt,
+    Chars,
+    ParseInt,
+    ParseFloat,
+    /// `join` on an array of strings.
+    ArrayJoin,
 }
 
 /// Methods that change their receiver in place.

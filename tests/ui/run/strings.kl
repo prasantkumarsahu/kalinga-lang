@@ -1,0 +1,13 @@
+// Strings: characters by index, slices, and the text methods.
+fn main() {
+    let s = "héllo, wörld"
+    println(s[0], s[1], s[s.len() - 1], len(s))
+    println(s[0..5], s[..5], s[7..], s[3..3] == "")
+    let words = "a,b,,c".split(",")
+    println(words, len(words), "abc".split(""))
+    println(s.replace("l", "L"), s.starts_with("hé"), s.ends_with("x"))
+    println(s.find("wör"), s.find("zz"), s.code_at(1), chr(233), chr(9731))
+    println("  42 ".parse_int(), "x".parse_int(), "2.5".parse_float(), "e".chars())
+    println(["a", "b", "c"].join("-"), [1, 2, 3, 4][1..3], [1, 2, 3][..0])
+    println(args())
+}

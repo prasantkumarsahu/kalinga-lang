@@ -75,10 +75,12 @@ fn every_method_type_checks() {
         let Some((_, var)) = receivers.iter().find(|(r, _)| *r == m.receiver) else {
             panic!("no test receiver for `{}`", m.receiver);
         };
+        // `join` needs an array of strings.
+        let var = if (m.receiver, m.name) == ("[T]", "join") { "words" } else { var };
         let expr = format!("{}.{}", var, call(m.name, m.params));
         let stmt = if m.ret == "void" { expr } else { format!("let r = {}", expr) };
         let source = format!(
-            "{}\nfn main() {{\n    var items = [1]\n    var map = {{\"k\": 1}}\n    let text = \"t\"\n    let result = res()\n    let task = Thread.spawn(fn() => 1)\n    let channel = Channel<int>()\n    let shared = Shared(1)\n    {}\n}}\n",
+            "{}\nfn main() {{\n    var items = [1]\n    let words = [\"w\"]\n    var map = {{\"k\": 1}}\n    let text = \"t\"\n    let result = res()\n    let task = Thread.spawn(fn() => 1)\n    let channel = Channel<int>()\n    let shared = Shared(1)\n    {}\n}}\n",
             PRELUDE, stmt
         );
         if let Err(errors) = check(&source) {

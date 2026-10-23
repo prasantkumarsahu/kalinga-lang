@@ -920,9 +920,16 @@ impl Parser {
                 self.advance();
                 e = Expr { kind: ExprKind::Try(Box::new(e)), pos };
             } else if self.eat(&Tok::LBracket) {
-                let idx = self.expr()?;
-                self.expect(Tok::RBracket, "`]`")?;
-                e = Expr { kind: ExprKind::Index(Box::new(e), Box::new(idx)), pos };
+                let from = if self.check(&Tok::DotDot) { None } else { Some(Box::new(self.expr()?)) };
+                if self.eat(&Tok::DotDot) {
+                    let to = if self.check(&Tok::RBracket) { None } else { Some(Box::new(self.expr()?)) };
+                    self.expect(Tok::RBracket, "`]`")?;
+                    e = Expr { kind: ExprKind::Slice(Box::new(e), from, to), pos };
+                } else {
+                    self.expect(Tok::RBracket, "`]` (or `..` for a slice)")?;
+                    let Some(idx) = from else { return err("expected an index", pos) };
+                    e = Expr { kind: ExprKind::Index(Box::new(e), idx), pos };
+                }
             } else {
                 return Ok(e);
             }

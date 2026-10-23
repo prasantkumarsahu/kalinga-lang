@@ -1,0 +1,3 @@
+tests/ui/errors/join_ints.kl:2:19: error: `join` works on arrays of `str`, not `[int]`
+2 |     println([1, 2].join(","))
+  |                   ^

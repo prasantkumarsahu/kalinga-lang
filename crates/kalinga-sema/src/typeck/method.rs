@@ -344,6 +344,9 @@ impl Checker<'_> {
 
     /// Methods that read arrays, maps and strings.
     fn value_method(&self, cx: &mut Ctx, recv_t: TExpr, name: &str, args: &[Expr], pos: Span) -> Result<TExpr> {
+        if recv_t.ty == Type::Str {
+            return self.str_method(cx, recv_t, name, args, pos);
+        }
         let arity = |n: usize| -> Result<()> {
             if args.len() != n { err(format!("`{}` takes {} argument(s)", name, n), pos) } else { Ok(()) }
         };
@@ -395,15 +398,65 @@ impl Checker<'_> {
             }
             (Type::Map(k, _), "keys") => (arity(0).map(|_| BuiltinMethod::Keys)?, vec![], Type::Array(k.clone())),
             (Type::Map(_, v), "values") => (arity(0).map(|_| BuiltinMethod::Values)?, vec![], Type::Array(v.clone())),
-            (Type::Str, "len") => (arity(0).map(|_| BuiltinMethod::StrLen)?, vec![], Type::Int),
-            (Type::Str, "upper") => (arity(0).map(|_| BuiltinMethod::Upper)?, vec![], Type::Str),
-            (Type::Str, "lower") => (arity(0).map(|_| BuiltinMethod::Lower)?, vec![], Type::Str),
-            (Type::Str, "trim") => (arity(0).map(|_| BuiltinMethod::Trim)?, vec![], Type::Str),
-            (Type::Str, "contains") => {
+            (Type::Array(elem), "join") => {
+                arity(1)?;
+                if **elem != Type::Str {
+                    return err(format!("`join` works on arrays of `str`, not `{}`", t), pos);
+                }
+                (BuiltinMethod::ArrayJoin, vec![self.expr_to(cx, &args[0], &Type::Str)?], Type::Str)
+            }
+            _ => return err(format!("`{}` has no method `{}`", t, name), pos),
+        };
+        Ok(texpr(TExprKind::BuiltinMethod { op, recv: Box::new(recv_t), args }, ty, pos))
+    }
+
+    fn str_method(&self, cx: &mut Ctx, recv_t: TExpr, name: &str, args: &[Expr], pos: Span) -> Result<TExpr> {
+        let arity = |n: usize| -> Result<()> {
+            if args.len() != n { err(format!("`{}` takes {} argument(s)", name, n), pos) } else { Ok(()) }
+        };
+        let (op, args, ty) = match name {
+            "len" => (arity(0).map(|_| BuiltinMethod::StrLen)?, vec![], Type::Int),
+            "upper" => (arity(0).map(|_| BuiltinMethod::Upper)?, vec![], Type::Str),
+            "lower" => (arity(0).map(|_| BuiltinMethod::Lower)?, vec![], Type::Str),
+            "trim" => (arity(0).map(|_| BuiltinMethod::Trim)?, vec![], Type::Str),
+            "contains" => {
                 arity(1)?;
                 (BuiltinMethod::StrContains, vec![self.expr_to(cx, &args[0], &Type::Str)?], Type::Bool)
             }
-            _ => return err(format!("`{}` has no method `{}`", t, name), pos),
+            "split" => {
+                arity(1)?;
+                let sep = self.expr_to(cx, &args[0], &Type::Str)?;
+                (BuiltinMethod::Split, vec![sep], Type::Array(Box::new(Type::Str)))
+            }
+            "replace" => {
+                arity(2)?;
+                let from = self.expr_to(cx, &args[0], &Type::Str)?;
+                let to = self.expr_to(cx, &args[1], &Type::Str)?;
+                (BuiltinMethod::Replace, vec![from, to], Type::Str)
+            }
+            "starts_with" | "ends_with" => {
+                arity(1)?;
+                let op = if name == "starts_with" { BuiltinMethod::StartsWith } else { BuiltinMethod::EndsWith };
+                (op, vec![self.expr_to(cx, &args[0], &Type::Str)?], Type::Bool)
+            }
+            "find" => {
+                arity(1)?;
+                (
+                    BuiltinMethod::StrFind,
+                    vec![self.expr_to(cx, &args[0], &Type::Str)?],
+                    Type::Optional(Box::new(Type::Int)),
+                )
+            }
+            "code_at" => {
+                arity(1)?;
+                (BuiltinMethod::CodeAt, vec![self.expr_to(cx, &args[0], &Type::Int)?], Type::Int)
+            }
+            "chars" => (arity(0).map(|_| BuiltinMethod::Chars)?, vec![], Type::Array(Box::new(Type::Str))),
+            "parse_int" => (arity(0).map(|_| BuiltinMethod::ParseInt)?, vec![], Type::Optional(Box::new(Type::Int))),
+            "parse_float" => {
+                (arity(0).map(|_| BuiltinMethod::ParseFloat)?, vec![], Type::Optional(Box::new(Type::Float)))
+            }
+            _ => return err(format!("`str` has no method `{}`", name), pos),
         };
         Ok(texpr(TExprKind::BuiltinMethod { op, recv: Box::new(recv_t), args }, ty, pos))
     }

@@ -60,9 +60,22 @@ impl Checker<'_> {
                 let (index, ty) = match base.ty.clone() {
                     Type::Map(k, v) => (self.expr_to(cx, idx, &k)?, *v),
                     Type::Array(elem) => (self.expr_to(cx, idx, &Type::Int)?, *elem),
+                    Type::Str => (self.expr_to(cx, idx, &Type::Int)?, Type::Str),
                     other => return err(format!("cannot index into `{}`", other), pos),
                 };
                 lit(TExprKind::Index { base: Box::new(base), index: Box::new(index) }, ty)
+            }
+            ExprKind::Slice(base, from, to) => {
+                let base = self.expr(cx, base, None)?;
+                if !matches!(base.ty, Type::Array(_) | Type::Str) {
+                    return err(format!("cannot slice `{}` (slices work on arrays and strings)", base.ty), pos);
+                }
+                let mut bound = |b: &Option<Box<Expr>>| -> Result<Option<Box<TExpr>>> {
+                    b.as_ref().map(|x| self.expr_to(cx, x, &Type::Int).map(Box::new)).transpose()
+                };
+                let (from, to) = (bound(from)?, bound(to)?);
+                let ty = base.ty.clone();
+                lit(TExprKind::Slice { base: Box::new(base), from, to }, ty)
             }
             ExprKind::SuperInit(_) => err("`super(...)` must be its own statement inside `init`", pos),
             ExprKind::SuperCall(name, args) => self.super_call(cx, name, args, pos),

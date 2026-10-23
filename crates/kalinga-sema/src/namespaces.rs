@@ -496,6 +496,12 @@ impl<'a> Resolver<'a> {
                 }
             }
             ExprKind::Field(recv, _) => self.expr(recv, sc)?,
+            ExprKind::Slice(b, from, to) => {
+                self.expr(b, sc)?;
+                for x in [from, to].into_iter().flatten() {
+                    self.expr(x, sc)?;
+                }
+            }
             ExprKind::Index(b, i) => {
                 self.expr(b, sc)?;
                 self.expr(i, sc)?;

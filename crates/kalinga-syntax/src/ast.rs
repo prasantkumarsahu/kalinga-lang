@@ -254,6 +254,8 @@ pub enum ExprKind {
     /// `obj.name`
     Field(Box<Expr>, String),
     Index(Box<Expr>, Box<Expr>),
+    /// `base[from..to]`; either end may be left out (`s[..3]`, `xs[2..]`).
+    Slice(Box<Expr>, Option<Box<Expr>>, Option<Box<Expr>>),
     /// `super(args)` inside `init`
     SuperInit(Vec<Expr>),
     /// `super.name(args)`

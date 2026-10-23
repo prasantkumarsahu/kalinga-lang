@@ -1,0 +1,3 @@
+tests/ui/errors/string_assign.kl:3:6: error: a string cannot be changed in place; build a new one (with `+`, a slice or `replace`)
+3 |     s[0] = "x"
+  |      ^

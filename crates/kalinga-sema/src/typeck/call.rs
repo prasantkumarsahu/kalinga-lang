@@ -404,6 +404,19 @@ impl Checker<'_> {
                 }
                 intrinsic(Builtin::ToFloat, vec![v], Type::Float)
             }
+            "chr" => {
+                if args.len() != 1 {
+                    return err("`chr` takes exactly 1 argument (a code point)", pos);
+                }
+                let code = self.expr_to(cx, &args[0], &Type::Int)?;
+                intrinsic(Builtin::Chr, vec![code], Type::Str)
+            }
+            "args" => {
+                if !args.is_empty() {
+                    return err("`args()` takes no arguments", pos);
+                }
+                intrinsic(Builtin::Args, vec![], Type::Array(Box::new(Type::Str)))
+            }
             "input" => {
                 let prompt = match args.len() {
                     0 => vec![],

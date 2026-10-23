@@ -113,6 +113,12 @@ impl Checker<'_> {
                 let (index, ty) = match base.ty().clone() {
                     Type::Map(k, v) => (self.expr_to(cx, idx, &k)?, *v),
                     Type::Array(elem) => (self.expr_to(cx, idx, &Type::Int)?, *elem),
+                    Type::Str => {
+                        return err(
+                            "a string cannot be changed in place; build a new one (with `+`, a slice or `replace`)",
+                            e.pos,
+                        );
+                    }
                     other => return err(format!("cannot index into `{}`", other), e.pos),
                 };
                 Ok(TPlace::Index { base: Box::new(base), index: Box::new(index), ty })
