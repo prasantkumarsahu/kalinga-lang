@@ -15,7 +15,7 @@ abstract class Animal : Show {
     init(name: str) { self.name = name }
 
     abstract fn sound() -> str
-    fn show() -> str { return "{self.name} says {self.sound()}" }
+    override fn show() -> str { return "{self.name} says {self.sound()}" }
 }
 
 class Dog : Animal {                 // `:` lists one base class + any interfaces

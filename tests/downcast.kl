@@ -7,7 +7,7 @@ class Animal {
 }
 class Dog : Animal, Show {
     fn fetch() -> str { return "{self.name} fetches" }
-    fn show() -> str { return "Dog {self.name}" }
+    override fn show() -> str { return "Dog {self.name}" }
 }
 class Puppy : Dog {}
 class Cat : Animal {}

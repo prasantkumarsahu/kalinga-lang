@@ -11,7 +11,7 @@ abstract class Animal : Pet {
 
     init(nick: str) { self.nick = nick }
 
-    fn name() -> str { return self.nick }
+    override fn name() -> str { return self.nick }
     abstract fn sound() -> str
 
     fn describe() -> str {

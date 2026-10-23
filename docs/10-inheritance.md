@@ -145,7 +145,7 @@ class, not on where the call was written.
 | Mistake | Error |
 |---|---|
 | Overriding without the keyword | ``method `area` overrides `Shape.area`; mark it `override fn` `` |
-| `override` on a method the base does not have (often a typo) | ``` `aera` is marked override but no base class has this method ``` |
+| `override` on a method the base does not have (often a typo) | ``` `aera` is marked override but no base class or interface has this method ``` |
 | Different parameter or return types | ``override of `area` must match `Shape.area() -> float` `` |
 
 ## Calling the base version: super.method()

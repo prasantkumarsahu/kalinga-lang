@@ -2,8 +2,8 @@
 // Use with `import "std/game"`. Built on the Rust library macroquad.
 //
 //     class MyGame : Game {
-//         fn update(input: Input, dt: float) { ... }
-//         fn draw(screen: Screen) { ... }
+//         override fn update(input: Input, dt: float) { ... }
+//         override fn draw(screen: Screen) { ... }
 //     }
 //     fn main() { Window.run("My Game", 800, 600, MyGame()) }
 

@@ -21,7 +21,7 @@ class Book : Describable {
         self.title = title
     }
 
-    fn describe() -> str {
+    override fn describe() -> str {
         return "Book: " + self.title
     }
 }
@@ -35,7 +35,7 @@ class Planet : Describable {
         self.moons = moons
     }
 
-    fn describe() -> str {
+    override fn describe() -> str {
         return self.name + " with " + str(self.moons) + " moons"
     }
 }
@@ -54,7 +54,15 @@ Mars with 2 moons
 ```
 
 - Interface methods are written like method headers: `fn name(params) -> type`, no body.
-- Implementing methods are ordinary methods (no `override` keyword).
+- Implementing methods are marked `override fn`, exactly like methods that replace a base
+  class method. In `class Book : Describable` you cannot tell from the `:` line whether
+  `Describable` is a class or an interface, so every method that comes from something after
+  `:` is marked the same way. Forgetting it is an error:
+
+```text
+error: method `describe` implements `Describable.describe`; mark it `override fn`
+```
+
 - The class must provide **every** method with the **same** signature:
 
 ```text
@@ -72,13 +80,13 @@ interface Scorer {
 }
 
 class LengthScorer : Scorer {
-    fn score(word: str) -> int {
+    override fn score(word: str) -> int {
         return len(word)
     }
 }
 
 class VowelScorer : Scorer {
-    fn score(word: str) -> int {
+    override fn score(word: str) -> int {
         var n = 0
         for ch in word {
             if "aeiou".contains(ch) {
@@ -135,11 +143,11 @@ class Item {
 }
 
 class Laptop : Item, Printable, Priced {
-    fn to_text() -> str {
+    override fn to_text() -> str {
         return "Laptop(" + self.name + ")"
     }
 
-    fn price() -> float {
+    override fn price() -> float {
         return 999.0
     }
 }
@@ -218,11 +226,11 @@ interface Pet : Named {
 }
 
 class Dog : Pet {
-    fn name() -> str {
+    override fn name() -> str {
         return "Rex"
     }
 
-    fn sound() -> str {
+    override fn sound() -> str {
         return "woof"
     }
 }

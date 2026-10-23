@@ -420,3 +420,12 @@ test("package and std import paths", () => {
   assert.strictEqual(pk.resolveImport("nope", root, ctx), null);
   assert.strictEqual(pk.stdDir("/t", () => ["std-0.3.0", "std-0.10.1", "std-0.4.0", "cargo"]), path.join("/t", "kalinga-build", "std-0.10.1"));
 });
+
+test("class body offers override stubs for interface methods", () => {
+  const src = "interface Game {\n    fn update(dt: float)\n    fn draw()\n}\nclass G : Game {\n    override fn draw() {}\n    |\n}\n";
+  const items = complete(src.replace("|", ""), src.indexOf("|"));
+  const stub = items.find((i) => i.label === "override fn update");
+  assert.ok(stub, labels(items).join(", "));
+  assert.strictEqual(stub.insertText, "override fn update(dt: float) {\n\t$0\n}");
+  assert.ok(!items.some((i) => i.label === "override fn draw"), "already written");
+});

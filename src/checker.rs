@@ -719,10 +719,23 @@ impl Model {
                 }
             }
         }
-        // Overrides.
+        // Overrides: a method that comes from anything after `:` (a base class or an
+        // interface) must be `override fn`; interface signatures are checked below.
+        let interfaces = self.all_interfaces(name);
         for meth in info.decl.methods.iter().filter(|m| !m.is_static) {
             let sig = &info.methods[&meth.name];
             let inherited = info.parent.as_ref().and_then(|p| self.find_method(p, &meth.name));
+            if inherited.is_none() {
+                if let Some(iname) = interfaces.iter().find(|i| self.interfaces[*i].methods.iter().any(|(n, _)| n == &meth.name)) {
+                    if !meth.is_override && !meth.is_abstract {
+                        return err(
+                            format!("method `{}` implements `{}.{}`; mark it `override fn`", meth.name, iname, meth.name),
+                            meth.pos,
+                        );
+                    }
+                    continue;
+                }
+            }
             match (inherited, meth.is_override) {
                 (Some((owner, psig)), true) => {
                     if !psig.same_shape(sig) {
@@ -745,7 +758,7 @@ impl Model {
                     )
                 }
                 (None, true) => {
-                    return err(format!("`{}` is marked override but no base class has this method", meth.name), meth.pos)
+                    return err(format!("`{}` is marked override but no base class or interface has this method", meth.name), meth.pos)
                 }
                 (None, false) => {}
             }

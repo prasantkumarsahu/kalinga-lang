@@ -43,7 +43,7 @@ Common compile errors and what to do:
 | `cannot infer the type of `[]`` / `` `none` `` | Value alone has no type | Annotate: `let xs: [int] = []` |
 | `condition must be `bool`` | `if count { }` | `if count > 0 { }` |
 | `` `A` has no field `b` `` / `has no method` | Typo, or member not on that type | Check the class (or interface) definition |
-| `mark it `override fn`` | Same method name as the base class | Add `override`, or rename |
+| `mark it `override fn`` | Same method name as the base class or an interface | Add `override`, or rename |
 | `does not implement `I.m() -> T`` | Interface method missing or different | Add the method with the exact signature |
 | `` `init` must call `super(...)` `` | Subclass skipped base construction | Call `super(args)` at the top of `init` |
 | `needs a default value (or make it optional)` | Object field without a value | `= ClassName()` or `field: ClassName?` |

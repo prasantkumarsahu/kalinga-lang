@@ -13,7 +13,7 @@ class Pong : Game {
     waiting: bool = true
     winner: str = ""
 
-    fn update(input: Input, dt: float) {
+    override fn update(input: Input, dt: float) {
         if input.key_pressed("escape") {
             input.quit()
         }
@@ -73,7 +73,7 @@ class Pong : Game {
         }
     }
 
-    fn draw(screen: Screen) {
+    override fn draw(screen: Screen) {
         screen.clear(Color.rgb(15, 20, 35))
         // Centre line
         var y = 10.0

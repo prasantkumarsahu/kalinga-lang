@@ -134,7 +134,7 @@ import "PACKAGE[/FILE]" [as ALIAS]                   a utkal package; ALIAS.Name
     init(PARAM, ...) { ... }                         at most one
     [private] [static] fn NAME(PARAM, ...) [-> TYPE] { ... }
     [private] static async fn NAME(PARAM, ...) [-> TYPE] { ... }
-    [private] override fn NAME(PARAM, ...) [-> TYPE] { ... }
+    [private] override fn NAME(PARAM, ...) [-> TYPE] { ... }   from a base class or interface
     abstract fn NAME(PARAM, ...) [-> TYPE]           abstract classes only
 }
 

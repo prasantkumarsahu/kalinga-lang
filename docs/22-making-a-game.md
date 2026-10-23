@@ -15,7 +15,7 @@ class Collector : Game {
     star: Vec2 = Vec2(100.0, 100.0)
     score: int
 
-    fn update(input: Input, dt: float) {
+    override fn update(input: Input, dt: float) {
         let speed = 300.0
         var dir = Vec2.zero()
         if input.key_down("left") { dir.x -= 1.0 }
@@ -33,7 +33,7 @@ class Collector : Game {
         }
     }
 
-    fn draw(screen: Screen) {
+    override fn draw(screen: Screen) {
         screen.clear(Color.rgb(15, 20, 35))
         screen.circle(self.star, 10.0, Color.YELLOW)
         screen.circle(self.player, 20.0, Color.SKY)
@@ -64,6 +64,9 @@ interface Game {
     fn draw(screen: Screen)
 }
 ```
+
+Its two methods are written `override fn update` and `override fn draw` in your class, like
+any method that comes from something after `:`.
 
 `Window.run(title, width, height, game)` opens the window and then, every frame (usually 60
 times per second):
@@ -148,7 +151,7 @@ class Shooter : Game {
         }
     }
 
-    fn update(input: Input, dt: float) {
+    override fn update(input: Input, dt: float) {
         if input.key_pressed("space") {
             if let s = self.laser {
                 s.play()
@@ -156,7 +159,7 @@ class Shooter : Game {
         }
     }
 
-    fn draw(screen: Screen) {
+    override fn draw(screen: Screen) {
         screen.clear(Color.BLACK)
         if let img = self.ship {
             screen.image(img, self.pos)

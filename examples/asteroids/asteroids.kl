@@ -86,7 +86,7 @@ class Asteroids : Game {
         }
     }
 
-    fn update(input: Input, dt: float) {
+    override fn update(input: Input, dt: float) {
         if input.key_pressed("escape") {
             input.quit()
         }
@@ -168,7 +168,7 @@ class Asteroids : Game {
         self.next_level()
     }
 
-    fn draw(screen: Screen) {
+    override fn draw(screen: Screen) {
         screen.clear(Color.rgb(8, 10, 20))
         for r in self.rocks {
             screen.circle_outline(r.pos, r.radius, 2.0, Color.GRAY)

@@ -120,6 +120,19 @@ fn error_missing_interface_method() {
 #[test]
 fn error_missing_override() {
     assert_compile_error("no_override", "class A { fn f() {} }\nclass B : A { fn f() {} }\nfn main() {}", "mark it `override fn`");
+    // Interface methods are marked `override fn` too, including through super-interfaces.
+    let s = "interface S { fn show() -> str }\n";
+    assert_compile_error("iface_no_override", &format!("{}class A : S {{\n    fn show() -> str {{ return \"a\" }}\n}}\nfn main() {{}}", s), "method `show` implements `S.show`; mark it `override fn`");
+    assert_compile_error("iface_super_no_override", &format!("{}interface T : S {{}}\nclass A : T {{\n    fn show() -> str {{ return \"a\" }}\n}}\nfn main() {{}}", s), "implements `S.show`");
+    assert_compile_error("override_nowhere", "class A {\n    override fn show() -> str { return \"a\" }\n}\nfn main() {}", "no base class or interface has this method");
+    assert_runs(
+        "iface_override",
+        &format!(
+            "{}class Base : S {{\n    override fn show() -> str {{ return \"base\" }}\n}}\nclass A : Base {{\n    override fn show() -> str {{ return \"a\" }}\n}}\nclass B : A {{\n    override fn show() -> str {{ return \"b\" }}\n}}\nfn main() {{\n    let xs: [S] = [A(), B()]\n    for x in xs {{ print(x.show()) }}\n}}\n",
+            s
+        ),
+        "a\nb\n",
+    );
 }
 
 #[test]
@@ -513,7 +526,7 @@ fn game_module() {
         let out = kalinga(&["check", f]);
         assert!(out.status.success(), "{}: {}", f, String::from_utf8_lossy(&out.stderr));
     }
-    assert_compile_error("game_needs_methods", "import \"std/game\"\nclass G : Game {\n    fn draw(screen: Screen) {}\n}\nfn main() {}", "does not implement `Game.update");
+    assert_compile_error("game_needs_methods", "import \"std/game\"\nclass G : Game {\n    override fn draw(screen: Screen) {}\n}\nfn main() {}", "does not implement `Game.update");
 }
 
 /// Opens a real window for a few frames and checks the screenshot. Needs a display and
@@ -529,7 +542,7 @@ fn game_window_smoke() {
     std::fs::write(
         &src,
         format!(
-            "import \"std/game\"\n\nclass Smoke : Game {{\n    frame: int\n\n    fn update(input: Input, dt: float) {{\n        self.frame += 1\n        if self.frame >= 5 {{\n            input.quit()\n        }}\n    }}\n\n    fn draw(screen: Screen) {{\n        screen.clear(Color.BLACK)\n        screen.rect(Rect(10.0, 10.0, 50.0, 50.0), Color.YELLOW)\n        if self.frame == 3 {{\n            screen.screenshot({:?})\n        }}\n    }}\n}}\n\nfn main() {{\n    let g = Smoke()\n    Window.run(\"smoke\", 200, 100, g)\n    print(\"frames\", g.frame)\n}}\n",
+            "import \"std/game\"\n\nclass Smoke : Game {{\n    frame: int\n\n    override fn update(input: Input, dt: float) {{\n        self.frame += 1\n        if self.frame >= 5 {{\n            input.quit()\n        }}\n    }}\n\n    override fn draw(screen: Screen) {{\n        screen.clear(Color.BLACK)\n        screen.rect(Rect(10.0, 10.0, 50.0, 50.0), Color.YELLOW)\n        if self.frame == 3 {{\n            screen.screenshot({:?})\n        }}\n    }}\n}}\n\nfn main() {{\n    let g = Smoke()\n    Window.run(\"smoke\", 200, 100, g)\n    print(\"frames\", g.frame)\n}}\n",
             shot.to_str().unwrap()
         ),
     )

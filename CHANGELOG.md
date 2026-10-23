@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- **`override fn` for interface methods too.** A method that comes from anything after `:`
+  in `class C : Base, Iface`, whether a base class or an interface, must be marked
+  `override fn`; the compiler says what to add (`method `update` implements `Game.update`;
+  mark it `override fn``). `override` on a method that comes from nowhere is still an error.
+  The editor offers `override fn` stubs for unwritten interface methods.
+
 ## 0.4.0 — first playable
 
 ### Games

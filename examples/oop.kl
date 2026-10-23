@@ -34,7 +34,7 @@ class Dog : Animal, Show {
         self.tricks.push(trick)
     }
 
-    fn show() -> str {
+    override fn show() -> str {
         return "Dog(" + self.name + ", tricks=" + str(self.tricks) + ")"
     }
 }

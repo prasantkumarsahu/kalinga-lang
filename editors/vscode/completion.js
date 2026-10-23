@@ -1162,8 +1162,26 @@ function complete(text, offset, options = {}) {
     );
     if (cls.abstract) items.push(kw("abstract fn", "method subclasses must implement", "abstract fn ${1:name}(${2}) -> ${3:void}"));
     const parent = parentOf(model, cls.name);
+    const own = new Set(cls.methods.map((m) => m.name));
+    // Interface methods not written yet: `override fn` stubs, listed first.
+    for (const b of cls.bases) {
+      if (!model.interfaces.has(b)) continue;
+      for (const m of interfaceMethods(model, b)) {
+        if (own.has(m.name) || (parent && classMethods(model, parent).some((x) => x.name === m.name))) continue;
+        own.add(m.name);
+        const ret = m.ret && m.ret !== "void" ? ` -> ${m.ret}` : "";
+        items.push({
+          label: `override fn ${m.name}`,
+          kind: "method",
+          detail: `implement ${m.owner}.${m.name}${sigText(m.params, m.ret)}`,
+          documentation: m.doc || "",
+          insertText: `override fn ${m.name}(${m.params.map((p) => `${p.name}: ${p.type}`).join(", ")})${ret} {\n\t$0\n}`,
+          snippet: true,
+          sortText: "0" + m.name,
+        });
+      }
+    }
     if (parent) {
-      const own = new Set(cls.methods.map((m) => m.name));
       for (const m of classMethods(model, parent)) {
         if (own.has(m.name) || m.private) continue;
         const ret = m.ret && m.ret !== "void" ? ` -> ${m.ret}` : "";
