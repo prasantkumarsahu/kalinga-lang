@@ -478,7 +478,12 @@ impl Model {
                 return err(format!("function `{}` is defined more than once", x.name), x.pos);
             }
             let sig = signature(&x.params, &x.ret, &resolve)?;
-            m.extern_fns.insert(x.name.clone(), (sig, x.path.clone().unwrap_or_else(|| x.name.clone())));
+            let path = match (&x.path, &x.body) {
+                (_, Some(_)) => format!("__x_{}", x.name),
+                (Some(p), None) => p.clone(),
+                (None, None) => x.name.clone(),
+            };
+            m.extern_fns.insert(x.name.clone(), (sig, path));
         }
         match m.functions.get("main") {
             None if require_main => return err("program has no `fn main()`", Pos { line: 1, col: 1, file: 0 }),

@@ -130,7 +130,22 @@ impl Parser {
                                 Tok::Str(v) => v,
                                 other => return err(format!("expected a version in quotes, found {}", other.describe()), pos),
                             };
-                            prog.crates.push((what, version, pos));
+                            let mut features = Vec::new();
+                            if self.peek() == &Tok::Ident("features".into()) {
+                                self.advance();
+                                self.expect(Tok::LBracket, "`[` and a list of feature names")?;
+                                while !self.check(&Tok::RBracket) {
+                                    match self.advance().tok {
+                                        Tok::Str(f) => features.push(f),
+                                        other => return err(format!("expected a feature name in quotes, found {}", other.describe()), pos),
+                                    }
+                                    if !self.eat(&Tok::Comma) {
+                                        break;
+                                    }
+                                }
+                                self.expect(Tok::RBracket, "`]`")?;
+                            }
+                            prog.crates.push(CrateDep { name: what, version, features, pos });
                         }
                         other => return err(format!("expected `use rust \"file.rs\"` or `use crate \"name\" = \"version\"`, found `use {}`", other), pos),
                     }
@@ -143,15 +158,20 @@ impl Parser {
                         let (name, _) = self.ident("function name")?;
                         let params = self.params()?;
                         let ret = self.ret_type()?;
-                        let path = if self.eat(&Tok::Assign) {
+                        let (mut path, mut body) = (None, None);
+                        if self.eat(&Tok::Assign) {
                             match self.advance().tok {
-                                Tok::Str(p) => Some(p),
-                                other => return err(format!("expected a Rust path in quotes, found {}", other.describe()), pos),
+                                Tok::Str(p) => path = Some(p),
+                                Tok::RustBlock(b) => body = Some(b),
+                                other => {
+                                    return err(
+                                        format!("expected a Rust path in quotes or `rust {{ ... }}`, found {}", other.describe()),
+                                        pos,
+                                    )
+                                }
                             }
-                        } else {
-                            None
-                        };
-                        prog.extern_fns.push(ExternFn { name, params, ret, path, pos });
+                        }
+                        prog.extern_fns.push(ExternFn { name, params, ret, path, body, pos });
                     } else if self.peek() == &Tok::Ident("type".into()) {
                         self.advance();
                         let (name, npos) = self.ident("type name")?;

@@ -253,6 +253,19 @@ impl<'a> Gen<'a> {
             let module = format!("__rs_{}", rust_module_name(path));
             writeln!(out, "\n#[path = {:?}]\nmod {};\nuse {}::*;", path, module, module).unwrap();
         }
+        for x in prog.extern_fns.iter().filter(|x| x.body.is_some()) {
+            let (sig, _) = &self.m.extern_fns[&x.name];
+            writeln!(
+                out,
+                "\n// extern fn {} (inline Rust)\nfn __x_{}({}){} {{{}}}",
+                x.name,
+                x.name,
+                self.params_decl(sig),
+                self.ret_suffix(&sig.ret),
+                x.body.as_ref().unwrap()
+            )
+            .unwrap();
+        }
 
         for iname in &self.m.interface_order {
             let info = &self.m.interfaces[iname];

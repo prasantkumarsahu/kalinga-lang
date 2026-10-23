@@ -110,6 +110,14 @@ pub struct StructDecl {
     pub pos: Pos,
 }
 
+#[derive(Debug, Clone)]
+pub struct CrateDep {
+    pub name: String,
+    pub version: String,
+    pub features: Vec<String>,
+    pub pos: Pos,
+}
+
 /// A Rust function Kalinga can call.
 #[derive(Debug, Clone)]
 pub struct ExternFn {
@@ -118,6 +126,8 @@ pub struct ExternFn {
     pub ret: TypeExpr,
     /// Rust path to call; defaults to `name` (found in a `use rust` file).
     pub path: Option<String>,
+    /// `= rust { ... }`: an inline Rust body.
+    pub body: Option<String>,
     pub pos: Pos,
 }
 
@@ -142,8 +152,8 @@ pub struct Program {
     /// `use rust "file.rs"`: Rust source files compiled into the program. After loading,
     /// the paths are absolute.
     pub rust_files: Vec<(String, Pos)>,
-    /// `use crate "name" = "version"`: crates.io dependencies.
-    pub crates: Vec<(String, String, Pos)>,
+    /// `use crate "name" = "version" [features [...]]`: crates.io dependencies.
+    pub crates: Vec<CrateDep>,
     /// `extern type Name`: opaque Rust types.
     pub extern_types: Vec<(String, Pos)>,
     /// `extern fn name(...) -> T [= "rust::path"]`

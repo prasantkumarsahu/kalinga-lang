@@ -1,0 +1,19 @@
+extern fn shout(s: str) -> str = rust { s.to_uppercase() + "!" }
+
+extern fn count_braces(s: str) -> int = rust {
+    // a comment with a } brace
+    let opens = s.chars().filter(|&c| c == '{').count();
+    let closes = s.chars().filter(|c| *c == '}').count();
+    let _label = "a string with } and { inside";
+    fn longest<'a>(a: &'a str, b: &'a str) -> &'a str { if a.len() > b.len() { a } else { b } }
+    let _ = longest("x", "yy");
+    (opens + closes) as i64
+}
+
+extern fn sum_sq(xs: [float]) -> float = rust {
+    xs.iter().map(|x| x * x).sum()
+}
+
+fn main() {
+    print(shout("hi"), count_braces("{{a}}{{b"), sum_sq([1.0, 2.0, 3.0]))
+}

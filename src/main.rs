@@ -5,6 +5,7 @@ mod driver;
 mod error;
 mod lexer;
 mod parser;
+mod stdlib;
 mod token;
 
 use std::path::PathBuf;

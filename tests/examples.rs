@@ -381,3 +381,50 @@ fn v03_examples() {
     assert_eq!(code, 0, "{}", err);
     assert_eq!(out, "mean 5.0, std dev 2.0\n[[7.0, 10.0], [15.0, 22.0]]\n4.0\n");
 }
+
+// ---------------------------------------------------------------- v0.4 features
+
+#[test]
+fn inline_rust_bodies() {
+    let (code, out, err) = run_file("tests/inline_rust.kl");
+    assert_eq!(code, 0, "{}", err);
+    assert_eq!(out, "HI! 3 14.0\n");
+    let (code, _, err) = run_source("inline_bad", "extern fn bad(x: int) -> int = rust { x + \"s\" }\nfn main() {\n    print(bad(1))\n}\n");
+    assert_eq!(code, 1);
+    assert!(err.contains("the Rust compiler rejected the program"), "{}", err);
+}
+
+#[test]
+fn std_modules() {
+    let (code, out, err) = run_file("tests/std_math2d.kl");
+    assert_eq!(code, 0, "{}", err);
+    assert_eq!(
+        out,
+        "5.0 Vec2(x: 0.6, y: 0.8) Vec2(x: -3.0, y: -4.0) Vec2(x: 1.5, y: 2.0) Vec2(x: 1.5, y: 2.0)\ntrue true Vec2(x: 8.0, y: 9.0)\n"
+    );
+    assert_compile_error("std_missing", "import \"std/nope\"\nfn main() {}", "there is no standard module `std/nope`");
+}
+
+/// Built games must not need the Visual C++ runtime on Windows.
+#[cfg(windows)]
+#[test]
+fn static_c_runtime() {
+    let dir = std::env::temp_dir().join("kalinga-tests");
+    std::fs::create_dir_all(&dir).unwrap();
+    let src = dir.join("static_crt.kl");
+    std::fs::write(&src, "fn main() {\n    print(\"hi\")\n}\n").unwrap();
+    let exe = dir.join("static_crt.exe");
+    let out = kalinga(&["build", src.to_str().unwrap(), "-o", exe.to_str().unwrap()]);
+    assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+    let bytes = std::fs::read(&exe).unwrap().to_ascii_uppercase();
+    assert!(!bytes.windows(12).any(|w| w == b"VCRUNTIME140"), "executable still depends on the VC++ runtime");
+}
+
+/// Needs internet the first time: `cargo test -- --ignored`.
+#[test]
+#[ignore]
+fn crate_features() {
+    let (code, out, err) = run_file("tests/crates/features.kl");
+    assert_eq!(code, 0, "{}", err);
+    assert_eq!(out, "roll ok: true\n");
+}

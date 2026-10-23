@@ -57,20 +57,38 @@ fn load(root_name: &str, root_source: &str) -> Result<(Program, SourceMap), Stri
             }
             program.rust_files.push((shown, *pos));
         }
-        for (name, version, pos) in &parsed.crates {
-            if let Some((_, v, _)) = program.crates.iter().find(|(n, _, _)| n == name) {
-                if v != version {
-                    let e = CompileError::new(format!("crate `{}` is used with two versions: \"{}\" and \"{}\"", name, v, version), *pos);
+        for dep in &parsed.crates {
+            if let Some(existing) = program.crates.iter_mut().find(|c| c.name == dep.name) {
+                if existing.version != dep.version {
+                    let e = CompileError::new(
+                        format!("crate `{}` is used with two versions: \"{}\" and \"{}\"", dep.name, existing.version, dep.version),
+                        dep.pos,
+                    );
                     return Err(map.render(&e));
+                }
+                for f in &dep.features {
+                    if !existing.features.contains(f) {
+                        existing.features.push(f.clone());
+                    }
                 }
                 continue;
             }
-            program.crates.push((name.clone(), version.clone(), *pos));
+            program.crates.push(dep.clone());
         }
         program.extern_types.extend(parsed.extern_types);
         program.extern_fns.extend(parsed.extern_fns);
         for (import, pos) in &parsed.imports {
-            let target = dir.join(import);
+            let target = match import.strip_prefix("std/") {
+                Some(module) => {
+                    let module = module.strip_suffix(".kl").unwrap_or(module);
+                    if !crate::stdlib::has(module) {
+                        let e = CompileError::new(format!("there is no standard module `std/{}`", module), *pos);
+                        return Err(map.render(&e));
+                    }
+                    crate::stdlib::dir()?.join(format!("{}.kl", module))
+                }
+                None => dir.join(import),
+            };
             let canonical = match std::fs::canonicalize(&target) {
                 Ok(c) => c,
                 Err(_) => {
@@ -103,8 +121,8 @@ pub fn to_rust(file: &str, source: &str) -> Result<String, String> {
 
 /// What the Rust build needs besides the generated source.
 struct Native {
-    /// crates.io dependencies: (name, version).
-    crates: Vec<(String, String)>,
+    /// crates.io dependencies.
+    crates: Vec<crate::ast::CrateDep>,
     /// Whether the program calls hand-written Rust (`use rust` / `extern fn`).
     uses_rust: bool,
 }
@@ -120,7 +138,7 @@ fn compile(file: &str, source: &str, require_main: bool) -> Result<(String, Nati
     let model = checker::Model::build(&program, require_main).map_err(|e| map.render(&e))?;
     let rust = codegen::generate(&program, &model).map_err(|e| map.render(&e))?;
     let native = Native {
-        crates: program.crates.iter().map(|(n, v, _)| (n.clone(), v.clone())).collect(),
+        crates: program.crates.clone(),
         uses_rust: !program.rust_files.is_empty() || !program.extern_fns.is_empty() || !program.crates.is_empty(),
     };
     Ok((rust, native))
@@ -154,6 +172,7 @@ pub fn build(input: &Path, output: Option<PathBuf>) -> Result<PathBuf, String> {
 
     let result = Command::new("rustc")
         .args(["--edition", "2024", "-O", "-C", "overflow-checks=on", "--crate-name", &name])
+        .args(static_crt_flags())
         .arg(&rs_path)
         .arg("-o")
         .arg(&exe)
@@ -163,6 +182,20 @@ pub fn build(input: &Path, output: Option<PathBuf>) -> Result<PathBuf, String> {
         return Err(rust_failure(&native, &rs_path, &String::from_utf8_lossy(&result.stderr)));
     }
     Ok(exe)
+}
+
+/// On Windows (MSVC), link the C runtime into the executable, so a finished game runs on
+/// any Windows PC without installing the Visual C++ runtime.
+fn static_crt_flags() -> Vec<&'static str> {
+    if cfg!(target_env = "msvc") { vec!["-C", "target-feature=+crt-static"] } else { vec![] }
+}
+
+fn host_triple() -> Result<String, String> {
+    let out = Command::new("rustc").arg("-vV").output().map_err(|e| format!("cannot run `rustc`: {}", e))?;
+    String::from_utf8_lossy(&out.stdout)
+        .lines()
+        .find_map(|l| l.strip_prefix("host: ").map(|h| h.trim().to_string()))
+        .ok_or_else(|| "cannot tell the Rust target platform (`rustc -vV`)".to_string())
 }
 
 fn rust_failure(native: &Native, generated: &Path, stderr: &str) -> String {
@@ -188,8 +221,13 @@ fn build_with_cargo(work: &Path, name: &str, rust: &str, native: &Native, exe: &
         "[package]\nname = \"{}\"\nversion = \"0.0.0\"\nedition = \"2024\"\n\n[workspace]\n\n[profile.release]\noverflow-checks = true\n\n[dependencies]\n",
         name.replace('_', "-")
     );
-    for (krate, version) in &native.crates {
-        manifest.push_str(&format!("{} = {:?}\n", krate, version));
+    for dep in &native.crates {
+        if dep.features.is_empty() {
+            manifest.push_str(&format!("{} = {:?}\n", dep.name, dep.version));
+        } else {
+            let fs: Vec<String> = dep.features.iter().map(|f| format!("{:?}", f)).collect();
+            manifest.push_str(&format!("{} = {{ version = {:?}, features = [{}] }}\n", dep.name, dep.version, fs.join(", ")));
+        }
     }
     let manifest_path = project.join("Cargo.toml");
     let deps_changed = std::fs::read_to_string(&manifest_path).ok().as_deref() != Some(manifest.as_str());
@@ -201,10 +239,14 @@ fn build_with_cargo(work: &Path, name: &str, rust: &str, native: &Native, exe: &
     if deps_changed {
         eprintln!("building with cargo (a crate used for the first time is downloaded and compiled once)...");
     }
+    // With an explicit `--target`, RUSTFLAGS only reach the program, not build scripts or
+    // proc-macros (which must not link the C runtime statically on Windows).
+    let host = host_triple()?;
     let result = Command::new("cargo")
-        .args(["build", "--release", "--quiet", "--manifest-path"])
+        .args(["build", "--release", "--quiet", "--target", &host, "--manifest-path"])
         .arg(project.join("Cargo.toml"))
         .env("CARGO_TARGET_DIR", &target)
+        .env("RUSTFLAGS", static_crt_flags().join(" "))
         .output()
         .map_err(|e| format!("cannot run `cargo` (is Rust installed and on PATH?): {}", e))?;
     if !result.status.success() {
@@ -214,7 +256,7 @@ fn build_with_cargo(work: &Path, name: &str, rust: &str, native: &Native, exe: &
         }
         return Err(rust_failure(native, &main_rs, &stderr));
     }
-    let built = target.join("release").join(format!("{}{}", name.replace('_', "-"), std::env::consts::EXE_SUFFIX));
+    let built = target.join(&host).join("release").join(format!("{}{}", name.replace('_', "-"), std::env::consts::EXE_SUFFIX));
     std::fs::copy(&built, exe).map_err(|e| format!("cannot copy {} to {}: {}", built.display(), exe.display(), e))?;
     Ok(exe.to_path_buf())
 }

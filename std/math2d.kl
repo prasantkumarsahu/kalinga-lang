@@ -1,0 +1,89 @@
+// 2D math for games: vectors and rectangles. Use with `import "std/math2d"`.
+
+// A 2D vector (position, velocity, direction...).
+struct Vec2 {
+    x: float
+    y: float
+
+    static fn zero() -> Vec2 {
+        return Vec2(0.0, 0.0)
+    }
+
+    // A vector of the given length pointing at `radians`.
+    static fn from_angle(radians: float, length: float) -> Vec2 {
+        return Vec2(Math.cos(radians) * length, Math.sin(radians) * length)
+    }
+
+    fn length() -> float {
+        return Math.hypot(self.x, self.y)
+    }
+
+    fn dot(o: Vec2) -> float {
+        return self.x * o.x + self.y * o.y
+    }
+
+    fn distance(o: Vec2) -> float {
+        return Math.hypot(self.x - o.x, self.y - o.y)
+    }
+
+    // The same direction with length 1 (or zero for the zero vector).
+    fn normalized() -> Vec2 {
+        let len = self.length()
+        if len == 0.0 {
+            return Vec2(0.0, 0.0)
+        }
+        return Vec2(self.x / len, self.y / len)
+    }
+
+    fn angle() -> float {
+        return Math.atan2(self.y, self.x)
+    }
+
+    fn lerp(to: Vec2, t: float) -> Vec2 {
+        return Vec2(Math.lerp(self.x, to.x, t), Math.lerp(self.y, to.y, t))
+    }
+
+    op +(o: Vec2) -> Vec2 {
+        return Vec2(self.x + o.x, self.y + o.y)
+    }
+
+    op -(o: Vec2) -> Vec2 {
+        return Vec2(self.x - o.x, self.y - o.y)
+    }
+
+    op *(k: float) -> Vec2 {
+        return Vec2(self.x * k, self.y * k)
+    }
+
+    op /(k: float) -> Vec2 {
+        return Vec2(self.x / k, self.y / k)
+    }
+
+    op -() -> Vec2 {
+        return Vec2(-self.x, -self.y)
+    }
+}
+
+// An axis-aligned rectangle: top-left corner plus size.
+struct Rect {
+    x: float
+    y: float
+    w: float
+    h: float
+
+    fn center() -> Vec2 {
+        return Vec2(self.x + self.w / 2.0, self.y + self.h / 2.0)
+    }
+
+    fn contains(p: Vec2) -> bool {
+        return p.x >= self.x && p.x <= self.x + self.w && p.y >= self.y && p.y <= self.y + self.h
+    }
+
+    fn overlaps(o: Rect) -> bool {
+        return self.x < o.x + o.w && o.x < self.x + self.w && self.y < o.y + o.h && o.y < self.y + self.h
+    }
+
+    fn moved(by: Vec2) -> Rect {
+        return Rect(self.x + by.x, self.y + by.y, self.w, self.h)
+    }
+}

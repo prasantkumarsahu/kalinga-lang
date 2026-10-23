@@ -272,9 +272,102 @@ impl Lexer {
         if w.starts_with("__") {
             return err("names starting with `__` are reserved", pos);
         }
+        // `= rust { ... }`: the body is Rust, so take it as raw text.
+        if w == "rust" && self.out.last().is_some_and(|t| t.tok == Tok::Assign) {
+            let mut j = self.i;
+            while matches!(self.chars.get(j), Some(' ' | '\t')) {
+                j += 1;
+            }
+            if self.chars.get(j) == Some(&'{') {
+                while self.i < j {
+                    self.bump();
+                }
+                let body = self.rust_block(pos)?;
+                self.push(Tok::RustBlock(body), pos);
+                return Ok(());
+            }
+        }
         let tok = Tok::keyword(&w).unwrap_or(Tok::Ident(w));
         self.push(tok, pos);
         Ok(())
+    }
+
+    /// Reads a balanced `{ ... }` of Rust code, skipping Rust strings, chars and comments.
+    fn rust_block(&mut self, pos: Pos) -> Result<String> {
+        self.bump(); // `{`
+        let mut out = String::new();
+        let mut depth = 1;
+        loop {
+            let c = match self.bump() {
+                Some(c) => c,
+                None => return err("unterminated `rust { ... }` block", pos),
+            };
+            match c {
+                '{' => depth += 1,
+                '}' => {
+                    depth -= 1;
+                    if depth == 0 {
+                        return Ok(out);
+                    }
+                }
+                '"' => {
+                    out.push(c);
+                    while let Some(d) = self.bump() {
+                        out.push(d);
+                        if d == '\\' {
+                            if let Some(e) = self.bump() {
+                                out.push(e);
+                            }
+                        } else if d == '"' {
+                            break;
+                        }
+                    }
+                    continue;
+                }
+                '\'' => {
+                    // A char literal ('x', '\n', '{') or a lifetime ('a).
+                    out.push(c);
+                    let is_char = matches!((self.peek(), self.peek2()), (Some('\\'), _) | (Some(_), Some('\'')));
+                    if is_char {
+                        while let Some(d) = self.bump() {
+                            out.push(d);
+                            if d == '\\' {
+                                if let Some(e) = self.bump() {
+                                    out.push(e);
+                                }
+                            } else if d == '\'' {
+                                break;
+                            }
+                        }
+                    }
+                    continue;
+                }
+                '/' if self.peek() == Some('/') => {
+                    out.push(c);
+                    while let Some(d) = self.peek() {
+                        if d == '\n' {
+                            break;
+                        }
+                        out.push(d);
+                        self.bump();
+                    }
+                    continue;
+                }
+                '/' if self.peek() == Some('*') => {
+                    out.push(c);
+                    while let Some(d) = self.bump() {
+                        out.push(d);
+                        if d == '*' && self.peek() == Some('/') {
+                            out.push(self.bump().unwrap());
+                            break;
+                        }
+                    }
+                    continue;
+                }
+                _ => {}
+            }
+            out.push(c);
+        }
     }
 
     fn symbol(&mut self, pos: Pos) -> Result<()> {
