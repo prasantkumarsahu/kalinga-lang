@@ -35,6 +35,9 @@ impl SourceMap {
     }
 }
 
+/// How many errors are shown at most; later ones are often caused by earlier ones.
+pub const MAX_ERRORS: usize = 20;
+
 /// Errors in the program itself, with the sources they point into.
 #[derive(Debug)]
 pub struct CompileErrors {
@@ -138,7 +141,14 @@ impl DriverError {
     }
 
     pub(crate) fn compile(sources: SourceMap, diagnostic: Diagnostic) -> Self {
-        DriverError::Compile(Box::new(CompileErrors { sources, diagnostics: vec![diagnostic] }))
+        Self::compile_all(sources, vec![diagnostic])
+    }
+
+    /// Errors in the program, in source order; at most `MAX_ERRORS` are kept.
+    pub(crate) fn compile_all(sources: SourceMap, mut diagnostics: Vec<Diagnostic>) -> Self {
+        diagnostics.sort_by_key(|d| (d.span.file, d.span.line, d.span.col));
+        diagnostics.truncate(MAX_ERRORS);
+        DriverError::Compile(Box::new(CompileErrors { sources, diagnostics }))
     }
 }
 

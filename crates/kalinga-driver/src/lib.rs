@@ -242,12 +242,15 @@ pub fn check(file: &str, source: &str) -> Result<()> {
 
 fn compile(file: &str, source: &str, require_main: bool) -> Result<(String, Native)> {
     let (program, map) = load(file, source)?;
-    let rust = match kalinga_sema::Model::build(&program, require_main)
-        .and_then(|model| kalinga_codegen::generate(&program, &model))
-    {
-        Ok(rust) => rust,
+    let model = match kalinga_sema::Model::build(&program, require_main) {
+        Ok(m) => m,
         Err(d) => return Err(DriverError::compile(map, d)),
     };
+    let typed = match kalinga_sema::typeck::check(&program, &model) {
+        Ok(t) => t,
+        Err(ds) => return Err(DriverError::compile_all(map, ds)),
+    };
+    let rust = kalinga_codegen::generate(&program, &model, &typed);
     let native = Native {
         crates: program.crates.clone(),
         uses_rust: !program.rust_files.is_empty() || !program.extern_fns.is_empty() || !program.crates.is_empty(),
