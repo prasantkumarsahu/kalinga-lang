@@ -1,6 +1,6 @@
 use kalinga_driver as driver;
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::exit;
 
 const USAGE: &str = "Kalinga — a simple, safe, fast object-oriented language that compiles to Rust
@@ -13,6 +13,13 @@ usage:
                                        meant to be imported can be checked (--stdin reads the
                                        source from stdin)
   kalinga -v | --version               print the installed version";
+
+/// Errors from the compiler and the command's own messages, shown as text.
+type CliResult<T> = Result<T, Box<dyn std::error::Error>>;
+
+fn read(file: &Path) -> CliResult<String> {
+    std::fs::read_to_string(file).map_err(|e| format!("cannot read {}: {}", file.display(), e).into())
+}
 
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -28,8 +35,8 @@ fn main() {
         }
     };
 
-    let result = match cmd {
-        "run" => driver::run(&file),
+    let result: CliResult<i32> = match cmd {
+        "run" => driver::run(&file).map_err(Into::into),
         "build" => {
             let out = match args.get(2).map(String::as_str) {
                 Some("-o") => match args.get(3) {
@@ -46,28 +53,25 @@ fn main() {
                 None => None,
             };
             let out = out.or_else(|| Some(file.with_extension(std::env::consts::EXE_EXTENSION)));
-            driver::build(&file, out).map(|exe| {
+            driver::build(&file, out).map_err(Into::into).map(|exe| {
                 println!("built {}", exe.display());
                 0
             })
         }
-        "emit" => std::fs::read_to_string(&file)
-            .map_err(|e| format!("cannot read {}: {}", file.display(), e))
-            .and_then(|src| driver::to_rust(&file.display().to_string(), &src))
-            .map(|rust| {
-                print!("{}", rust);
-                0
-            }),
+        "emit" => read(&file).and_then(|src| Ok(driver::to_rust(&file.display().to_string(), &src)?)).map(|rust| {
+            print!("{}", rust);
+            0
+        }),
         "check" => {
             let source = if args.get(2).map(String::as_str) == Some("--stdin") {
                 let mut s = String::new();
                 std::io::Read::read_to_string(&mut std::io::stdin(), &mut s)
                     .map(|_| s)
-                    .map_err(|e| format!("cannot read stdin: {}", e))
+                    .map_err(|e| format!("cannot read stdin: {}", e).into())
             } else {
-                std::fs::read_to_string(&file).map_err(|e| format!("cannot read {}: {}", file.display(), e))
+                read(&file)
             };
-            source.and_then(|src| driver::check(&file.display().to_string(), &src)).map(|_| 0)
+            source.and_then(|src| Ok(driver::check(&file.display().to_string(), &src)?)).map(|_| 0)
         }
         _ => {
             eprintln!("unknown command `{}`\n\n{}", cmd, USAGE);

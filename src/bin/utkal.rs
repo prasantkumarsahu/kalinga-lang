@@ -6,6 +6,9 @@ use std::process::{Command, exit};
 use kalinga_driver as driver;
 use kalinga_project::{self as project, MANIFEST, Mode};
 
+/// Errors from the libraries and the command's own messages, shown as text.
+type CliResult<T> = Result<T, Box<dyn std::error::Error>>;
+
 const USAGE: &str = "utkal — the Kalinga package manager
 
 usage:
@@ -45,8 +48,8 @@ fn main() {
             println!("{} package(s) up to date", r.packages.len());
             Ok(0)
         }),
-        Some(other) => Err(format!("unknown command `{}`\n\n{}", other, USAGE)),
-        None => Err(USAGE.to_string()),
+        Some(other) => Err(format!("unknown command `{}`\n\n{}", other, USAGE).into()),
+        None => Err(USAGE.into()),
     };
     match result {
         Ok(code) => exit(code),
@@ -58,14 +61,14 @@ fn main() {
 }
 
 /// The project folder: the nearest one above the current folder holding `utkal.toml`.
-fn project_dir() -> Result<PathBuf, String> {
+fn project_dir() -> CliResult<PathBuf> {
     let cwd = std::env::current_dir().map_err(|e| format!("cannot read the current folder: {}", e))?;
     project::find_project(&cwd).ok_or_else(|| {
-        format!("no {} here or in any parent folder (create a project with `utkal new <name>`)", MANIFEST)
+        format!("no {} here or in any parent folder (create a project with `utkal new <name>`)", MANIFEST).into()
     })
 }
 
-fn new(args: &[&str]) -> Result<i32, String> {
+fn new(args: &[&str]) -> CliResult<i32> {
     let Some(name) = args.first().filter(|a| !a.starts_with('-')) else {
         return Err("usage: utkal new <name> [--lib]".into());
     };
@@ -76,10 +79,11 @@ fn new(args: &[&str]) -> Result<i32, String> {
         return Err(format!(
             "`{}` is not a valid package name (use letters, digits, `-` and `_`, starting with a letter)",
             pkg
-        ));
+        )
+        .into());
     }
     if dir.exists() {
-        return Err(format!("{} already exists", dir.display()));
+        return Err(format!("{} already exists", dir.display()).into());
     }
     let src = dir.join("src");
     let write =
@@ -122,8 +126,10 @@ fn toml_str(s: &str) -> String {
     toml::Value::String(s.to_string()).to_string()
 }
 
-fn add(args: &[&str]) -> Result<i32, String> {
-    let Some(name) = args.first().filter(|a| !a.starts_with('-')) else { return Err(format!("usage:\n{}", USAGE)) };
+fn add(args: &[&str]) -> CliResult<i32> {
+    let Some(name) = args.first().filter(|a| !a.starts_with('-')) else {
+        return Err(format!("usage:\n{}", USAGE).into());
+    };
     let dir = project_dir()?;
     let (section, line) = if let Some(version) = flag(args, "--rust") {
         let line = match flag(args, "--features") {
@@ -136,7 +142,7 @@ fn add(args: &[&str]) -> Result<i32, String> {
         ("rust-dependencies", line)
     } else {
         if !project::valid_package_name(name) {
-            return Err(format!("`{}` is not a valid package name", name));
+            return Err(format!("`{}` is not a valid package name", name).into());
         }
         let source = match (flag(args, "--git"), flag(args, "--path")) {
             (Some(url), None) => {
@@ -161,13 +167,13 @@ fn add(args: &[&str]) -> Result<i32, String> {
     // Fetch now, so mistakes show up at once; undo the change if it fails.
     if let Err(e) = project::resolve(&dir, Mode::Fetch) {
         let _ = std::fs::write(&path, &old);
-        return Err(e);
+        return Err(e.into());
     }
     println!("added `{}` to [{}]", name, section);
     Ok(0)
 }
 
-fn remove(args: &[&str]) -> Result<i32, String> {
+fn remove(args: &[&str]) -> CliResult<i32> {
     let Some(name) = args.first() else { return Err("usage: utkal remove <name>".into()) };
     let dir = project_dir()?;
     let path = dir.join(MANIFEST);
@@ -177,7 +183,7 @@ fn remove(args: &[&str]) -> Result<i32, String> {
         text = set_entry(&text, section, name, None);
     }
     if text == old {
-        return Err(format!("`{}` is not in {}", name, MANIFEST));
+        return Err(format!("`{}` is not in {}", name, MANIFEST).into());
     }
     std::fs::write(&path, &text).map_err(|e| format!("cannot write {}: {}", path.display(), e))?;
     project::resolve(&dir, Mode::Fetch)?;
@@ -232,7 +238,7 @@ fn set_entry(text: &str, section: &str, name: &str, line: Option<&str>) -> Strin
 }
 
 /// Fetches packages, then compiles `src/main.kl` to `target/<name>`.
-fn build(dir: &Path) -> Result<PathBuf, String> {
+fn build(dir: &Path) -> CliResult<PathBuf> {
     let manifest = project::read_manifest(dir)?;
     project::resolve(dir, Mode::Fetch)?;
     let main = dir.join("src").join("main.kl");
@@ -240,22 +246,23 @@ fn build(dir: &Path) -> Result<PathBuf, String> {
         return Err(format!(
             "{} not found (a library has only src/lib.kl: use `utkal check` or `utkal test`)",
             main.display()
-        ));
+        )
+        .into());
     }
     let target = dir.join("target");
     std::fs::create_dir_all(&target).map_err(|e| format!("cannot create {}: {}", target.display(), e))?;
     let exe = target.join(format!("{}{}", manifest.name, std::env::consts::EXE_SUFFIX));
-    driver::build(&main, Some(exe))
+    Ok(driver::build(&main, Some(exe))?)
 }
 
-fn run(args: &[&str]) -> Result<i32, String> {
+fn run(args: &[&str]) -> CliResult<i32> {
     let dir = project_dir()?;
     let exe = build(&dir)?;
     let status = Command::new(&exe).args(args).status().map_err(|e| format!("cannot run {}: {}", exe.display(), e))?;
     Ok(status.code().unwrap_or(1))
 }
 
-fn check() -> Result<i32, String> {
+fn check() -> CliResult<i32> {
     let dir = project_dir()?;
     project::resolve(&dir, Mode::Fetch)?;
     let mut checked = 0;
@@ -275,7 +282,7 @@ fn check() -> Result<i32, String> {
     Ok(0)
 }
 
-fn test() -> Result<i32, String> {
+fn test() -> CliResult<i32> {
     let dir = project_dir()?;
     project::resolve(&dir, Mode::Fetch)?;
     let mut tests: Vec<PathBuf> = std::fs::read_dir(dir.join("tests"))

@@ -12,6 +12,9 @@ use std::process::Command;
 use kalinga_syntax::ast::CrateDep;
 use kalinga_syntax::error::Span;
 
+mod error;
+pub use error::{ProjectError, Result};
+
 pub const MANIFEST: &str = "utkal.toml";
 pub const LOCK: &str = "utkal.lock";
 
@@ -80,34 +83,39 @@ fn strip_verbatim(p: &Path) -> PathBuf {
     PathBuf::from(s.strip_prefix(r"\\?\").unwrap_or(&s))
 }
 
-pub fn read_manifest(dir: &Path) -> Result<Manifest, String> {
+pub fn read_manifest(dir: &Path) -> Result<Manifest> {
     let path = dir.join(MANIFEST);
-    let text = std::fs::read_to_string(&path).map_err(|e| format!("cannot read {}: {}", path.display(), e))?;
-    parse_manifest(&text).map_err(|e| format!("{}: {}", path.display(), e))
+    let text = std::fs::read_to_string(&path).map_err(ProjectError::io("read", &path))?;
+    parse_manifest(&text).map_err(ProjectError::in_manifest(path))
 }
 
-pub fn parse_manifest(text: &str) -> Result<Manifest, String> {
-    let doc: toml::Table = text.parse().map_err(|e: toml::de::Error| e.message().to_string())?;
-    let package = doc.get("package").and_then(|p| p.as_table()).ok_or("missing a [package] section")?;
-    let name = package.get("name").and_then(|n| n.as_str()).ok_or("[package] needs a `name`")?.to_string();
+/// A problem with the contents of a manifest.
+fn bad(problem: impl Into<String>) -> ProjectError {
+    ProjectError::Manifest(problem.into())
+}
+
+pub fn parse_manifest(text: &str) -> Result<Manifest> {
+    let doc: toml::Table = text.parse().map_err(|e: toml::de::Error| bad(e.message()))?;
+    let package = doc.get("package").and_then(|p| p.as_table()).ok_or_else(|| bad("missing a [package] section"))?;
+    let name = package.get("name").and_then(|n| n.as_str()).ok_or_else(|| bad("[package] needs a `name`"))?.to_string();
     if !valid_package_name(&name) {
-        return Err(format!(
+        return Err(bad(format!(
             "`{}` is not a valid package name (use letters, digits, `-` and `_`, starting with a letter)",
             name
-        ));
+        )));
     }
     let version = package.get("version").and_then(|v| v.as_str()).unwrap_or("0.1.0").to_string();
 
     let mut deps = vec![];
     if let Some(table) = doc.get("dependencies") {
-        let table = table.as_table().ok_or("[dependencies] must be a table")?;
+        let table = table.as_table().ok_or_else(|| bad("[dependencies] must be a table"))?;
         for (dname, spec) in table {
             if !valid_package_name(dname) {
-                return Err(format!("`{}` is not a valid package name", dname));
+                return Err(bad(format!("`{}` is not a valid package name", dname)));
             }
             let spec = spec
                 .as_table()
-                .ok_or_else(|| format!("dependency `{}` needs `git = \"...\"` or `path = \"...\"`", dname))?;
+                .ok_or_else(|| bad(format!("dependency `{}` needs `git = \"...\"` or `path = \"...\"`", dname)))?;
             let get = |k: &str| spec.get(k).and_then(|v| v.as_str()).map(str::to_string);
             let source = match (get("path"), get("git")) {
                 (Some(p), None) => Source::Path(p),
@@ -122,22 +130,23 @@ pub fn parse_manifest(text: &str) -> Result<Manifest, String> {
                     .flatten()
                     .collect();
                     if pins.len() > 1 {
-                        return Err(format!(
+                        return Err(bad(format!(
                             "dependency `{}`: use only one of `tag`, `branch`, `rev` and `version`",
                             dname
-                        ));
+                        )));
                     }
                     if let Some(GitPin::Version(v)) = pins.first() {
-                        Req::parse(v)
-                            .ok_or_else(|| format!("dependency `{}`: `{}` is not a version requirement", dname, v))?;
+                        Req::parse(v).ok_or_else(|| {
+                            bad(format!("dependency `{}`: `{}` is not a version requirement", dname, v))
+                        })?;
                     }
                     Source::Git { url, pin: pins.into_iter().next().unwrap_or(GitPin::Head) }
                 }
                 _ => {
-                    return Err(format!(
+                    return Err(bad(format!(
                         "dependency `{}` needs exactly one of `git = \"...\"` and `path = \"...\"`",
                         dname
-                    ));
+                    )));
                 }
             };
             deps.push(Dep { name: dname.clone(), source });
@@ -146,7 +155,7 @@ pub fn parse_manifest(text: &str) -> Result<Manifest, String> {
 
     let mut rust_deps = vec![];
     if let Some(table) = doc.get("rust-dependencies") {
-        let table = table.as_table().ok_or("[rust-dependencies] must be a table")?;
+        let table = table.as_table().ok_or_else(|| bad("[rust-dependencies] must be a table"))?;
         for (cname, spec) in table {
             let (version, features) = match spec {
                 toml::Value::String(v) => (v.clone(), vec![]),
@@ -154,17 +163,17 @@ pub fn parse_manifest(text: &str) -> Result<Manifest, String> {
                     let v = t
                         .get("version")
                         .and_then(|v| v.as_str())
-                        .ok_or_else(|| format!("crate `{}` needs a `version`", cname))?;
+                        .ok_or_else(|| bad(format!("crate `{}` needs a `version`", cname)))?;
                     let fs = match t.get("features") {
                         None => vec![],
                         Some(f) => f
                             .as_array()
                             .and_then(|a| a.iter().map(|x| x.as_str().map(str::to_string)).collect::<Option<Vec<_>>>())
-                            .ok_or_else(|| format!("crate `{}`: `features` must be a list of strings", cname))?,
+                            .ok_or_else(|| bad(format!("crate `{}`: `features` must be a list of strings", cname)))?,
                     };
                     (v.to_string(), fs)
                 }
-                _ => return Err(format!("crate `{}` needs a version, e.g. {} = \"1.0\"", cname, cname)),
+                _ => return Err(bad(format!("crate `{}` needs a version, e.g. {} = \"1.0\"", cname, cname))),
             };
             rust_deps.push(CrateDep { name: cname.clone(), version, features, pos: Span::default() });
         }
@@ -185,7 +194,7 @@ pub fn unit_name(package: &str) -> String {
 /// Adds a crate to `list`, merging it with an entry of the same name. Two versions merge
 /// when they are compatible (`"0.4"` and `"0.4.16"`); the higher one is kept and the
 /// features are combined.
-pub fn merge_crate(list: &mut Vec<CrateDep>, dep: &CrateDep) -> Result<(), String> {
+pub fn merge_crate(list: &mut Vec<CrateDep>, dep: &CrateDep) -> Result<()> {
     let Some(existing) = list.iter_mut().find(|c| c.name == dep.name) else {
         list.push(dep.clone());
         return Ok(());
@@ -198,10 +207,11 @@ pub fn merge_crate(list: &mut Vec<CrateDep>, dep: &CrateDep) -> Result<(), Strin
                 }
             }
             _ => {
-                return Err(format!(
-                    "crate `{}` is used with two versions: \"{}\" and \"{}\"",
-                    dep.name, existing.version, dep.version
-                ));
+                return Err(ProjectError::CrateVersions {
+                    name: dep.name.clone(),
+                    first: existing.version.clone(),
+                    second: dep.version.clone(),
+                });
             }
         }
     }
@@ -355,14 +365,20 @@ pub struct Resolved {
     pub rust_deps: Vec<CrateDep>,
 }
 
+/// Where a dependency's files come from, once its path folder (if any) has been found.
+enum Place<'a> {
+    Folder(PathBuf),
+    Git { url: &'a str, pin: &'a GitPin },
+}
+
 /// Finds (and in `Fetch` / `Update` mode downloads) every package `project` depends on,
 /// directly or through other packages, and rewrites `utkal.lock` when it changed.
-pub fn resolve(project: &Path, mode: Mode) -> Result<Resolved, String> {
+pub fn resolve(project: &Path, mode: Mode) -> Result<Resolved> {
     let root = read_manifest(project)?;
     let lock = if mode == Mode::Update { vec![] } else { read_lock(project) };
     let mut out = Resolved::default();
     for c in &root.rust_deps {
-        merge_crate(&mut out.rust_deps, c).map_err(|e| format!("{}: {}", project.join(MANIFEST).display(), e))?;
+        merge_crate(&mut out.rust_deps, c).map_err(ProjectError::in_manifest(project.join(MANIFEST)))?;
     }
 
     // name → (source description, who asked first, version of the chosen commit)
@@ -372,19 +388,18 @@ pub fn resolve(project: &Path, mode: Mode) -> Result<Resolved, String> {
         root.deps.into_iter().map(|d| (d, project.to_path_buf(), format!("`{}`", root.name))).collect();
     while !queue.is_empty() {
         let (dep, base, requirer) = queue.remove(0);
-        let desc = match &dep.source {
-            Source::Path(p) => {
-                let dir = std::fs::canonicalize(base.join(p)).map_err(|_| {
-                    format!(
-                        "package `{}` (required by {}): folder {} not found",
-                        dep.name,
-                        requirer,
-                        base.join(p).display()
-                    )
-                })?;
-                format!("path {}", strip_verbatim(&dir).display())
-            }
-            Source::Git { .. } => dep.source.describe(),
+        let in_package = || ProjectError::in_package(&dep.name, &requirer);
+        let place = match &dep.source {
+            Source::Path(p) => Place::Folder(
+                std::fs::canonicalize(base.join(p))
+                    .map(|d| strip_verbatim(&d))
+                    .map_err(|_| in_package()(ProjectError::MissingFolder(base.join(p))))?,
+            ),
+            Source::Git { url, pin } => Place::Git { url, pin },
+        };
+        let desc = match &place {
+            Place::Folder(dir) => format!("path {}", dir.display()),
+            Place::Git { .. } => dep.source.describe(),
         };
         if let Some((first_desc, first_requirer, version)) = chosen.get(&dep.name) {
             let compatible = *first_desc == desc
@@ -398,35 +413,35 @@ pub fn resolve(project: &Path, mode: Mode) -> Result<Resolved, String> {
             if compatible {
                 continue;
             }
-            return Err(format!(
-                "package `{}` is required as `{}` by {} but as `{}` by {}; make them agree",
-                dep.name, first_desc, first_requirer, desc, requirer
-            ));
+            return Err(ProjectError::Conflict {
+                name: dep.name.clone(),
+                first: first_desc.clone(),
+                first_by: first_requirer.clone(),
+                second: desc,
+                second_by: requirer,
+            });
         }
 
-        let (dir, version) = match &dep.source {
-            Source::Path(p) => (strip_verbatim(&std::fs::canonicalize(base.join(p)).unwrap()), None),
-            Source::Git { url, pin } => {
+        let (dir, version) = match place {
+            Place::Folder(dir) => (dir, None),
+            Place::Git { url, pin } => {
                 let locked = lock.iter().find(|l| l.name == dep.name && l.source == desc).map(|l| l.commit.clone());
-                let (dir, commit, version) = fetch_git(&dep.name, url, pin, locked, mode)
-                    .map_err(|e| format!("package `{}` (required by {}): {}", dep.name, requirer, e))?;
+                let (dir, commit, version) = fetch_git(&dep.name, url, pin, locked, mode).map_err(in_package())?;
                 new_lock.push(Locked { name: dep.name.clone(), source: desc.clone(), commit });
                 (dir, version)
             }
         };
-        let manifest =
-            read_manifest(&dir).map_err(|e| format!("package `{}` (required by {}): {}", dep.name, requirer, e))?;
+        let manifest = read_manifest(&dir).map_err(in_package())?;
         if manifest.name != dep.name {
-            return Err(format!(
-                "{} asks for package `{}`, but {} is named `{}`",
+            return Err(ProjectError::WrongName {
                 requirer,
-                dep.name,
-                dir.join(MANIFEST).display(),
-                manifest.name
-            ));
+                wanted: dep.name.clone(),
+                manifest: dir.join(MANIFEST),
+                found: manifest.name,
+            });
         }
         for c in &manifest.rust_deps {
-            merge_crate(&mut out.rust_deps, c).map_err(|e| format!("{}: {}", dir.join(MANIFEST).display(), e))?;
+            merge_crate(&mut out.rust_deps, c).map_err(ProjectError::in_manifest(dir.join(MANIFEST)))?;
         }
         for d in manifest.deps {
             queue.push((d, dir.clone(), format!("`{}`", dep.name)));
@@ -443,7 +458,7 @@ pub fn resolve(project: &Path, mode: Mode) -> Result<Resolved, String> {
         if new_lock.is_empty() && old.is_none() {
             // No git packages: no lock file needed.
         } else if old.as_deref() != Some(text.as_str()) {
-            std::fs::write(&path, text).map_err(|e| format!("cannot write {}: {}", path.display(), e))?;
+            std::fs::write(&path, text).map_err(ProjectError::io("write", &path))?;
         }
     }
     Ok(out)
@@ -458,14 +473,17 @@ pub fn home() -> PathBuf {
     PathBuf::from(user).join(".utkal")
 }
 
-fn git(dir: Option<&Path>, args: &[&str]) -> Result<String, String> {
+fn git(dir: Option<&Path>, args: &[&str]) -> Result<String> {
     let mut cmd = Command::new("git");
     if let Some(d) = dir {
         cmd.arg("-C").arg(d);
     }
-    let out = cmd.args(args).output().map_err(|e| format!("cannot run `git` (is it installed and on PATH?): {}", e))?;
+    let out = cmd.args(args).output().map_err(ProjectError::GitMissing)?;
     if !out.status.success() {
-        return Err(format!("`git {}` failed: {}", args.join(" "), String::from_utf8_lossy(&out.stderr).trim()));
+        return Err(ProjectError::Git {
+            args: args.join(" "),
+            stderr: String::from_utf8_lossy(&out.stderr).trim().to_string(),
+        });
     }
     Ok(String::from_utf8_lossy(&out.stdout).trim().to_string())
 }
@@ -477,20 +495,21 @@ fn fetch_git(
     pin: &GitPin,
     locked: Option<String>,
     mode: Mode,
-) -> Result<(PathBuf, String, Option<Version>), String> {
+) -> Result<(PathBuf, String, Option<Version>)> {
     use std::hash::{Hash, Hasher};
     let mut h = std::collections::hash_map::DefaultHasher::new();
     url.hash(&mut h);
     let cache = home().join("cache");
-    let db = cache.join("git").join(format!("{}-{:08x}", name, h.finish() as u32));
-    let offline_hint = || "not downloaded yet; run `utkal build` in the project to fetch it".to_string();
+    let git_cache = cache.join("git");
+    let db = git_cache.join(format!("{}-{:08x}", name, h.finish() as u32));
+    let not_downloaded = || ProjectError::NotDownloaded { commit: None };
 
     let mut fetched = false;
     if !db.join("HEAD").exists() {
         if mode == Mode::Offline {
-            return Err(offline_hint());
+            return Err(not_downloaded());
         }
-        std::fs::create_dir_all(db.parent().unwrap()).map_err(|e| format!("cannot create {}: {}", db.display(), e))?;
+        std::fs::create_dir_all(&git_cache).map_err(ProjectError::io("create", &db))?;
         eprintln!("fetching {} from {}", name, url);
         git(None, &["clone", "--bare", "--quiet", url, &db.display().to_string()])?;
         fetched = true;
@@ -498,10 +517,12 @@ fn fetch_git(
     let has = |c: &str| git(Some(&db), &["cat-file", "-e", &format!("{}^{{commit}}", c)]).is_ok();
     let commit = match locked {
         Some(c) if has(&c) => c,
-        Some(c) if mode == Mode::Offline => return Err(format!("commit {} {}", short(&c), offline_hint())),
+        Some(c) if mode == Mode::Offline => {
+            return Err(ProjectError::NotDownloaded { commit: Some(short(&c).to_string()) });
+        }
         locked => {
             if mode == Mode::Offline {
-                return Err(offline_hint());
+                return Err(not_downloaded());
             }
             if !fetched {
                 eprintln!("updating {} from {}", name, url);
@@ -519,18 +540,18 @@ fn fetch_git(
         .filter_map(|t| Version::parse(t.trim()).map(|(v, _)| v))
         .max();
 
-    let checkout = cache.join("src").join(format!("{}-{}", name, short(&commit)));
+    let checkouts = cache.join("src");
+    let checkout = checkouts.join(format!("{}-{}", name, short(&commit)));
     if !checkout.join(MANIFEST).exists() {
-        let tmp = cache.join("src").join(format!("{}-{}.tmp", name, short(&commit)));
+        let tmp = checkouts.join(format!("{}-{}.tmp", name, short(&commit)));
         let _ = std::fs::remove_dir_all(&tmp);
-        std::fs::create_dir_all(tmp.parent().unwrap())
-            .map_err(|e| format!("cannot create {}: {}", tmp.display(), e))?;
+        std::fs::create_dir_all(&checkouts).map_err(ProjectError::io("create", &tmp))?;
         git(None, &["clone", "--quiet", "--no-checkout", &db.display().to_string(), &tmp.display().to_string()])?;
         git(Some(&tmp), &["-c", "advice.detachedHead=false", "checkout", "--quiet", "--detach", &commit])?;
         let _ = std::fs::remove_dir_all(&checkout);
-        std::fs::rename(&tmp, &checkout).map_err(|e| format!("cannot create {}: {}", checkout.display(), e))?;
+        std::fs::rename(&tmp, &checkout).map_err(ProjectError::io("create", &checkout))?;
         if !checkout.join(MANIFEST).exists() {
-            return Err(format!("{} (commit {}) has no {}", url, short(&commit), MANIFEST));
+            return Err(ProjectError::NoManifest { url: url.to_string(), commit: short(&commit).to_string() });
         }
     }
     Ok((checkout, commit, version))
@@ -540,15 +561,16 @@ fn short(commit: &str) -> &str {
     &commit[..commit.len().min(12)]
 }
 
-fn pick_commit(db: &Path, pin: &GitPin) -> Result<String, String> {
+fn pick_commit(db: &Path, pin: &GitPin) -> Result<String> {
     let rev = |r: &str| git(Some(db), &["rev-parse", "--verify", "--quiet", &format!("{}^{{commit}}", r)]);
+    let missing = |kind: &'static str, name: &str| ProjectError::NoSuchRef { kind, name: name.to_string() };
     match pin {
-        GitPin::Head => rev("HEAD").map_err(|_| "the repository has no commits".to_string()),
-        GitPin::Tag(t) => rev(&format!("refs/tags/{}", t)).map_err(|_| format!("no tag `{}`", t)),
-        GitPin::Branch(b) => rev(&format!("refs/heads/{}", b)).map_err(|_| format!("no branch `{}`", b)),
-        GitPin::Rev(r) => rev(r).map_err(|_| format!("no commit `{}`", r)),
+        GitPin::Head => rev("HEAD").map_err(|_| ProjectError::EmptyRepository),
+        GitPin::Tag(t) => rev(&format!("refs/tags/{}", t)).map_err(|_| missing("tag", t)),
+        GitPin::Branch(b) => rev(&format!("refs/heads/{}", b)).map_err(|_| missing("branch", b)),
+        GitPin::Rev(r) => rev(r).map_err(|_| missing("commit", r)),
         GitPin::Version(req) => {
-            let r = Req::parse(req).ok_or_else(|| format!("`{}` is not a version requirement", req))?;
+            let r = Req::parse(req).ok_or_else(|| ProjectError::BadRequirement(req.clone()))?;
             let tags = git(Some(db), &["tag", "--list"])?;
             let best = tags
                 .lines()
@@ -557,7 +579,7 @@ fn pick_commit(db: &Path, pin: &GitPin) -> Result<String, String> {
                 .max();
             match best {
                 Some((_, tag)) => rev(&format!("refs/tags/{}", tag)),
-                None => Err(format!("no tag matches version `{}` (tags look like `v1.2.3`)", req)),
+                None => Err(ProjectError::NoMatchingTag(req.clone())),
             }
         }
     }
