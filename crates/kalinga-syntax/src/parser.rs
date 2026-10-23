@@ -1,5 +1,5 @@
 use crate::ast::*;
-use crate::error::{Pos, Result, err};
+use crate::error::{Result, Span, err};
 use crate::token::{StrPart, Tok, Token};
 
 pub fn parse(tokens: Vec<Token>) -> Result<Program> {
@@ -7,7 +7,7 @@ pub fn parse(tokens: Vec<Token>) -> Result<Program> {
 }
 
 /// Parses the expression inside a `{...}` string interpolation.
-fn parse_embedded(code: &str, at: Pos) -> Result<Expr> {
+fn parse_embedded(code: &str, at: Span) -> Result<Expr> {
     let tokens = crate::lexer::lex_at(code, at)?;
     let mut p = Parser { tokens, i: 0 };
     let e = p.expr()?;
@@ -38,7 +38,7 @@ impl Parser {
         &self.tokens[self.i].tok
     }
 
-    fn pos(&self) -> Pos {
+    fn pos(&self) -> Span {
         self.tokens[self.i].pos
     }
 
@@ -63,7 +63,7 @@ impl Parser {
         }
     }
 
-    fn expect(&mut self, tok: Tok, what: &str) -> Result<Pos> {
+    fn expect(&mut self, tok: Tok, what: &str) -> Result<Span> {
         if self.check(&tok) {
             Ok(self.advance().pos)
         } else {
@@ -71,7 +71,7 @@ impl Parser {
         }
     }
 
-    fn ident(&mut self, what: &str) -> Result<(String, Pos)> {
+    fn ident(&mut self, what: &str) -> Result<(String, Span)> {
         match self.peek().clone() {
             Tok::Ident(name) => {
                 let pos = self.advance().pos;

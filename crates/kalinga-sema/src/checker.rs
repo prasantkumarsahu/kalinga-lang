@@ -6,7 +6,7 @@ use std::collections::{HashMap, HashSet};
 use std::fmt;
 
 use kalinga_syntax::ast::*;
-use kalinga_syntax::error::{Pos, Result, err};
+use kalinga_syntax::error::{Result, Span, err};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Type {
@@ -315,7 +315,7 @@ impl Model {
                 .map(|c| (c.name.clone(), c.tparams.len()))
                 .collect(),
         };
-        let check_tparams = |tps: &[String], pos: Pos| -> Result<()> {
+        let check_tparams = |tps: &[String], pos: Span| -> Result<()> {
             for (i, t) in tps.iter().enumerate() {
                 if !t.starts_with(|c: char| c.is_uppercase()) {
                     return err(format!("type parameters must start with an uppercase letter: `{}`", t), pos);
@@ -587,7 +587,7 @@ impl Model {
             m.extern_fns.insert(x.name.clone(), (sig, path));
         }
         match m.functions.get("main") {
-            None if require_main => return err("program has no `fn main()`", Pos { line: 1, col: 1, file: 0 }),
+            None if require_main => return err("program has no `fn main()`", Span::at(1, 1, 0)),
             Some(sig)
                 if !sig.params.is_empty()
                     || !matches!(&sig.ret, Type::Void)
@@ -1181,9 +1181,9 @@ impl Model {
 }
 
 /// Gives a position to errors raised without one (e.g. from type resolution).
-pub fn at_pos(mut e: kalinga_syntax::error::CompileError, pos: Pos) -> kalinga_syntax::error::CompileError {
-    if e.pos == Pos::default() {
-        e.pos = pos;
+pub fn at_pos(mut e: kalinga_syntax::error::Diagnostic, pos: Span) -> kalinga_syntax::error::Diagnostic {
+    if e.span == Span::default() {
+        e.span = pos;
     }
     e
 }
@@ -1196,7 +1196,7 @@ pub fn class_trait(class: &str) -> String {
     format!("__I_{}", class)
 }
 
-fn check_type_name(name: &str, pos: Pos) -> Result<()> {
+fn check_type_name(name: &str, pos: Span) -> Result<()> {
     if RESERVED_TYPES.contains(&name) || BUILTINS.contains(&name) {
         return err(format!("`{}` is reserved and cannot be used as a type name", name), pos);
     }
@@ -1286,18 +1286,18 @@ fn resolve_type(t: &TypeExpr, names: &TypeNames, tparams: &[String]) -> Result<T
         TypeExpr::Array(inner) => {
             let i = resolve_type(inner, names, tparams)?;
             if i == Type::Void {
-                return err("array of void is not allowed", Pos::default());
+                return err("array of void is not allowed", Span::default());
             }
             Type::Array(Box::new(i))
         }
         TypeExpr::Map(k, v) => {
             let kt = resolve_type(k, names, tparams)?;
             if !is_map_key(&kt) {
-                return err(format!("map keys must be `int`, `str` or `bool`, not `{}`", kt), Pos::default());
+                return err(format!("map keys must be `int`, `str` or `bool`, not `{}`", kt), Span::default());
             }
             let vt = resolve_type(v, names, tparams)?;
             if vt == Type::Void {
-                return err("map of void is not allowed", Pos::default());
+                return err("map of void is not allowed", Span::default());
             }
             Type::Map(Box::new(kt), Box::new(vt))
         }
@@ -1306,7 +1306,7 @@ fn resolve_type(t: &TypeExpr, names: &TypeNames, tparams: &[String]) -> Result<T
             for p in ps {
                 let t = resolve_type(p, names, tparams)?;
                 if t == Type::Void {
-                    return err("a function parameter cannot be void", Pos::default());
+                    return err("a function parameter cannot be void", Span::default());
                 }
                 params.push(t);
             }
@@ -1315,7 +1315,7 @@ fn resolve_type(t: &TypeExpr, names: &TypeNames, tparams: &[String]) -> Result<T
         TypeExpr::Optional(inner) => {
             let i = resolve_type(inner, names, tparams)?;
             if matches!(i, Type::Optional(_)) {
-                return err("nested optional `T??` is not allowed", Pos::default());
+                return err("nested optional `T??` is not allowed", Span::default());
             }
             Type::Optional(Box::new(i))
         }

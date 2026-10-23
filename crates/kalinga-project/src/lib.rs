@@ -10,7 +10,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use kalinga_syntax::ast::CrateDep;
-use kalinga_syntax::error::Pos;
+use kalinga_syntax::error::Span;
 
 pub const MANIFEST: &str = "utkal.toml";
 pub const LOCK: &str = "utkal.lock";
@@ -166,7 +166,7 @@ pub fn parse_manifest(text: &str) -> Result<Manifest, String> {
                 }
                 _ => return Err(format!("crate `{}` needs a version, e.g. {} = \"1.0\"", cname, cname)),
             };
-            rust_deps.push(CrateDep { name: cname.clone(), version, features, pos: Pos::default() });
+            rust_deps.push(CrateDep { name: cname.clone(), version, features, pos: Span::default() });
         }
     }
     Ok(Manifest { name, version, deps, rust_deps })
@@ -584,7 +584,7 @@ mod tests {
             name: "macroquad".into(),
             version: v.into(),
             features: f.iter().map(|s| s.to_string()).collect(),
-            pos: Pos::default(),
+            pos: Span::default(),
         };
         let mut list = vec![];
         merge_crate(&mut list, &dep("0.4", &["audio"])).unwrap();

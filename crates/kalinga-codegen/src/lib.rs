@@ -9,10 +9,10 @@ use std::collections::{HashMap, HashSet};
 use std::fmt::Write as _;
 
 use kalinga_sema::checker::{
-    BUILTINS, Model, Signature, StructOp, Type, class_trait, has_params, is_map_key, subst, subst_sig, unify,
+    BUILTINS, Model, Signature, StructOp, Type, at_pos, class_trait, has_params, is_map_key, subst, subst_sig, unify,
 };
 use kalinga_syntax::ast::*;
-use kalinga_syntax::error::{Pos, Result, err};
+use kalinga_syntax::error::{Result, Span, err};
 
 pub fn generate(prog: &Program, model: &Model) -> Result<String> {
     let g = Gen { m: model, self_values: RefCell::new(HashSet::new()), cast_targets: RefCell::new(HashSet::new()) };
@@ -126,7 +126,7 @@ impl Ctx {
         Some(var)
     }
 
-    fn declare(&mut self, name: &str, ty: Type, mutable: bool, pos: Pos) -> Result<String> {
+    fn declare(&mut self, name: &str, ty: Type, mutable: bool, pos: Span) -> Result<String> {
         let scope = self.scopes.last_mut().unwrap();
         if scope.contains_key(name) {
             return err(format!("`{}` is already declared in this scope", name), pos);
@@ -219,7 +219,7 @@ impl<'a> Gen<'a> {
     }
 
     /// Converts `code` of type `from` into type `to` (upcasts, optional wrapping).
-    fn coerce(&self, code: String, from: &Type, to: &Type, pos: Pos) -> Result<String> {
+    fn coerce(&self, code: String, from: &Type, to: &Type, pos: Span) -> Result<String> {
         if from == to {
             return Ok(code);
         }
@@ -535,7 +535,7 @@ impl<'a> Gen<'a> {
     }
 
     /// Type of struct field `f` (with the struct's type arguments), checking `private`.
-    fn struct_field_type(&self, cx: &Ctx, st: &str, args: &[Type], f: &str, pos: Pos) -> Result<Type> {
+    fn struct_field_type(&self, cx: &Ctx, st: &str, args: &[Type], f: &str, pos: Span) -> Result<Type> {
         let info = &self.m.structs[st];
         match info.fields.iter().find(|(n, _)| n == f) {
             Some((_, t)) => {
@@ -585,7 +585,7 @@ impl<'a> Gen<'a> {
         recv: &Expr,
         name: &str,
         args: &[Expr],
-        pos: Pos,
+        pos: Span,
     ) -> Result<(String, Type)> {
         let Type::Struct(st, targs) = strukt else { unreachable!("struct_method_call on `{}`", strukt) };
         let (st, targs) = (st.as_str(), targs.as_slice());
@@ -609,7 +609,7 @@ impl<'a> Gen<'a> {
         if m.is_mut {
             let mut n = 0;
             let (pre, place, _) = self.place(cx, recv, &mut n).map_err(|mut e| {
-                e.msg = format!("{} (`{}` is a `mut fn`, so it needs a variable it can change)", e.msg, name);
+                e.message = format!("{} (`{}` is a `mut fn`, so it needs a variable it can change)", e.message, name);
                 e
             })?;
             return Ok((format!("{{ {}{}let __t = {}.{}({}); __t }}", pre, binds, place, rid(name), names), m.sig.ret));
@@ -662,7 +662,7 @@ impl<'a> Gen<'a> {
         Ok((codes, ty.unwrap_or(Type::Float)))
     }
 
-    fn library_call(&self, cx: &mut Ctx, ns: &str, name: &str, args: &[Expr], pos: Pos) -> Result<(String, Type)> {
+    fn library_call(&self, cx: &mut Ctx, ns: &str, name: &str, args: &[Expr], pos: Span) -> Result<(String, Type)> {
         let what = format!("{}.{}", ns, name);
         let arity = |n: usize| -> Result<()> {
             if args.len() == n {
@@ -821,7 +821,7 @@ impl<'a> Gen<'a> {
         targs: &[TypeExpr],
         args: &[Expr],
         expected: Option<&Type>,
-        pos: Pos,
+        pos: Span,
     ) -> Result<(String, Type)> {
         let info = self.m.structs[name].clone();
         if info.tparams.is_empty() {
@@ -927,7 +927,7 @@ impl<'a> Gen<'a> {
         type_name: &str,
         variant: &str,
         args: Option<&[Expr]>,
-        pos: Pos,
+        pos: Span,
     ) -> Result<(String, Type)> {
         let info = &self.m.enums[type_name];
         let fields = match info.variant(variant) {
@@ -1203,7 +1203,7 @@ impl<'a> Gen<'a> {
         cx: &mut Ctx,
         sig: &Signature,
         stmts: &[Stmt],
-        pos: Pos,
+        pos: Span,
         name: &str,
         depth: usize,
     ) -> Result<String> {
@@ -1249,12 +1249,7 @@ impl<'a> Gen<'a> {
             StmtKind::Let { name, mutable, ty, value } => {
                 let (code, t) = match ty {
                     Some(te) => {
-                        let t = self.m.resolve(te, &cx.tparams).map_err(|mut e| {
-                            if e.pos == Pos::default() {
-                                e.pos = s.pos;
-                            }
-                            e
-                        })?;
+                        let t = self.m.resolve(te, &cx.tparams).map_err(|e| at_pos(e, s.pos))?;
                         (self.expr_to(cx, value, &t)?, t)
                     }
                     None => self.expr(cx, value, None)?,
@@ -1372,7 +1367,7 @@ impl<'a> Gen<'a> {
         }
     }
 
-    fn match_stmt(&self, cx: &mut Ctx, value: &Expr, arms: &[MatchArm], pos: Pos, depth: usize) -> Result<String> {
+    fn match_stmt(&self, cx: &mut Ctx, value: &Expr, arms: &[MatchArm], pos: Span, depth: usize) -> Result<String> {
         let (code, ty) = self.expr(cx, value, None)?;
         let enum_info = match &ty {
             Type::Enum(e) => Some((e.clone(), self.m.enums[e].clone())),
@@ -1492,7 +1487,7 @@ impl<'a> Gen<'a> {
         })
     }
 
-    fn super_init(&self, cx: &mut Ctx, args: &[Expr], pos: Pos) -> Result<String> {
+    fn super_init(&self, cx: &mut Ctx, args: &[Expr], pos: Span) -> Result<String> {
         if !cx.in_init {
             return err("`super(...)` can only be called inside `init`", pos);
         }
@@ -1633,7 +1628,7 @@ impl<'a> Gen<'a> {
         sig: &Signature,
         args: &[Expr],
         expected: Option<&Type>,
-        pos: Pos,
+        pos: Span,
         what: &str,
     ) -> Result<(String, String, Vec<Type>, Type)> {
         if args.len() != sig.params.len() {
@@ -1648,7 +1643,7 @@ impl<'a> Gen<'a> {
                 return err(format!("`{}` takes {} type argument(s), not {}", what, tparams.len(), targs.len()), pos);
             }
             for (tp, te) in tparams.iter().zip(targs) {
-                let t = self.m.resolve(te, &cx.tparams).map_err(|e| kalinga_sema::checker::at_pos(e, pos))?;
+                let t = self.m.resolve(te, &cx.tparams).map_err(|e| at_pos(e, pos))?;
                 map.insert(tp.clone(), t);
             }
         } else if let Some(exp) = expected {
@@ -1812,7 +1807,7 @@ impl<'a> Gen<'a> {
         self.coerce(code, &t, to, e.pos)
     }
 
-    fn self_class(&self, cx: &Ctx, pos: Pos) -> Result<String> {
+    fn self_class(&self, cx: &Ctx, pos: Span) -> Result<String> {
         if cx.is_static {
             return err("`self` is not available in a `static fn`", pos);
         }
@@ -1820,11 +1815,11 @@ impl<'a> Gen<'a> {
             return err("`self` cannot be used inside a lambda; copy it first (`let me = self`) and use `me`", pos);
         }
         cx.class.clone().ok_or_else(|| {
-            kalinga_syntax::error::CompileError::new("`self` is only available inside class methods", pos)
+            kalinga_syntax::error::Diagnostic::error("`self` is only available inside class methods", pos)
         })
     }
 
-    fn field_type(&self, cx: &Ctx, class: &str, field: &str, pos: Pos) -> Result<Type> {
+    fn field_type(&self, cx: &Ctx, class: &str, field: &str, pos: Span) -> Result<Type> {
         match self.m.all_fields(class).into_iter().find(|(n, _, _)| n == field) {
             Some((_, t, owner)) => {
                 if self.m.classes[&owner].private_fields.contains(field) && cx.class.as_deref() != Some(owner.as_str())
@@ -1846,7 +1841,7 @@ impl<'a> Gen<'a> {
             .map(|(_, t, _)| t)
     }
 
-    fn check_method_access(&self, cx: &Ctx, owner: &str, method: &str, pos: Pos) -> Result<()> {
+    fn check_method_access(&self, cx: &Ctx, owner: &str, method: &str, pos: Span) -> Result<()> {
         let info = &self.m.classes[owner];
         if info.private_methods.contains(method) && cx.class.as_deref() != Some(owner) {
             return err(format!("method `{}` is private to `{}`", method, owner), pos);
@@ -1855,7 +1850,7 @@ impl<'a> Gen<'a> {
     }
 
     /// `Class.method(args)` for a `static fn`.
-    fn static_call(&self, cx: &mut Ctx, class: &str, name: &str, args: &[Expr], pos: Pos) -> Result<(String, Type)> {
+    fn static_call(&self, cx: &mut Ctx, class: &str, name: &str, args: &[Expr], pos: Span) -> Result<(String, Type)> {
         let (owner, sig) = match self.m.find_static(class, name) {
             Some(x) => x,
             None if self.m.find_method(class, name).is_some() => {
@@ -1934,7 +1929,7 @@ impl<'a> Gen<'a> {
     }
 
     /// Evaluates call arguments into `__aN` temporaries: (let-bindings, names).
-    fn args(&self, cx: &mut Ctx, sig: &Signature, args: &[Expr], pos: Pos, what: &str) -> Result<(String, String)> {
+    fn args(&self, cx: &mut Ctx, sig: &Signature, args: &[Expr], pos: Span, what: &str) -> Result<(String, String)> {
         if args.len() != sig.params.len() {
             return err(
                 format!("`{}` takes {} argument(s) but {} were given", what, sig.params.len(), args.len()),
@@ -2059,9 +2054,9 @@ impl<'a> Gen<'a> {
                 let mut codes = vec![];
                 for it in items {
                     codes.push(self.expr_to(cx, it, &elem).map_err(|mut er| {
-                        er.msg = format!(
+                        er.message = format!(
                             "{} (all array elements must have the same type; annotate the variable to mix subclasses)",
-                            er.msg
+                            er.message
                         );
                         er
                     })?);
@@ -2083,9 +2078,9 @@ impl<'a> Gen<'a> {
                 for (k, v) in entries {
                     let kc = self.expr_to(cx, k, &kt)?;
                     let vc = self.expr_to(cx, v, &vt).map_err(|mut er| {
-                        er.msg = format!(
+                        er.message = format!(
                             "{} (all map values must have the same type; annotate the variable to mix subclasses)",
-                            er.msg
+                            er.message
                         );
                         er
                     })?;
@@ -2248,7 +2243,7 @@ impl<'a> Gen<'a> {
         ps: &[Type],
         ret: &Type,
         args: &[Expr],
-        pos: Pos,
+        pos: Span,
         what: &str,
     ) -> Result<(String, Type)> {
         let sig = Signature {
@@ -2262,11 +2257,11 @@ impl<'a> Gen<'a> {
     fn lambda(
         &self,
         cx: &mut Ctx,
-        params: &[(String, Option<TypeExpr>, Pos)],
+        params: &[(String, Option<TypeExpr>, Span)],
         ret: Option<&TypeExpr>,
         body: &LambdaBody,
         expected: Option<&Type>,
-        pos: Pos,
+        pos: Span,
     ) -> Result<(String, Type)> {
         let parts = self.lambda_parts(cx, params, ret, body, expected, pos)?;
         let caps: String = parts.captures.iter().map(|(c, _, _)| format!("let {} = {}.clone(); ", c, c)).collect();
@@ -2321,11 +2316,11 @@ impl<'a> Gen<'a> {
     fn lambda_parts(
         &self,
         cx: &mut Ctx,
-        params: &[(String, Option<TypeExpr>, Pos)],
+        params: &[(String, Option<TypeExpr>, Span)],
         ret: Option<&TypeExpr>,
         body: &LambdaBody,
         expected: Option<&Type>,
-        pos: Pos,
+        pos: Span,
     ) -> Result<LambdaParts> {
         let hint = match expected {
             Some(Type::Func(ps, r)) if ps.len() == params.len() => Some((ps.clone(), (**r).clone())),
@@ -2334,9 +2329,7 @@ impl<'a> Gen<'a> {
         let mut ptypes = Vec::new();
         for (i, (name, ty, ppos)) in params.iter().enumerate() {
             let t = match (ty, &hint) {
-                (Some(te), _) => {
-                    self.m.resolve(te, &cx.tparams).map_err(|e| kalinga_sema::checker::at_pos(e, *ppos))?
-                }
+                (Some(te), _) => self.m.resolve(te, &cx.tparams).map_err(|e| at_pos(e, *ppos))?,
                 (None, Some((ps, _))) if ps[i] != Type::Unknown => ps[i].clone(),
                 _ => {
                     return err(
@@ -2348,7 +2341,7 @@ impl<'a> Gen<'a> {
             ptypes.push(t);
         }
         let declared_ret = match ret {
-            Some(te) => Some(self.m.resolve(te, &cx.tparams).map_err(|e| kalinga_sema::checker::at_pos(e, pos))?),
+            Some(te) => Some(self.m.resolve(te, &cx.tparams).map_err(|e| at_pos(e, pos))?),
             None => hint.as_ref().map(|(_, r)| r.clone()).filter(|r| *r != Type::Unknown),
         };
 
@@ -2399,7 +2392,7 @@ impl<'a> Gen<'a> {
         Ok(LambdaParts { captures: frame.captures.into_inner(), params: rust_params, ret_sig, body: body_code, ty })
     }
 
-    fn downcast(&self, cx: &mut Ctx, value: &Expr, target: &str, test_only: bool, pos: Pos) -> Result<(String, Type)> {
+    fn downcast(&self, cx: &mut Ctx, value: &Expr, target: &str, test_only: bool, pos: Span) -> Result<(String, Type)> {
         if !self.m.classes.contains_key(target) {
             return err(format!("`as`/`is` need a class name, and `{}` is not a class", target), pos);
         }
@@ -2436,7 +2429,7 @@ impl<'a> Gen<'a> {
         }
     }
 
-    fn binary(&self, cx: &mut Ctx, op: BinOp, l: &Expr, r: &Expr, pos: Pos) -> Result<(String, Type)> {
+    fn binary(&self, cx: &mut Ctx, op: BinOp, l: &Expr, r: &Expr, pos: Span) -> Result<(String, Type)> {
         let (lc, lt) = self.expr(cx, l, None)?;
         let (rc, rt) = self.expr(cx, r, None)?;
         if let Type::Struct(st, sargs) = &lt
@@ -2514,12 +2507,12 @@ impl<'a> Gen<'a> {
         targs: &[TypeExpr],
         args: &[Expr],
         expected: Option<&Type>,
-        pos: Pos,
+        pos: Span,
     ) -> Result<(String, Type)> {
         if (name == "Channel" || name == "Shared") && cx.lookup(name).is_none() {
             let explicit = match targs {
                 [] => None,
-                [t] => Some(self.m.resolve(t, &cx.tparams).map_err(|e| kalinga_sema::checker::at_pos(e, pos))?),
+                [t] => Some(self.m.resolve(t, &cx.tparams).map_err(|e| at_pos(e, pos))?),
                 _ => return err(format!("`{}` takes one type argument", name), pos),
             };
             if name == "Channel" {
@@ -2685,7 +2678,7 @@ impl<'a> Gen<'a> {
         Ok((format!("{{ {}{}({}) }}", binds, fn_id(name), names), ret))
     }
 
-    fn builtin(&self, cx: &mut Ctx, name: &str, args: &[Expr], pos: Pos) -> Result<(String, Type)> {
+    fn builtin(&self, cx: &mut Ctx, name: &str, args: &[Expr], pos: Span) -> Result<(String, Type)> {
         let one = |cx: &mut Ctx| -> Result<(String, Type)> {
             if args.len() != 1 {
                 return err(format!("`{}` takes exactly 1 argument", name), pos);
@@ -2765,7 +2758,7 @@ impl<'a> Gen<'a> {
         }
     }
 
-    fn method_call(&self, cx: &mut Ctx, recv: &Expr, name: &str, args: &[Expr], pos: Pos) -> Result<(String, Type)> {
+    fn method_call(&self, cx: &mut Ctx, recv: &Expr, name: &str, args: &[Expr], pos: Span) -> Result<(String, Type)> {
         if let Some(t) = self.type_receiver(cx, recv) {
             return self.variant_value(cx, &t, name, Some(args), pos);
         }
@@ -3092,7 +3085,7 @@ impl<'a> Gen<'a> {
         t: &Type,
         name: &str,
         args: &[Expr],
-        pos: Pos,
+        pos: Span,
     ) -> Result<(String, Type)> {
         let arity = |n: usize| -> Result<()> {
             if args.len() != n { err(format!("`{}` takes {} argument(s)", name, n), pos) } else { Ok(()) }

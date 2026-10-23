@@ -1,13 +1,13 @@
-use crate::error::{Pos, Result, err};
+use crate::error::{Result, Span, err};
 use crate::token::{StrPart, Tok, Token};
 
 /// Lexes a whole file; `file` is its index in the driver's source map.
 pub fn lex(source: &str, file: u32) -> Result<Vec<Token>> {
-    lex_at(source, Pos { line: 1, col: 1, file })
+    lex_at(source, Span::at(1, 1, file))
 }
 
 /// Lexes `source` as if it started at `start` (used for `{...}` inside strings).
-pub fn lex_at(source: &str, start: Pos) -> Result<Vec<Token>> {
+pub fn lex_at(source: &str, start: Span) -> Result<Vec<Token>> {
     Lexer {
         chars: source.chars().collect(),
         i: 0,
@@ -65,11 +65,15 @@ impl Lexer {
         false
     }
 
-    fn pos(&self) -> Pos {
-        Pos { line: self.line, col: self.col, file: self.file }
+    fn pos(&self) -> Span {
+        Span::at(self.line, self.col, self.file)
     }
 
-    fn push(&mut self, tok: Tok, pos: Pos) {
+    /// Adds a token that started at `pos` and ends here.
+    fn push(&mut self, tok: Tok, mut pos: Span) {
+        if pos.line == self.line {
+            pos.len = self.col - pos.col;
+        }
         if tok == Tok::Newline {
             // Collapse blank lines and drop newlines that cannot end a statement.
             if matches!(self.brackets.last(), Some('(') | Some('[')) {
@@ -133,7 +137,7 @@ impl Lexer {
     }
 
     /// Raw source of a `{...}` interpolation, after the opening `{`.
-    fn interpolation(&mut self, pos: Pos) -> Result<String> {
+    fn interpolation(&mut self, pos: Span) -> Result<String> {
         let mut code = String::new();
         let mut depth = 0;
         loop {
@@ -180,7 +184,7 @@ impl Lexer {
         Ok(code)
     }
 
-    fn string(&mut self, pos: Pos) -> Result<()> {
+    fn string(&mut self, pos: Span) -> Result<()> {
         self.bump();
         let mut s = String::new();
         let mut parts: Vec<StrPart> = Vec::new();
@@ -231,7 +235,7 @@ impl Lexer {
         Ok(())
     }
 
-    fn number(&mut self, pos: Pos) -> Result<()> {
+    fn number(&mut self, pos: Span) -> Result<()> {
         let mut text = String::new();
         while let Some(c) = self.peek() {
             if c.is_ascii_digit() || c == '_' {
@@ -256,7 +260,7 @@ impl Lexer {
                     break;
                 }
             }
-            let v: f64 = text.parse().map_err(|_| crate::error::CompileError::new("bad float literal", pos))?;
+            let v: f64 = text.parse().map_err(|_| crate::error::Diagnostic::error("bad float literal", pos))?;
             self.push(Tok::Float(v), pos);
         } else {
             let v: i64 = match text.parse() {
@@ -268,7 +272,7 @@ impl Lexer {
         Ok(())
     }
 
-    fn word(&mut self, pos: Pos) -> Result<()> {
+    fn word(&mut self, pos: Span) -> Result<()> {
         let mut w = String::new();
         while let Some(c) = self.peek() {
             if c.is_alphanumeric() || c == '_' {
@@ -302,7 +306,7 @@ impl Lexer {
     }
 
     /// Reads a balanced `{ ... }` of Rust code, skipping Rust strings, chars and comments.
-    fn rust_block(&mut self, pos: Pos) -> Result<String> {
+    fn rust_block(&mut self, pos: Span) -> Result<String> {
         self.bump(); // `{`
         let mut out = String::new();
         let mut depth = 1;
@@ -379,7 +383,7 @@ impl Lexer {
         }
     }
 
-    fn symbol(&mut self, pos: Pos) -> Result<()> {
+    fn symbol(&mut self, pos: Span) -> Result<()> {
         let c = self.bump().unwrap();
         let next = self.peek();
         let two = |l: &mut Self, t: Tok| {

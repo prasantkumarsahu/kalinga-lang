@@ -1,4 +1,4 @@
-use crate::error::Pos;
+use crate::error::Span;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum TypeExpr {
@@ -8,7 +8,7 @@ pub enum TypeExpr {
     Str,
     Void,
     /// A class, interface or enum name, with type arguments for generic classes.
-    Named(String, Vec<TypeExpr>, Pos),
+    Named(String, Vec<TypeExpr>, Span),
     Array(Box<TypeExpr>),
     Map(Box<TypeExpr>, Box<TypeExpr>),
     Optional(Box<TypeExpr>),
@@ -20,7 +20,7 @@ pub enum TypeExpr {
 pub struct Param {
     pub name: String,
     pub ty: TypeExpr,
-    pub pos: Pos,
+    pub pos: Span,
 }
 
 #[derive(Debug, Clone)]
@@ -40,7 +40,7 @@ pub struct FnDecl {
     pub is_mut: bool,
     /// `async fn`: calling it gives an `Async<T>` to `await`.
     pub is_async: bool,
-    pub pos: Pos,
+    pub pos: Span,
 }
 
 #[derive(Debug, Clone)]
@@ -49,14 +49,14 @@ pub struct FieldDecl {
     pub ty: TypeExpr,
     pub default: Option<Expr>,
     pub is_private: bool,
-    pub pos: Pos,
+    pub pos: Span,
 }
 
 #[derive(Debug, Clone)]
 pub struct InitDecl {
     pub params: Vec<Param>,
     pub body: Vec<Stmt>,
-    pub pos: Pos,
+    pub pos: Span,
 }
 
 #[derive(Debug, Clone)]
@@ -65,12 +65,12 @@ pub struct ClassDecl {
     /// Type parameters: `class Stack<T>`.
     pub tparams: Vec<String>,
     /// Names after `:` — at most one class, any number of interfaces.
-    pub bases: Vec<(String, Pos)>,
+    pub bases: Vec<(String, Span)>,
     pub fields: Vec<FieldDecl>,
     pub init: Option<InitDecl>,
     pub methods: Vec<FnDecl>,
     pub is_abstract: bool,
-    pub pos: Pos,
+    pub pos: Span,
 }
 
 #[derive(Debug, Clone)]
@@ -78,16 +78,16 @@ pub struct MethodSig {
     pub name: String,
     pub params: Vec<Param>,
     pub ret: TypeExpr,
-    pub pos: Pos,
+    pub pos: Span,
 }
 
 #[derive(Debug, Clone)]
 pub struct InterfaceDecl {
     pub name: String,
     /// Super-interfaces after `:`.
-    pub bases: Vec<(String, Pos)>,
+    pub bases: Vec<(String, Span)>,
     pub methods: Vec<MethodSig>,
-    pub pos: Pos,
+    pub pos: Span,
 }
 
 /// `op +(other: Vec2) -> Vec2 { ... }` inside a struct.
@@ -99,7 +99,7 @@ pub struct OpDecl {
     pub params: Vec<Param>,
     pub ret: TypeExpr,
     pub body: Vec<Stmt>,
-    pub pos: Pos,
+    pub pos: Span,
 }
 
 /// `struct Vec2 { x: float, y: float }`: a value type, copied on assignment.
@@ -113,7 +113,7 @@ pub struct StructDecl {
     pub ops: Vec<OpDecl>,
     /// `static NAME: Type = value` constants, used as `Struct.NAME`.
     pub consts: Vec<FieldDecl>,
-    pub pos: Pos,
+    pub pos: Span,
 }
 
 #[derive(Debug, Clone)]
@@ -121,7 +121,7 @@ pub struct CrateDep {
     pub name: String,
     pub version: String,
     pub features: Vec<String>,
-    pub pos: Pos,
+    pub pos: Span,
 }
 
 /// A Rust function Kalinga can call.
@@ -134,21 +134,21 @@ pub struct ExternFn {
     pub path: Option<String>,
     /// `= rust { ... }`: an inline Rust body.
     pub body: Option<String>,
-    pub pos: Pos,
+    pub pos: Span,
 }
 
 #[derive(Debug, Clone)]
 pub struct VariantDecl {
     pub name: String,
     pub fields: Vec<Param>,
-    pub pos: Pos,
+    pub pos: Span,
 }
 
 #[derive(Debug, Clone)]
 pub struct EnumDecl {
     pub name: String,
     pub variants: Vec<VariantDecl>,
-    pub pos: Pos,
+    pub pos: Span,
 }
 
 #[derive(Debug, Clone)]
@@ -156,7 +156,7 @@ pub struct Import {
     /// The path as written.
     pub path: String,
     pub alias: Option<String>,
-    pub pos: Pos,
+    pub pos: Span,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -168,11 +168,11 @@ pub struct Program {
     pub main_thread: bool,
     /// `use rust "file.rs"`: Rust source files compiled into the program. After loading,
     /// the paths are absolute.
-    pub rust_files: Vec<(String, Pos)>,
+    pub rust_files: Vec<(String, Span)>,
     /// `use crate "name" = "version" [features [...]]`: crates.io dependencies.
     pub crates: Vec<CrateDep>,
     /// `extern type Name`: opaque Rust types.
-    pub extern_types: Vec<(String, Pos)>,
+    pub extern_types: Vec<(String, Span)>,
     /// `extern fn name(...) -> T [= "rust::path"]`
     pub extern_fns: Vec<ExternFn>,
     pub functions: Vec<FnDecl>,
@@ -228,7 +228,7 @@ pub enum UnOp {
 #[derive(Debug, Clone)]
 pub struct Expr {
     pub kind: ExprKind,
-    pub pos: Pos,
+    pub pos: Span,
 }
 
 #[derive(Debug, Clone)]
@@ -270,7 +270,7 @@ pub enum ExprKind {
     Try(Box<Expr>),
     /// `fn(x: int) -> int { ... }` or `fn(x) => x * 2`
     Lambda {
-        params: Vec<(String, Option<TypeExpr>, Pos)>,
+        params: Vec<(String, Option<TypeExpr>, Span)>,
         ret: Option<TypeExpr>,
         body: LambdaBody,
     },
@@ -318,13 +318,13 @@ pub enum Pattern {
 pub struct MatchArm {
     pub pattern: Pattern,
     pub body: Vec<Stmt>,
-    pub pos: Pos,
+    pub pos: Span,
 }
 
 #[derive(Debug, Clone)]
 pub struct Stmt {
     pub kind: StmtKind,
-    pub pos: Pos,
+    pub pos: Span,
 }
 
 #[derive(Debug, Clone)]

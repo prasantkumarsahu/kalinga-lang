@@ -8,11 +8,11 @@ use std::process::Command;
 
 use kalinga_sema::{checker, namespaces};
 use kalinga_syntax::ast::Program;
-use kalinga_syntax::error::CompileError;
+use kalinga_syntax::error::Diagnostic;
 use kalinga_syntax::{lexer, parser};
 
 /// Every source file taking part in a compilation: (display name, text).
-/// `Pos::file` indexes into it.
+/// `Span::file` indexes into it.
 struct SourceMap {
     files: Vec<(String, String)>,
     /// Renamed declarations (`Vec2__mathx`) and how to show them (`mathx.Vec2`).
@@ -20,8 +20,8 @@ struct SourceMap {
 }
 
 impl SourceMap {
-    fn render(&self, e: &CompileError) -> String {
-        let (name, text) = &self.files[e.pos.file as usize];
+    fn render(&self, e: &Diagnostic) -> String {
+        let (name, text) = &self.files[e.span.file as usize];
         let mut msg = e.render(name, text);
         for (mangled, shown) in &self.display {
             msg = msg.replace(mangled.as_str(), shown);
@@ -81,7 +81,7 @@ fn load(root_name: &str, root_source: &str) -> Result<(Program, SourceMap), Stri
         for (file, pos) in &parsed.rust_files {
             let target = dir.join(file);
             let canonical = std::fs::canonicalize(&target).map_err(|_| {
-                map.render(&CompileError::new(
+                map.render(&Diagnostic::error(
                     format!("cannot find Rust file `{}` (looked for {})", file, target.display()),
                     *pos,
                 ))
@@ -94,19 +94,19 @@ fn load(root_name: &str, root_source: &str) -> Result<(Program, SourceMap), Stri
             }
             let module = shown.rsplit(['/', '\\']).next().unwrap_or("").to_string();
             if program.rust_files.iter().any(|(p, _)| p.rsplit(['/', '\\']).next() == Some(module.as_str())) {
-                let e = CompileError::new(format!("two Rust files are named `{}`; rename one", module), *pos);
+                let e = Diagnostic::error(format!("two Rust files are named `{}`; rename one", module), *pos);
                 return Err(map.render(&e));
             }
             program.rust_files.push((shown, *pos));
         }
         for dep in &parsed.crates {
             kalinga_project::merge_crate(&mut program.crates, dep)
-                .map_err(|m| map.render(&CompileError::new(m, dep.pos)))?;
+                .map_err(|m| map.render(&Diagnostic::error(m, dep.pos)))?;
         }
         program.extern_types.extend(parsed.extern_types);
         program.extern_fns.extend(parsed.extern_fns);
         for import in &parsed.imports {
-            let fail = |m: String| map.render(&CompileError::new(m, import.pos));
+            let fail = |m: String| map.render(&Diagnostic::error(m, import.pos));
             let (target, target_unit) = if let Some(module) = import.path.strip_prefix("std/") {
                 let module = module.strip_suffix(".kl").unwrap_or(module);
                 if module == "game" {

@@ -1,3 +1,3 @@
 tests/ui/errors/no_override.kl:2:15: error: method `f` overrides `A.f`; mark it `override fn`
 2 | class B : A { fn f() {} }
-  |               ^
+  |               ^^

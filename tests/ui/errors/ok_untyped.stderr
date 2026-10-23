@@ -1,3 +1,3 @@
 tests/ui/errors/ok_untyped.kl:1:21: error: cannot tell which `Result` this `Ok` belongs to; give the variable a type, e.g. `let r: Result<int, str> = Ok(...)`
 1 | fn main() { let r = Ok(5) }
-  |                     ^
+  |                     ^^

@@ -1,3 +1,3 @@
 tests/ui/errors/mismatch.kl:1:26: error: expected `int`, found `str`
 1 | fn main() { let x: int = "hi" }
-  |                          ^
+  |                          ^^^^

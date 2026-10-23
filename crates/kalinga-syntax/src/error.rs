@@ -1,52 +1,97 @@
+//! Source positions and compiler messages.
+
 use std::fmt;
 
-/// Position in the source file (1-based).
+/// Where something is in the source: a 1-based line and column (in characters), and how
+/// many characters it covers on that line.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub struct Pos {
+pub struct Span {
     pub line: usize,
     pub col: usize,
+    /// Length in characters; 0 for an empty or unknown extent.
+    pub len: usize,
     /// Index into the driver's source map (0 = the file being compiled).
     pub file: u32,
 }
 
-#[derive(Debug, Clone)]
-pub struct CompileError {
-    pub msg: String,
-    pub pos: Pos,
+impl Span {
+    /// A position with no known length (shown as a single `^`).
+    pub fn at(line: usize, col: usize, file: u32) -> Self {
+        Span { line, col, len: 0, file }
+    }
 }
 
-impl CompileError {
-    pub fn new(msg: impl Into<String>, pos: Pos) -> Self {
-        CompileError { msg: msg.into(), pos }
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Severity {
+    Error,
+    Warning,
+}
+
+impl fmt::Display for Severity {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            Severity::Error => "error",
+            Severity::Warning => "warning",
+        })
+    }
+}
+
+/// A message about the program, pointing at a place in the source.
+#[derive(Debug, Clone)]
+pub struct Diagnostic {
+    pub severity: Severity,
+    pub message: String,
+    pub span: Span,
+    /// A hint on how to fix it, shown after the source line.
+    pub help: Option<String>,
+}
+
+impl Diagnostic {
+    pub fn error(message: impl Into<String>, span: Span) -> Self {
+        Diagnostic { severity: Severity::Error, message: message.into(), span, help: None }
     }
 
-    /// Pretty-prints the error with the offending source line and a caret.
+    pub fn with_help(mut self, help: impl Into<String>) -> Self {
+        self.help = Some(help.into());
+        self
+    }
+
+    /// Pretty-prints the message with the offending source line, underlined.
     pub fn render(&self, file: &str, source: &str) -> String {
-        let line_text = source.lines().nth(self.pos.line.saturating_sub(1)).unwrap_or("");
-        let gutter = format!("{}", self.pos.line);
-        let caret_pad = " ".repeat(self.pos.col.saturating_sub(1));
-        format!(
-            "{}:{}:{}: error: {}\n{} | {}\n{} | {}^",
+        let Span { line, col, len, .. } = self.span;
+        let line_text = source.lines().nth(line.saturating_sub(1)).unwrap_or("");
+        let gutter = line.to_string();
+        let pad = " ".repeat(gutter.len());
+        let mut out = format!(
+            "{}:{}:{}: {}: {}\n{} | {}\n{} | {}{}",
             file,
-            self.pos.line,
-            self.pos.col,
-            self.msg,
+            line,
+            col,
+            self.severity,
+            self.message,
             gutter,
             line_text,
-            " ".repeat(gutter.len()),
-            caret_pad
-        )
+            pad,
+            " ".repeat(col.saturating_sub(1)),
+            "^".repeat(len.max(1))
+        );
+        if let Some(help) = &self.help {
+            out.push_str(&format!("\n{} = help: {}", pad, help));
+        }
+        out
     }
 }
 
-impl fmt::Display for CompileError {
+impl fmt::Display for Diagnostic {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}:{}: {}", self.pos.line, self.pos.col, self.msg)
+        write!(f, "{}:{}: {}", self.span.line, self.span.col, self.message)
     }
 }
 
-pub type Result<T> = std::result::Result<T, CompileError>;
+impl std::error::Error for Diagnostic {}
 
-pub fn err<T>(msg: impl Into<String>, pos: Pos) -> Result<T> {
-    Err(CompileError::new(msg, pos))
+pub type Result<T> = std::result::Result<T, Diagnostic>;
+
+pub fn err<T>(message: impl Into<String>, span: Span) -> Result<T> {
+    Err(Diagnostic::error(message, span))
 }

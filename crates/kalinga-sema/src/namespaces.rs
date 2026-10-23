@@ -13,12 +13,12 @@
 use std::collections::{HashMap, HashSet};
 
 use kalinga_syntax::ast::*;
-use kalinga_syntax::error::{Pos, Result, err};
+use kalinga_syntax::error::{Result, Span, err};
 
 /// What the driver learned while loading files.
 #[derive(Default)]
 pub struct Units {
-    /// Unit of each file (index = `Pos::file`).
+    /// Unit of each file (index = `Span::file`).
     pub file_unit: Vec<String>,
     /// Per file: `import "pkg" as alias` → unit.
     pub file_aliases: Vec<HashMap<String, String>>,
@@ -32,11 +32,11 @@ pub struct Units {
 pub type DisplayNames = Vec<(String, String)>;
 
 pub fn apply(prog: &mut Program, units: &Units) -> Result<DisplayNames> {
-    let unit_of = |pos: Pos| units.file_unit.get(pos.file as usize).cloned().unwrap_or_default();
+    let unit_of = |pos: Span| units.file_unit.get(pos.file as usize).cloned().unwrap_or_default();
 
     // 1. Which units declare which names.
     let mut declared: HashMap<String, Vec<String>> = HashMap::new();
-    let mut add = |name: &str, pos: Pos| {
+    let mut add = |name: &str, pos: Span| {
         let list = declared.entry(name.to_string()).or_default();
         let u = unit_of(pos);
         if !list.contains(&u) {
@@ -146,7 +146,7 @@ impl Scope {
 }
 
 impl<'a> Resolver<'a> {
-    fn unit(&self, pos: Pos) -> String {
+    fn unit(&self, pos: Span) -> String {
         self.units.file_unit.get(pos.file as usize).cloned().unwrap_or_default()
     }
 
@@ -156,7 +156,7 @@ impl<'a> Resolver<'a> {
     }
 
     /// Resolves a reference to top-level `name` from a file.
-    fn resolve(&self, name: &str, pos: Pos) -> Result<String> {
+    fn resolve(&self, name: &str, pos: Span) -> Result<String> {
         let Some(owners) = self.declared.get(name) else { return Ok(name.to_string()) };
         if owners.len() < 2 {
             return Ok(name.to_string());
@@ -186,7 +186,7 @@ impl<'a> Resolver<'a> {
     }
 
     /// `alias.Name` for `import "pkg" as alias`.
-    fn resolve_qualified(&self, alias: &str, name: &str, pos: Pos) -> Option<Result<String>> {
+    fn resolve_qualified(&self, alias: &str, name: &str, pos: Span) -> Option<Result<String>> {
         let unit = self.units.file_aliases.get(pos.file as usize)?.get(alias)?;
         if !self.declared.get(name).is_some_and(|us| us.contains(unit)) {
             return Some(err(format!("package `{}` has no `{}`", alias, name), pos));
@@ -194,12 +194,12 @@ impl<'a> Resolver<'a> {
         Some(Ok(self.final_name(unit, name)))
     }
 
-    fn is_alias(&self, n: &str, pos: Pos, scope: &Scope) -> bool {
+    fn is_alias(&self, n: &str, pos: Span, scope: &Scope) -> bool {
         !scope.has(n) && self.units.file_aliases.get(pos.file as usize).is_some_and(|a| a.contains_key(n))
     }
 
     fn rewrite(&self, prog: &mut Program) -> Result<()> {
-        let unit_of = |p: Pos| self.unit(p);
+        let unit_of = |p: Span| self.unit(p);
         for f in &mut prog.functions {
             f.name = self.final_name(&unit_of(f.pos), &f.name);
             self.func(f, &[])?;

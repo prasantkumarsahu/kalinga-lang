@@ -1,3 +1,3 @@
 tests/ui/errors/async_unused.kl:5:5: error: calling an `async fn` only prepares it: put `await` in front, or start it with `Async.spawn(...)`
 5 |     job()
-  |     ^
+  |     ^^^

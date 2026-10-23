@@ -1,10 +1,10 @@
-use crate::error::Pos;
+use crate::error::Span;
 
 /// Piece of an interpolated string: literal text or the source of a `{...}` expression.
 #[derive(Debug, Clone, PartialEq)]
 pub enum StrPart {
     Lit(String),
-    Code(String, Pos),
+    Code(String, Span),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -260,5 +260,5 @@ impl Tok {
 #[derive(Debug, Clone)]
 pub struct Token {
     pub tok: Tok,
-    pub pos: Pos,
+    pub pos: Span,
 }
