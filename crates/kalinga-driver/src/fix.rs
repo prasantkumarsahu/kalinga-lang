@@ -59,8 +59,7 @@ pub struct FixReport {
 
 /// Fixes `path` (a `.kl` file, or every `.kl` file under a folder) in place.
 pub fn fix_path(path: &Path) -> Result<FixReport> {
-    let mut files = vec![];
-    collect_kl_files(path, &mut files)?;
+    let files = kl_files(path)?;
     let mut report = FixReport::default();
     for file in files {
         let source = std::fs::read_to_string(&file).map_err(DriverError::io("read", &file))?;
@@ -77,6 +76,13 @@ pub fn fix_path(path: &Path) -> Result<FixReport> {
         }
     }
     Ok(report)
+}
+
+/// `path` if it is a file, else every `.kl` file under the folder (skipping `target`), sorted.
+pub fn kl_files(path: &Path) -> Result<Vec<PathBuf>> {
+    let mut files = vec![];
+    collect_kl_files(path, &mut files)?;
+    Ok(files)
 }
 
 fn collect_kl_files(path: &Path, out: &mut Vec<PathBuf>) -> Result<()> {

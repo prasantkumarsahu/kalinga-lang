@@ -12,6 +12,7 @@
 | `kalinga -v` (also `-version`, `--version`) | Print the installed version, e.g. `kalinga 0.4.0`. |
 | `kalinga check <name.kl> --stdin` | Check source read from stdin, reporting errors under `<name.kl>`. |
 | `kalinga fix <file.kl or folder>...` | Update code written for an earlier version of Kalinga, in place. |
+| `kalinga fmt [--check] <file.kl or folder>...` | Lay out code in the standard style, in place (see [Formatting](#formatting)). With `--check`, list the files that are not formatted and fail, changing nothing. |
 | `kalinga lsp` | Run the language server on stdin / stdout; editors start it (see below). |
 
 Exit codes:
@@ -67,12 +68,54 @@ checks work there too.
 | `utkal build` | Download what is missing, compile `src/main.kl` to `target/<name>` |
 | `utkal run [args...]` | Build and run, passing the arguments on |
 | `utkal check` | Report errors in `src/main.kl` and `src/lib.kl` |
+| `utkal fmt [--check]` | Format (or check) every `.kl` file in `src/` and `tests/` |
+| `utkal fix` | Update `src/` and `tests/` for this Kalinga version |
 | `utkal test` | Build and run every `tests/*.kl`; exit code 0 means passed |
 | `utkal update` | Pick the newest allowed package versions and rewrite `utkal.lock` |
 | `utkal -v` | Print the installed version |
 
 Downloaded packages are cached in `~/.utkal/cache` (or `$UTKAL_HOME/cache`). `utkal` needs
 `git` on PATH for git packages.
+
+## Formatting
+
+`kalinga fmt` lays out code in one standard style, so every Kalinga program reads the same
+and nobody argues about spaces:
+
+- 4 spaces of indentation per level; the lines inside brackets are indented one level,
+  however many brackets a line opens; a line continuing an expression (after an
+  operator, or starting with `.`) one more
+- spaces around operators and after `,` and `:`; none inside `( )` and `[ ]`, before `(`
+  in a call, around `..` or after a unary `-` / `!`: `f(a + b, -x)`, `xs[i]`, `0..n`,
+  `Result<int, str>`, `{"key": 1}`; one-line blocks get spaces: `{ return 1 }`
+- one statement per line (`a; b` becomes two lines)
+- at most one blank line in a row, none just inside braces, and one after a top-level
+  declaration that takes several lines
+- trailing `//` comments on consecutive lines start in the same column
+
+It changes only spaces and line breaks: comments, the blank lines you put between
+groups, parentheses and how literals are written all stay, and it checks that the
+program's tokens are unchanged. Formatting twice gives the same result. Before:
+
+```text
+fn area(w:float,h :float)->float{
+return w*h   // square units
+}
+fn main(){ println( area(2,3) ) }
+```
+
+After `kalinga fmt`:
+
+```kalinga
+fn area(w: float, h: float) -> float {
+    return w * h // square units
+}
+
+fn main() { println(area(2, 3)) }
+```
+
+In VS Code, **Format Document** (`Shift+Alt+F`) does the same. In CI, `kalinga fmt --check`
+(or `utkal fmt --check`) fails when a file is not formatted.
 
 ## VS Code extension
 
@@ -101,6 +144,7 @@ Language Server Protocol (Neovim, Helix, Zed, Emacs, ...) can use it by running
 - The outline of a file (document symbols)
 - Quick fixes: mark a method `override fn`, remove a wrong `override`, add a method an
   interface or abstract base class requires
+- **Format Document** with `kalinga fmt`
 - Syntax highlighting; inline `= rust { ... }` bodies are highlighted as Rust
 - ▶ **Run** button in the editor title bar, and `Ctrl+F5`
 - Commands (Ctrl+Shift+P): **Kalinga: Run File**, **Kalinga: Build Executable**,

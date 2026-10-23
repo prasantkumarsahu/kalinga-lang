@@ -124,3 +124,21 @@ fn game_window_smoke() {
     let png = std::fs::read(&shot).expect("screenshot written");
     assert!(png.starts_with(b"\x89PNG"), "not a PNG");
 }
+
+#[test]
+fn fmt_formats_files_and_check_reports_them() {
+    let dir = std::env::temp_dir().join("kalinga-cli-fmt");
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).expect("dir");
+    let file = dir.join("messy.kl");
+    std::fs::write(&file, "fn main(){\nprintln( 1+2 )\n}\n").expect("write");
+    let kalinga = env!("CARGO_BIN_EXE_kalinga");
+    let check = std::process::Command::new(kalinga).args(["fmt", "--check"]).arg(&dir).output().expect("run");
+    assert_eq!(check.status.code(), Some(1));
+    assert!(String::from_utf8_lossy(&check.stdout).contains("not formatted:"));
+    let fmt = std::process::Command::new(kalinga).arg("fmt").arg(&dir).output().expect("run");
+    assert!(fmt.status.success());
+    assert_eq!(std::fs::read_to_string(&file).expect("read"), "fn main() {\n    println(1 + 2)\n}\n");
+    let again = std::process::Command::new(kalinga).args(["fmt", "--check"]).arg(&dir).output().expect("run");
+    assert!(again.status.success());
+}

@@ -12,7 +12,7 @@ value. When "there might be nothing" is a real possibility, you say so in the ty
 fn main() {
     var nickname: str? = none
     println(nickname)
-    nickname = "Kali"          // a plain str is wrapped automatically
+    nickname = "Kali" // a plain str is wrapped automatically
     println(nickname)
 }
 ```

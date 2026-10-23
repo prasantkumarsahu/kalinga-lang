@@ -242,7 +242,7 @@ fn greet(n: Named) {
 fn main() {
     let p: Pet = Dog()
     println(p.name(), p.sound())
-    greet(p)    // a Pet is also a Named
+    greet(p) // a Pet is also a Named
 }
 ```
 

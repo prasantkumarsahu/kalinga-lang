@@ -1,6 +1,6 @@
 //! The Kalinga language server (`kalinga lsp`): diagnostics, hover, completion, signature
-//! help, go to definition, find references, rename, document symbols and quick fixes, all
-//! answered by the compiler itself.
+//! help, go to definition, find references, rename, document symbols, quick fixes and
+//! formatting, all answered by the compiler itself.
 //!
 //! Each document is analysed as a whole program (with its imports, reading the editor's
 //! text of open files). Type checking records what every name refers to
@@ -13,6 +13,7 @@
 pub mod actions;
 pub mod completion;
 mod describe;
+pub mod formatting;
 pub mod hover;
 pub mod navigation;
 mod server;

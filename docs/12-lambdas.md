@@ -48,7 +48,7 @@ fn apply_twice(f: fn(int) -> int, x: int) -> int {
 }
 
 fn main() {
-    println(apply_twice(fn(n) => n + 10, 1))   // `n` is an int: apply_twice says so
+    println(apply_twice(fn(n) => n + 10, 1)) // `n` is an int: apply_twice says so
 }
 ```
 
@@ -96,7 +96,7 @@ fn main() {
 
     var greeting = "hello"
     let greet = fn(name: str) => "{greeting}, {name}"
-    greeting = "bye"          // the lambda kept its own copy
+    greeting = "bye" // the lambda kept its own copy
     println(greet("Asha"))
 }
 ```

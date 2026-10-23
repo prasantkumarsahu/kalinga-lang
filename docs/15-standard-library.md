@@ -42,9 +42,9 @@ convenience. `min`, `max` and `clamp` need all `int` or all `float` values.
 
 ```kalinga
 fn main() {
-    Random.seed(42)                     // optional: makes the sequence repeatable
-    let die = Random.int(1, 7)          // 1 to 6 (the upper bound is excluded)
-    let unit = Random.float()           // 0.0 up to (not including) 1.0
+    Random.seed(42)            // optional: makes the sequence repeatable
+    let die = Random.int(1, 7) // 1 to 6 (the upper bound is excluded)
+    let unit = Random.float()  // 0.0 up to (not including) 1.0
     println(die >= 1 && die <= 6, unit >= 0.0 && unit < 1.0)
 
     var deck = [1, 2, 3, 4, 5]
@@ -103,7 +103,7 @@ A typical frame loop measures the time since the last frame and moves things by 
 ```kalinga
 fn main() {
     var x = 0.0
-    let speed = 100.0          // units per second
+    let speed = 100.0 // units per second
     var last = Time.now()
     for frame in 0..3 {
         Time.sleep(0.01)

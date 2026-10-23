@@ -9,6 +9,7 @@ license.workspace = true
 kalinga-syntax = { path = "../kalinga-syntax" }
 kalinga-sema = { path = "../kalinga-sema" }
 kalinga-codegen = { path = "../kalinga-codegen" }
+kalinga-fmt = { path = "../kalinga-fmt" }
 kalinga-project = { path = "../kalinga-project" }
 
 [lints]

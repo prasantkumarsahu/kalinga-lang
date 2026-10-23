@@ -319,7 +319,7 @@ fn switch_on(l: Lamp) {
 
 fn main() {
     let a = Lamp()
-    let b = a          // b and a are the same lamp
+    let b = a // b and a are the same lamp
     switch_on(b)
     println(a.on)
 }
@@ -342,8 +342,8 @@ class Engine {
 }
 
 class Car {
-    engine: Engine = Engine()   // every car gets its own new engine
-    trailer: Car? = none        // may or may not exist
+    engine: Engine = Engine() // every car gets its own new engine
+    trailer: Car? = none      // may or may not exist
 }
 
 fn main() {

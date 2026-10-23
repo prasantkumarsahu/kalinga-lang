@@ -23,7 +23,7 @@ class Animal {
 
 class Dog : Animal {
     init(name: str) {
-        super(name)          // run Animal's init first
+        super(name) // run Animal's init first
         self.sound = "woof"
     }
 
@@ -34,8 +34,8 @@ class Dog : Animal {
 
 fn main() {
     let d = Dog("Rex")
-    println(d.speak())    // inherited from Animal
-    println(d.fetch())    // defined in Dog
+    println(d.speak()) // inherited from Animal
+    println(d.fetch()) // defined in Dog
 }
 ```
 

@@ -210,3 +210,16 @@ fn errors_in_imported_files_show_on_the_import_line() {
     assert_eq!(d[0].range.start.line, 0);
     assert!(d[0].message.starts_with("in lib.kl:2:12: "), "{}", d[0].message);
 }
+
+#[test]
+fn format_document() {
+    let (mut world, uri) = open(&temp_dir("nav-format"), "fn main(){\nprintln( 1+2 )\n}\n");
+    let params = DocumentFormattingParams {
+        text_document: TextDocumentIdentifier { uri },
+        options: FormattingOptions::default(),
+        work_done_progress_params: WorkDoneProgressParams::default(),
+    };
+    let edits = kalinga_lsp::formatting::format(&mut world, params).expect("edits");
+    assert_eq!(edits.len(), 1);
+    assert_eq!(edits[0].new_text, "fn main() {\n    println(1 + 2)\n}\n");
+}

@@ -188,8 +188,16 @@ name = "kalinga-driver"
 version = "0.4.0"
 dependencies = [
  "kalinga-codegen",
+ "kalinga-fmt",
  "kalinga-project",
  "kalinga-sema",
+ "kalinga-syntax",
+]
+
+[[package]]
+name = "kalinga-fmt"
+version = "0.4.0"
+dependencies = [
  "kalinga-syntax",
 ]
 
@@ -198,6 +206,7 @@ name = "kalinga-lang"
 version = "0.4.0"
 dependencies = [
  "kalinga-driver",
+ "kalinga-fmt",
  "kalinga-lsp",
  "kalinga-project",
  "kalinga-sema",
@@ -210,6 +219,7 @@ name = "kalinga-lsp"
 version = "0.4.0"
 dependencies = [
  "kalinga-driver",
+ "kalinga-fmt",
  "kalinga-project",
  "kalinga-sema",
  "kalinga-syntax",

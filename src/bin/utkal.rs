@@ -22,6 +22,7 @@ usage:
   utkal run [args...]               build and run
   utkal check                       report errors (src/main.kl or src/lib.kl)
   utkal fix                         update src/ and tests/ for this Kalinga version
+  utkal fmt [--check]               lay out src/ and tests/ in the standard style
   utkal test                        run every tests/*.kl; a test passes when it exits with 0
   utkal update                      fetch the newest allowed versions and rewrite utkal.lock
   utkal -v | --version              print the installed version";
@@ -44,6 +45,7 @@ fn main() {
         Some("run") => run(&rest),
         Some("check") => check(),
         Some("fix") => fix(),
+        Some("fmt") => fmt(rest.contains(&"--check")),
         Some("test") => test(),
         Some("update") => project_dir().and_then(|dir| {
             let r = project::resolve(&dir, Mode::Update)?;
@@ -287,6 +289,29 @@ fn fix() -> CliResult<i32> {
         println!("set {} in {}", line, MANIFEST);
     }
     Ok(0)
+}
+
+/// Formats `src/` and `tests/`; with `check`, lists the files that are not formatted and
+/// fails if there are any.
+fn fmt(check: bool) -> CliResult<i32> {
+    let dir = project_dir()?;
+    let mut code = 0;
+    for folder in ["src", "tests"] {
+        if !dir.join(folder).is_dir() {
+            continue;
+        }
+        let report = driver::fmt::fmt_path(&dir.join(folder), check)?;
+        for file in &report.changed {
+            println!("{} {}", if check { "not formatted:" } else { "formatted" }, file.display());
+        }
+        for e in &report.failed {
+            eprintln!("cannot format a file that is not valid Kalinga:\n{}", e);
+        }
+        if !report.failed.is_empty() || (check && !report.changed.is_empty()) {
+            code = 1;
+        }
+    }
+    Ok(code)
 }
 
 /// This compiler's language version, `major.minor` (`0.5`).

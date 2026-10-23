@@ -1,0 +1,12 @@
+[package]
+name = "kalinga-fmt"
+description = "The Kalinga formatter: one standard layout, comments kept"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+kalinga-syntax = { path = "../kalinga-syntax" }
+
+[lints]
+workspace = true

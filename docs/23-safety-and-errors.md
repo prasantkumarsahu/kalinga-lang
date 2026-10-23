@@ -116,9 +116,9 @@ class Account {
 fn main() {
     let a = Account()
     let b = Account()
-    a.transfer_to(b, 30)    // fine: two different objects
+    a.transfer_to(b, 30) // fine: two different objects
     println(a.balance, b.balance)
-    a.transfer_to(a, 10)    // the same object twice: runtime error
+    a.transfer_to(a, 10) // the same object twice: runtime error
 }
 ```
 

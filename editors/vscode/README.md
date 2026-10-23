@@ -29,6 +29,7 @@ compiler itself, so what the editor shows is exactly what the compiler sees:
 - Outline (document symbols)
 - Quick fixes: mark a method `override fn`, remove a wrong `override`, add a missing
   interface or abstract method
+- Format Document (`kalinga fmt`)
 - Syntax highlighting, snippets (`main`, `fn`, `class`, `struct`, `match`, `gameclass`, ...),
   comment toggling, bracket matching and auto-indent
 - `utkal.toml`: key and value hints, with an extension that reads JSON schemas for TOML

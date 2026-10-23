@@ -5,6 +5,7 @@
 
 mod error;
 pub mod fix;
+pub mod fmt;
 mod stdlib;
 
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -18,6 +19,7 @@ use kalinga_syntax::error::Diagnostic;
 use kalinga_syntax::{lexer, parser};
 
 pub use error::{CompileErrors, DriverError, Result, SourceMap};
+pub use fix::kl_files;
 
 /// The utkal project a file belongs to (if any) and its packages.
 #[derive(Default)]

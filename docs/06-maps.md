@@ -6,8 +6,8 @@ A **map** stores values under keys, like a dictionary. Its type is written `{K: 
 ```kalinga
 fn main() {
     var stock = {"apples": 3, "pears": 5}
-    stock["kiwis"] = 12          // add a new key
-    stock["apples"] += 10        // change an existing value
+    stock["kiwis"] = 12   // add a new key
+    stock["apples"] += 10 // change an existing value
     println(stock)
     println(stock["pears"], len(stock))
 }

@@ -15,6 +15,8 @@ usage:
   kalinga fix   <file.kl or folder>...  update code written for an earlier Kalinga version
                                        (0.4 → 0.5: `print(...)` becomes `println(...)`,
                                        `static NAME: T = v` becomes `const NAME: T = v`)
+  kalinga fmt   [--check] <file.kl or folder>...  lay out code in the standard style
+                                       (--check lists the files it would change, and fails)
   kalinga lsp                          run the language server (editors start it)
   kalinga -v | --version               print the installed version";
 
@@ -23,6 +25,26 @@ type CliResult<T> = Result<T, Box<dyn std::error::Error>>;
 
 fn read(file: &Path) -> CliResult<String> {
     std::fs::read_to_string(file).map_err(|e| format!("cannot read {}: {}", file.display(), e).into())
+}
+
+/// `kalinga fmt [--check]`: formats each file (or every `.kl` file in each folder) in
+/// place, or with `--check` only lists the files that are not formatted.
+fn fmt(args: &[String]) -> CliResult<i32> {
+    let check = args.iter().any(|a| a == "--check");
+    let mut code = 0;
+    for p in args.iter().filter(|a| *a != "--check") {
+        let report = driver::fmt::fmt_path(Path::new(p), check)?;
+        for file in &report.changed {
+            println!("{} {}", if check { "not formatted:" } else { "formatted" }, file.display());
+        }
+        for e in &report.failed {
+            eprintln!("cannot format a file that is not valid Kalinga:\n{}", e);
+        }
+        if !report.failed.is_empty() || (check && !report.changed.is_empty()) {
+            code = 1;
+        }
+    }
+    Ok(code)
 }
 
 /// `kalinga fix`: updates each file (or every `.kl` file in each folder) in place.
@@ -88,6 +110,7 @@ fn main() {
             0
         }),
         "fix" => fix(&args[1..]),
+        "fmt" => fmt(&args[1..]),
         "check" => {
             let source = if args.get(2).map(String::as_str) == Some("--stdin") {
                 let mut s = String::new();

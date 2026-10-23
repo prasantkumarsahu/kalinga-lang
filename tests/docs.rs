@@ -2,7 +2,9 @@
 //! - every complete program (a ```` ```kalinga ```` block with `fn main()`) must compile, and
 //!   when a ```` ```text ```` block follows it, running it must print exactly that;
 //! - every ```` ```kalinga error ```` block must be rejected, with the first line of the
-//!   following ```` ```text ```` block as the first line of the error.
+//!   following ```` ```text ```` block as the first line of the error;
+//! - every other ```` ```kalinga ```` block is in the standard layout (`kalinga fmt`),
+//!   except those showing `;`, which `fmt` would split.
 //!
 //! Programs that read input get `Asha` and `20` on stdin, and each runs in its own
 //! folder. Blocks that need other files (`import` of a file or package, `use rust`,
@@ -148,6 +150,17 @@ fn doc_examples_match_their_output() {
     let mut failures = failures.into_inner().unwrap();
     failures.sort();
     assert!(failures.is_empty(), "{} doc example(s) are wrong:\n\n{}", failures.len(), failures.join("\n\n"));
+}
+
+#[test]
+fn doc_examples_are_formatted() {
+    let unformatted: Vec<String> = doc_blocks()
+        .iter()
+        .filter(|b| !b.expect_error && !b.code.contains(';'))
+        .filter(|b| kalinga_fmt::format(&b.code).is_ok_and(|f| f != b.code))
+        .map(|b| format!("{}:{}", b.file, b.line))
+        .collect();
+    assert!(unformatted.is_empty(), "examples not in the `kalinga fmt` layout: {}", unformatted.join(", "));
 }
 
 /// The `| ... |` rows of the table that follows `heading` in `text`.

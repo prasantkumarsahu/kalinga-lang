@@ -9,6 +9,7 @@ license.workspace = true
 kalinga-syntax = { path = "../kalinga-syntax" }
 kalinga-sema = { path = "../kalinga-sema" }
 kalinga-driver = { path = "../kalinga-driver" }
+kalinga-fmt = { path = "../kalinga-fmt" }
 kalinga-project = { path = "../kalinga-project" }
 lsp-server = "0.7.8"
 lsp-types = "0.94.1"

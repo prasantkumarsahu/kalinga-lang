@@ -144,7 +144,7 @@ declare a new variable with the same name (shadowing); the same block may not:
 fn main() {
     let x = 1
     if true {
-        let x = "inner"   // a different variable that hides the outer one
+        let x = "inner" // a different variable that hides the outer one
         println(x)
     }
     println(x)
@@ -216,10 +216,10 @@ Kalinga never converts between types on its own. Use `int()`, `float()` and `str
 fn main() {
     let n = 7
     let f = 2.5
-    println(float(n) * f)       // int → float
-    println(int(f))             // float → int (drops the fraction)
-    println("n is " + str(n))   // int → str
-    println(int("42") + 1)      // str → int
+    println(float(n) * f)     // int → float
+    println(int(f))           // float → int (drops the fraction)
+    println("n is " + str(n)) // int → str
+    println(int("42") + 1)    // str → int
 }
 ```
 

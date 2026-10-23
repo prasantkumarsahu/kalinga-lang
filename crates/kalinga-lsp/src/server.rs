@@ -8,13 +8,13 @@ use lsp_types::notification::{
     Notification as LspNotification, PublishDiagnostics,
 };
 use lsp_types::request::{
-    CodeActionRequest, Completion, DocumentSymbolRequest, GotoDefinition, HoverRequest, PrepareRenameRequest,
-    References, Rename, Request as LspRequest, SignatureHelpRequest,
+    CodeActionRequest, Completion, DocumentSymbolRequest, Formatting, GotoDefinition, HoverRequest,
+    PrepareRenameRequest, References, Rename, Request as LspRequest, SignatureHelpRequest,
 };
 use lsp_types::*;
 
 use crate::world::World;
-use crate::{actions, completion, hover, navigation, signature};
+use crate::{actions, completion, formatting, hover, navigation, signature};
 
 type Fallible<T> = Result<T, Box<dyn Error + Send + Sync>>;
 
@@ -39,6 +39,7 @@ pub fn capabilities() -> ServerCapabilities {
         })),
         document_symbol_provider: Some(OneOf::Left(true)),
         code_action_provider: Some(CodeActionProviderCapability::Simple(true)),
+        document_formatting_provider: Some(OneOf::Left(true)),
         ..ServerCapabilities::default()
     }
 }
@@ -116,6 +117,7 @@ fn respond(world: &mut World, req: Request) -> Response {
         Rename::METHOD => answer::<Rename>(req, |p| navigation::rename(world, p)),
         DocumentSymbolRequest::METHOD => answer::<DocumentSymbolRequest>(req, |p| navigation::symbols(world, p)),
         CodeActionRequest::METHOD => answer::<CodeActionRequest>(req, |p| actions::actions(world, p)),
+        Formatting::METHOD => answer::<Formatting>(req, |p| formatting::format(world, p)),
         _ => Err((ErrorCode::MethodNotFound, format!("unknown request `{}`", req.method))),
     };
     match result {

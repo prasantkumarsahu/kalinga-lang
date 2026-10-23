@@ -132,8 +132,8 @@ class Holder {
 
 fn fill(items: [int], b: Holder) {
     var copy = items
-    copy.push(99)       // only the local copy grows
-    b.value = 99        // the caller's object changes
+    copy.push(99) // only the local copy grows
+    b.value = 99  // the caller's object changes
 }
 
 fn main() {
