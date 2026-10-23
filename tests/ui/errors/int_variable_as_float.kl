@@ -1,0 +1,5 @@
+// Only literals convert: an int variable still needs float(x).
+fn main() {
+    let i = 2
+    let f: float = i
+}

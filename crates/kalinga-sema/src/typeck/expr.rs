@@ -16,6 +16,8 @@ impl Checker<'_> {
         let pos = e.pos;
         let lit = |kind, ty| Ok(texpr(kind, ty, pos));
         match &e.kind {
+            // A whole number where a float is wanted is that float: `Vec2(600, 300)`.
+            ExprKind::Int(v) if expected == Some(&Type::Float) => lit(TExprKind::Float(*v as f64), Type::Float),
             ExprKind::Int(v) => lit(TExprKind::Int(*v), Type::Int),
             ExprKind::Float(v) => lit(TExprKind::Float(*v), Type::Float),
             ExprKind::Str(s) => lit(TExprKind::Str(s.clone()), Type::Str),
@@ -48,7 +50,7 @@ impl Checker<'_> {
                 }
                 lit(TExprKind::Interp(out), Type::Str)
             }
-            ExprKind::Unary(op, inner) => self.unary(cx, *op, inner, pos),
+            ExprKind::Unary(op, inner) => self.unary(cx, *op, inner, expected, pos),
             ExprKind::Binary(op, l, r) => self.binary(cx, *op, l, r, pos),
             ExprKind::Call(name, targs, args) => self.call(cx, name, targs, args, expected, pos),
             ExprKind::MethodCall(recv, name, args) => self.method_call(cx, recv, name, args, pos),
@@ -146,8 +148,9 @@ impl Checker<'_> {
         Ok(texpr(TExprKind::Map(out), Type::Map(Box::new(kt), Box::new(vt)), pos))
     }
 
-    fn unary(&self, cx: &mut Ctx, op: UnOp, inner: &Expr, pos: Span) -> Result<TExpr> {
-        let v = self.expr(cx, inner, None)?;
+    fn unary(&self, cx: &mut Ctx, op: UnOp, inner: &Expr, expected: Option<&Type>, pos: Span) -> Result<TExpr> {
+        let wants_float = op == UnOp::Neg && expected == Some(&Type::Float);
+        let v = self.expr(cx, inner, if wants_float { expected } else { None })?;
         let ty = v.ty.clone();
         match (op, &ty) {
             (UnOp::Neg, Type::Int | Type::Float) => Ok(texpr(TExprKind::Neg(Box::new(v)), ty, pos)),
@@ -166,15 +169,22 @@ impl Checker<'_> {
     }
 
     fn binary(&self, cx: &mut Ctx, op: BinOp, l: &Expr, r: &Expr, pos: Span) -> Result<TExpr> {
-        let lhs = self.expr(cx, l, None)?;
-        let rhs = self.expr(cx, r, None)?;
+        let (lhs, rhs) = self.operands(cx, l, r)?;
         let (lt, rt) = (lhs.ty.clone(), rhs.ty.clone());
         let arithmetic = matches!(op, BinOp::Add | BinOp::Sub | BinOp::Mul | BinOp::Div | BinOp::Rem);
         if let Type::Struct(st, sargs) = &lt
             && arithmetic
         {
-            let Some(o) = self.find_op(st, sargs, op, Some(&rt)) else {
-                return err(format!("`{}` has no `op {}` taking a `{}`", lt, op.rust(), rt), pos);
+            // `v * 2` uses an `op *` taking an int if there is one, else one taking a float.
+            let (rhs, o) = match self.find_op(st, sargs, op, Some(&rt)) {
+                Some(o) => (rhs, o),
+                None => {
+                    let as_float = int_literal_as_float(rhs);
+                    match self.find_op(st, sargs, op, Some(&as_float.ty)) {
+                        Some(o) if as_float.ty == Type::Float => (as_float, o),
+                        _ => return err(format!("`{}` has no `op {}` taking a `{}`", lt, op.rust(), rt), pos),
+                    }
+                }
             };
             let rhs = self.convert(rhs, o.param.as_ref().unwrap_or(&Type::Void))?;
             let kind =
@@ -185,7 +195,11 @@ impl Checker<'_> {
         if let Type::Struct(st, sargs) = &rt
             && matches!(op, BinOp::Add | BinOp::Mul)
             && !matches!(lt, Type::Struct(..))
-            && let Some(o) = self.find_op(st, sargs, op, Some(&lt))
+            && let Some((lhs, o)) = self.find_op(st, sargs, op, Some(&lt)).map(|o| (lhs.clone(), o)).or_else(|| {
+                let as_float = int_literal_as_float(lhs.clone());
+                let o = self.find_op(st, sargs, op, Some(&Type::Float)).filter(|_| as_float.ty == Type::Float)?;
+                Some((as_float, o))
+            })
         {
             let lhs = self.convert(lhs, o.param.as_ref().unwrap_or(&Type::Void))?;
             let kind =
@@ -206,6 +220,19 @@ impl Checker<'_> {
             }
         }
         Ok(texpr(TExprKind::Binary(op, Box::new(lhs), Box::new(rhs)), ty, pos))
+    }
+
+    /// Both operands of a binary operator. A whole-number literal next to a float is a
+    /// float: `speed * 2`, `x > 0`.
+    fn operands(&self, cx: &mut Ctx, l: &Expr, r: &Expr) -> Result<(TExpr, TExpr)> {
+        let lhs = self.expr(cx, l, None)?;
+        let rhs = self.expr(cx, r, None)?;
+        let floaty = |t: &Type| *t == Type::Float;
+        Ok(match (floaty(&lhs.ty), floaty(&rhs.ty)) {
+            (true, false) => (lhs, int_literal_as_float(rhs)),
+            (false, true) => (int_literal_as_float(lhs), rhs),
+            _ => (lhs, rhs),
+        })
     }
 
     /// Result type of a built-in operator, or why the operands do not fit it.
@@ -403,5 +430,16 @@ impl Checker<'_> {
         let args = self.args(cx, &sig, args, pos, name)?;
         let callee = Callee::SuperMethod { owner, name: name.to_string() };
         Ok(texpr(TExprKind::Call { callee, args }, sig.ret, pos))
+    }
+}
+
+/// `e` as a float literal when it is a whole-number literal (`2` or `-2`).
+fn int_literal_as_float(e: TExpr) -> TExpr {
+    match e.kind {
+        TExprKind::Int(v) => texpr(TExprKind::Float(v as f64), Type::Float, e.pos),
+        TExprKind::Neg(inner) if matches!(inner.kind, TExprKind::Int(_)) => {
+            texpr(TExprKind::Neg(Box::new(int_literal_as_float(*inner))), Type::Float, e.pos)
+        }
+        kind => TExpr { kind, ..e },
     }
 }

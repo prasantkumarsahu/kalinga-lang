@@ -1,0 +1,14 @@
+// Whole-number literals are floats wherever a float is expected.
+import "std/math2d"
+
+fn speed(x: float) -> float {
+    return x * 2
+}
+
+fn main() {
+    let v = Vec2(600, 300)
+    let w: float = 5
+    let z = -3
+    let n: float = -3
+    print(v, w, z, n, speed(4), 1.5 + 1, 2 * 0.5, v * 2, 2 * v, w > 0, 7 / 2)
+}

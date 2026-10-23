@@ -1,0 +1,3 @@
+tests/ui/errors/int_variable_as_float.kl:4:20: error: expected `float`, found `int`
+4 |     let f: float = i
+  |                    ^
