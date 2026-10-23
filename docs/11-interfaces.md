@@ -250,4 +250,4 @@ hello Rex
 
 ---
 
-Previous: [10. Inheritance](10-inheritance.md) · Next: [12. Lambdas](12-lambdas.md)
+Previous: [10. Inheritance](10-inheritance.md) · Next: [12. Lambdas and Function Values](12-lambdas.md)

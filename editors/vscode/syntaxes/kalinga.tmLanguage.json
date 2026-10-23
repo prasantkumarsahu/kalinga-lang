@@ -13,6 +13,9 @@
       "include": "#strings"
     },
     {
+      "include": "#rust-block"
+    },
+    {
       "include": "#declarations"
     },
     {
@@ -98,7 +101,7 @@
           }
         },
         {
-          "match": "\b(fn)\\s+([A-Za-z_][A-Za-z0-9_]*)",
+          "match": "\\b(fn)\\s+([A-Za-z_][A-Za-z0-9_]*)",
           "captures": {
             "1": {
               "name": "storage.type.function.kalinga"
@@ -145,7 +148,7 @@
       "patterns": [
         {
           "name": "keyword.control.kalinga",
-          "match": "\b(if|else|while|for|in|match|return|break|continue)\b"
+          "match": "\\b(if|else|while|for|in|match|return|break|continue|await)\\b"
         },
         {
           "name": "keyword.control.import.kalinga",
@@ -157,24 +160,28 @@
         },
         {
           "name": "storage.modifier.kalinga",
-          "match": "\\b(override|private|static|abstract)\\b|\\bmut(?=\\s+fn\\b)|\\bop(?=\\s*[-+*/%]\\s*\\()|\\b(rust|crate)(?=\\s+\\\")|\\btype(?=\\s+[A-Z])"
+          "match": "\\b(override|private|static|abstract|async)\\b|\\bmut(?=\\s+fn\\b)|\\bop(?=\\s*[-+*/%]\\s*\\()|\\b(rust|crate)(?=\\s+\\\")|\\btype(?=\\s+[A-Z])"
         },
         {
           "name": "keyword.operator.type.kalinga",
-          "match": "\b(as|is)\b"
+          "match": "\\b(as|is)\\b"
         },
         {
           "name": "variable.language.self.kalinga",
-          "match": "\b(self|super)\b"
+          "match": "\\b(self|super)\\b"
         },
         {
           "name": "support.class.library.kalinga",
-          "match": "\\b(Math|Random|Time)\\b(?=\\s*\\.)"
+          "match": "\\b(Math|Random|Time|Thread|Async)\\b(?=\\s*\\.)"
         }
       ]
     },
     "constants": {
       "patterns": [
+        {
+          "name": "support.function.result.kalinga",
+          "match": "\\b(Ok|Err)\\b(?=\\s*\\()"
+        },
         {
           "name": "constant.language.boolean.kalinga",
           "match": "\\b(true|false)\\b"
@@ -187,6 +194,10 @@
     },
     "types": {
       "patterns": [
+        {
+          "name": "support.type.builtin.kalinga",
+          "match": "\\b(Result|Channel|Shared|Task|Async)\\b(?=\\s*<)"
+        },
         {
           "name": "support.type.primitive.kalinga",
           "match": "\\b(int|float|bool|str|void)\\b(?!\\s*\\()"
@@ -269,7 +280,47 @@
         },
         {
           "name": "keyword.operator.optional.kalinga",
-          "match": "\\?"
+          "match": "\\?",
+          "comment": "`T?` optional types and the postfix `?` that returns errors early"
+        }
+      ]
+    },
+    "rust-block": {
+      "comment": "`extern fn f() -> int = rust { ... }`: an inline Rust body",
+      "begin": "\\b(rust)\\s*(\\{)",
+      "beginCaptures": {
+        "1": {
+          "name": "storage.modifier.kalinga"
+        },
+        "2": {
+          "name": "punctuation.section.embedded.begin.kalinga"
+        }
+      },
+      "end": "\\}",
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.section.embedded.end.kalinga"
+        }
+      },
+      "contentName": "meta.embedded.block.rust",
+      "patterns": [
+        {
+          "include": "#rust-braces"
+        },
+        {
+          "include": "source.rust"
+        }
+      ]
+    },
+    "rust-braces": {
+      "begin": "\\{",
+      "end": "\\}",
+      "patterns": [
+        {
+          "include": "#rust-braces"
+        },
+        {
+          "include": "source.rust"
         }
       ]
     }

@@ -1,5 +1,58 @@
 # Changelog
 
+## 0.4.0 — first playable
+
+### Games
+- **`std/game`**: a window, 2D drawing (rectangles, circles, lines, triangles, text,
+  images), keyboard and mouse input, sounds and screenshots, built on macroquad. A game is
+  a class implementing `Game { update(input, dt); draw(screen) }`, started with
+  `Window.run(...)`. Drawing 10,000 sprites takes 0.73 ms per frame, against 0.63 ms for the
+  same program in plain Rust.
+- **`std/math2d`**: `Vec2` and `Rect` structs with operators and geometry helpers.
+- Examples: `examples/pong/` and `examples/asteroids/`, with Pong's rules unit-tested.
+
+### Language
+- **Error handling**: `Result<T, E>` with `Ok` / `Err`, exhaustive `match`, postfix `?`
+  (also on optionals), `is_ok`, `is_err`, `ok`, `err`, `unwrap_or`, `unwrap`, and
+  `fn main() -> Result<void, E>`.
+- **Threads** (share-nothing): `Thread.spawn(fn() => ...)` → `Task<T>` with `join()` and
+  `is_done()`, `Channel<T>`, `Shared<T>`, `xs.par_map(f)` (5.4x faster on 12 cores) and
+  `Thread.cores()`. Only values cross threads; using an object in a thread is a compile
+  error, so there are no data races and single-threaded code is unchanged.
+- **Async**: `async fn` and `static async fn`, `await`, `async fn main()`, and a built-in
+  executor with `Time.wait`, `Async.spawn`, `Async.all`, `Async.run`, and `await` on thread
+  tasks.
+- **Generic structs** (`struct Grid<T>`), struct constants (`static ORIGIN: Vec2 = ...`) and
+  numbers on the left of struct operators (`2.0 * v`).
+- **Package namespaces**: `import "pkg" as alias` with `alias.Name` in code and types;
+  packages may reuse names, and error messages show `pkg.Name`.
+
+### Rust interop
+- Inline Rust bodies: `extern fn roll(n: int) -> int = rust { fastrand::i64(1..=n) }`.
+- `extern fn` can return `Result`.
+- Crate features: `use crate "macroquad" = "0.4" features ["audio"]`; compatible versions
+  of the same crate are merged.
+- Windows builds link the C runtime statically, so executables run without the Visual C++
+  runtime installed.
+
+### utkal, the package manager
+- New `utkal` command: `new [--lib]`, `add`, `remove`, `build`, `run`, `check`, `test`,
+  `update`.
+- `utkal.toml` with `[dependencies]` from git (`tag`, `branch`, `rev` or a semver
+  `version` matched against tags) or a `path`, and `[rust-dependencies]` that need no
+  `use crate` lines.
+- `utkal.lock` pins every git package to a commit; packages are cached in `~/.utkal`.
+- `kalinga` and the editor find the nearest `utkal.toml`, so packages work everywhere.
+
+### Tooling
+- VS Code extension 0.5.0: highlighting for `async`/`await`, `Ok`/`Err` and inline Rust
+  bodies (and a fix for patterns that never matched, such as `fn` names); completion and
+  signature help for `Thread`, `Async`, `Result`, `Channel`, `Shared`, `Task`, `std/`
+  modules, packages and `alias.` names; new snippets (`resfn`, `matchr`, `externr`, `spawn`,
+  `channel`, `asyncfn`, `importas`, `gameclass`); `utkal.toml` hints.
+- Docs: new chapters Error Handling, Packages with utkal, Threads, Async and Making a Game;
+  the rest renumbered.
+
 ## 0.3.0 — foundations for games and AI
 
 ### Language

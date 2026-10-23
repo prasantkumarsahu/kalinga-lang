@@ -4,6 +4,7 @@ const { execFile } = require("child_process");
 const fs = require("fs");
 const path = require("path");
 const completion = require("./completion");
+const packages = require("./packages");
 
 const LANG = "kalinga";
 const CHECK_DELAY_MS = 400;
@@ -85,13 +86,15 @@ function parseErrors(stderr, document) {
   return out;
 }
 
-/** Reads imported files for completion (`import` paths are relative to the importing file). */
+/** Reads imported files for completion: files, `std/...` modules and utkal packages. */
 function importLoader(document) {
   if (document.isUntitled) return {};
+  const ctx = packages.context(path.dirname(document.fileName));
   return {
     dir: path.dirname(document.fileName),
     load(importPath, dir) {
-      const full = path.resolve(dir || path.dirname(document.fileName), importPath);
+      const full = packages.resolveImport(importPath, dir || path.dirname(document.fileName), ctx);
+      if (!full) return null;
       const open = vscode.workspace.textDocuments.find((d) => !d.isUntitled && samePath(d.fileName, full));
       try {
         const text = open ? open.getText() : fs.readFileSync(full, "utf8");

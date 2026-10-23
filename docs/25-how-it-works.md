@@ -1,4 +1,4 @@
-# 20. How It Works
+# 25. How It Works
 
 Kalinga is a **source-to-source compiler**: it translates Kalinga into Rust and lets
 `rustc` produce optimized machine code. Early C++ compilers worked the same way, turning
@@ -54,11 +54,15 @@ reported as an *internal compiler error*.
 | `Stack<int>` | `Rc<RefCell<Stack<i64>>>` |
 | `struct Vec2` | a plain Rust `struct Vec2` (`#[derive(Clone)]`), stored inline |
 | `extern type T` | the Rust type `T` from a `use rust` file |
+| `Result<T, E>` | `Result<T, E>` |
+| `Task<T>` | a handle to a `std::thread` plus its result |
+| `Channel<T>` / `Shared<T>` | `Arc<Mutex<VecDeque<T>>>` + `Condvar` / `Arc<Mutex<T>>` |
+| `Async<T>` | a boxed Rust `Future`, run by the built-in executor |
 
 - `Rc` is a reference-counted pointer: an object is freed automatically when the last
   reference to it goes away. No garbage collector, no manual `free`.
 - `RefCell` enforces "one writer at a time" at runtime. This is what turns the re-entrancy
-  mistake from [chapter 10](18-safety-and-errors.md#re-entrant-objects) into a clear error
+  mistake from [chapter 23](23-safety-and-errors.md#re-entrant-objects) into a clear error
   instead of undefined behaviour.
 
 ## Mapping classes
@@ -155,9 +159,35 @@ The rules behind it:
 | `a + b` (struct) | `a.__op_0(b)`, the struct's `op +` method |
 | `use rust "f.rs"` | `#[path = "..."] mod __rs_f; use __rs_f::*;` |
 | `Math.sqrt(x)` / `Random.int(a, b)` | `x.sqrt()` / a small xorshift generator in the runtime |
+| `expr?` | `match expr { Ok(v) => v, Err(e) => return Err(e) }` (the same with `None` for optionals) |
+| `Thread.spawn(fn() => ...)` | `std::thread::spawn(move \|\| ...)`; captures are checked to be values |
+| `xs.par_map(f)` | chunks of `xs` mapped on `std::thread::scope` threads |
+| `async fn f() -> T` / `await x` | a Rust `async` block returning `T` / `.await` |
+| `extern fn f() = rust { ... }` | `fn __x_f() { ... }` |
 
 Method-call arguments are evaluated into temporaries before the object is borrowed, so
 `a.f(a.x)` is safe.
+
+## Threads and async
+
+Objects are `Rc<RefCell<...>>`, which Rust does not allow to cross threads. Kalinga keeps
+them: only values (numbers, strings, arrays, structs, enums, channels, shared cells) may be
+captured by a thread lambda or sent through a channel, and the compiler checks this before
+Rust does. Single-threaded code therefore pays nothing for threads.
+
+`async fn`s compile to Rust futures. The runtime includes a small single-threaded
+executor (a ready queue, a timer list and wakers): `await` polls the future, `Time.wait`
+registers a timer, and `await task` on a thread wakes the executor when the thread ends.
+`async fn main()` runs on this executor.
+
+## Packages and names
+
+Every file belongs to a *unit*: the project, a utkal package or a `std/` module. All units
+are compiled into one Rust program, so when two units declare the same top-level name,
+the compiler renames all but one of them (`Vec2__mathx`) before type checking, and
+resolves every use to the right one: a file's own unit first, then the units it imports;
+`alias.Name` names one unit directly. Error messages turn the internal names back into
+`mathx.Vec2`.
 
 ## Objects know themselves
 
@@ -192,14 +222,19 @@ The costs to be aware of:
 
 | File | Role |
 |---|---|
-| `src/main.rs` | Command-line interface |
+| `src/main.rs` | The `kalinga` command line |
+| `src/bin/utkal.rs` | The `utkal` command line |
+| `src/lib.rs` | The compiler as a library, shared by both commands |
+| `src/project.rs` | `utkal.toml`, `utkal.lock`, fetching git and path packages, versions |
+| `src/namespaces.rs` | Package namespaces: renaming clashing names, `import ... as` |
+| `src/stdlib.rs`, `std/` | The bundled `std/` modules (`math2d`, `game` and its Rust glue) |
 | `src/token.rs`, `src/lexer.rs` | Tokens, newline handling |
 | `src/ast.rs`, `src/parser.rs` | Syntax tree and recursive-descent parser |
 | `src/checker.rs` | Type model, class hierarchy, override and interface rules |
 | `src/codegen.rs` | Body type checking, Rust generation, runtime prelude |
-| `src/driver.rs` | Writes the `.rs` file, runs `rustc` and the program |
+| `src/driver.rs` | Loads files and packages, writes the `.rs` file, runs `rustc` or `cargo` and the program |
 | `src/error.rs` | Error type and the source-line-with-caret display |
 
 ---
 
-Previous: [19. Tooling](19-tooling.md) · Next: [21. Language Reference](21-reference.md)
+Previous: [24. Tooling](24-tooling.md) · Next: [26. Language Reference](26-reference.md)

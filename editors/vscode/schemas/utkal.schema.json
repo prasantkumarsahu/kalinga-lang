@@ -1,0 +1,63 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "utkal.toml",
+  "description": "A Kalinga project managed by utkal.",
+  "type": "object",
+  "required": ["package"],
+  "properties": {
+    "package": {
+      "type": "object",
+      "required": ["name"],
+      "properties": {
+        "name": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9_-]*$", "description": "Package name: letters, digits, `-` and `_`. Other projects import it by this name." },
+        "version": { "type": "string", "description": "This package's version, e.g. \"0.1.0\". Tag releases as `v0.1.0` so others can ask for versions." },
+        "kalinga": { "type": "string", "description": "The Kalinga version the package is written for, e.g. \"0.4\"." }
+      },
+      "additionalProperties": false
+    },
+    "dependencies": {
+      "type": "object",
+      "description": "Kalinga packages, imported with `import \"name\"` or `import \"name\" as alias`.",
+      "additionalProperties": {
+        "type": "object",
+        "oneOf": [
+          {
+            "required": ["path"],
+            "properties": { "path": { "type": "string", "description": "A folder holding the package's utkal.toml, relative to this file." } },
+            "additionalProperties": false
+          },
+          {
+            "required": ["git"],
+            "properties": {
+              "git": { "type": "string", "description": "Git repository URL (or a local repository path)." },
+              "tag": { "type": "string", "description": "An exact tag, e.g. \"v0.4.0\"." },
+              "branch": { "type": "string", "description": "A branch; `utkal update` moves to its newest commit." },
+              "rev": { "type": "string", "description": "A commit hash." },
+              "version": { "type": "string", "description": "A version requirement matched against tags: \"0.4\" (= ^0.4), \"~1.2.3\", \"=1.0.0\", \">=0.3\" or \"*\"." }
+            },
+            "additionalProperties": false
+          }
+        ]
+      }
+    },
+    "rust-dependencies": {
+      "type": "object",
+      "description": "crates.io crates the Rust code (`use rust` files, `= rust { }` bodies) can use, without `use crate` lines.",
+      "additionalProperties": {
+        "oneOf": [
+          { "type": "string", "description": "Version, e.g. \"0.4\"." },
+          {
+            "type": "object",
+            "required": ["version"],
+            "properties": {
+              "version": { "type": "string" },
+              "features": { "type": "array", "items": { "type": "string" } }
+            },
+            "additionalProperties": false
+          }
+        ]
+      }
+    }
+  },
+  "additionalProperties": false
+}

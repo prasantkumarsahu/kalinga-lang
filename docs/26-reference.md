@@ -1,4 +1,4 @@
-# 21. Language Reference
+# 26. Language Reference
 
 A compact summary of the whole language. For explanations and examples, see the guide
 chapters linked from the [docs index](README.md).
@@ -29,12 +29,13 @@ A newline does **not** end a statement when it follows an operator, `,`, `.`, `:
 
 ```text
 fn  class  struct  interface  enum  import  use  extern  init  override  private  static  abstract
-let  var  if  else  while  for  in  match  return  break  continue
+let  var  if  else  while  for  in  match  return  break  continue  async  await
 true  false  none  self  super  as  is
 ```
 
 Contextual words (only special in one place): `mut` before `fn` and `op` before an
-operator inside a struct; `rust` and `crate` after `use`; `type` after `extern`.
+operator inside a struct; `rust` and `crate` after `use` and `rust` after `extern fn ... =`;
+`type` after `extern`; `features` after a crate version.
 
 Built-in type names: `int`, `float`, `bool`, `str`, `void`.
 
@@ -54,7 +55,11 @@ functions, plus `Rc`, `RefCell`, `String`, `Vec`, `Option`, `Some`, `None`, `Box
 | `T?` | optional; `T` or `none` (`T??` not allowed) | `none` |
 | `{K: V}` | map; keys `int`, `str` or `bool`; sorted by key | `{}` |
 | `fn(A, B) -> R` | function value | none — must be given |
-| `Name<T, ...>` | instance of a generic class | none — must be given |
+| `Name<T, ...>` | instance of a generic class or struct | none — must be given |
+| `Result<T, E>` | `Ok(T)` or `Err(E)` (chapter 16) | none — must be given |
+| `Task<T>` | a running thread (chapter 20) | none — must be given |
+| `Channel<T>`, `Shared<T>` | values shared between threads (chapter 20) | none — must be given |
+| `Async<T>` | a running async job (chapter 21) | none — must be given |
 | `T` | type parameter inside generic code | — (stored as empty until set) |
 | struct `Name` | value type, copied on assignment | none — must be given |
 | `extern type Name` | opaque Rust type | none — must be given |
@@ -87,9 +92,9 @@ From lowest to highest. All binary operators are left-associative.
 | 4 | `<` `<=` `>` `>=` | same type: `int`, `float`, `str` |
 | 5 | `+` `-` | `int`, `float`; `+` also joins `str` |
 | 6 | `*` `/` `%` | `int`, `float` |
-| 7 | `-x` `!x` | numeric / `bool` |
+| 7 | `-x` `!x` `await x` | numeric / `bool` / `Async<T>` or `Task<T>` (inside `async fn` only) |
 | 8 | `x as C` `x is C` | object → `C?` / `bool` |
-| 9 | `f(...)` `x.m(...)` `x.f` `x[i]` | postfix |
+| 9 | `f(...)` `x.m(...)` `x.f` `x[i]` `x?` | postfix; `?` unwraps a `Result` / optional or returns early |
 
 Assignment operators (statements only): `=` `+=` `-=` `*=` `/=` `%=` (`+=` works on `str`).
 
@@ -118,28 +123,33 @@ EXPR                           usually a call
 ```text
 fn NAME(PARAM, ...) [-> TYPE] { ... }
     PARAM = NAME: TYPE
+async fn NAME(PARAM, ...) [-> TYPE] { ... }          calling it gives Async<TYPE>
 
-import "PATH"
+import "FILE.kl"                                     a file, relative to this one
+import "std/MODULE"                                  a standard module
+import "PACKAGE[/FILE]" [as ALIAS]                   a utkal package; ALIAS.Name
 
 [abstract] class NAME[<T, ...>] [: BASE_OR_INTERFACE, ...] {
     [private] FIELD: TYPE [= EXPR]
     init(PARAM, ...) { ... }                         at most one
     [private] [static] fn NAME(PARAM, ...) [-> TYPE] { ... }
+    [private] static async fn NAME(PARAM, ...) [-> TYPE] { ... }
     [private] override fn NAME(PARAM, ...) [-> TYPE] { ... }
     abstract fn NAME(PARAM, ...) [-> TYPE]           abstract classes only
 }
 
-struct NAME {
+struct NAME[<T, ...>] {
     [private] FIELD: TYPE [= EXPR]
+    static NAME: TYPE = EXPR                         a constant, used as Struct.NAME
     [private] [static] fn NAME(PARAM, ...) [-> TYPE] { ... }
     [private] mut fn NAME(PARAM, ...) [-> TYPE] { ... }     may change `self`
     op OPERATOR(PARAM) -> TYPE { ... }               + - * / %; `op -()` is unary minus
 }
 
 use rust "FILE.rs"
-use crate "NAME" = "VERSION"
+use crate "NAME" = "VERSION" [features ["FEATURE", ...]]
 extern type NAME
-extern fn NAME(PARAM, ...) [-> TYPE] [= "rust::path"]
+extern fn NAME(PARAM, ...) [-> TYPE] [= "rust::path" | = rust { RUST CODE }]
 
 interface NAME [: INTERFACE, ...] {
     fn NAME(PARAM, ...) [-> TYPE]
@@ -187,6 +197,17 @@ of `init`, required when the base has an `init`), `super.method(...)`.
 | `str` | `len()` | `int` |
 | `str` | `upper()` / `lower()` / `trim()` | `str` |
 | `str` | `contains(s: str)` | `bool` |
+| `[T]` | `par_map(f: fn(T) -> U)` | `[U]`, computed on all cores (values only) |
+| `Result<T, E>` | `is_ok()` / `is_err()` | `bool` |
+| `Result<T, E>` | `ok()` / `err()` | `T?` / `E?` |
+| `Result<T, E>` | `unwrap_or(x: T)` / `unwrap()` | `T` (`unwrap` stops the program on `Err`) |
+| `Task<T>` | `join()` / `is_done()` | `T` / `bool` |
+| `Channel<T>` | `send(x: T)` / `close()` | — |
+| `Channel<T>` | `receive()` / `try_receive()` | `T?` (`receive` waits) |
+| `Shared<T>` | `get()` / `set(x: T)` / `update(f: fn(T) -> T)` | `T` / — / — |
+
+Library functions: `Math.*`, `Random.*` and `Time.*` (chapter 15), `Time.wait(s)`,
+`Async.spawn/all/run` (chapter 21), `Thread.spawn(f)` and `Thread.cores()` (chapter 20).
 
 ## Value display
 
@@ -198,18 +219,20 @@ of `init`, required when the base has an `init`), `super.method(...)`.
 | `"hi"` | `hi` |
 | `[1, 2]`, `["a"]` | `[1, 2]`, `[a]` |
 | an `int?` holding `none` / `5` | `none` / `5` |
+| `Ok(3)`, `Err("no")` | `Ok(3)`, `Err(no)` |
 
 ## Grammar (EBNF)
 
 ```text
 program     = { import | use | extern | function | class | struct | interface | enum } ;
-import      = "import" STRING ;
-use         = "use" ( "rust" STRING | "crate" STRING "=" STRING ) ;
-extern      = "extern" ( "type" IDENT | "fn" IDENT params [ "->" type ] [ "=" STRING ] ) ;
-struct      = "struct" IDENT "{" { { modifier } IDENT ":" type [ "=" expr ]
+import      = "import" STRING [ "as" IDENT ] ;
+use         = "use" ( "rust" STRING | "crate" STRING "=" STRING [ "features" "[" STRING { "," STRING } "]" ] ) ;
+extern      = "extern" ( "type" IDENT | "fn" IDENT params [ "->" type ] [ "=" ( STRING | "rust" RUST_BLOCK ) ] ) ;
+struct      = "struct" IDENT [ tparams ] "{" { { modifier } IDENT ":" type [ "=" expr ]
+            | "static" IDENT ":" type "=" expr
             | [ "mut" ] { modifier } "fn" IDENT params [ "->" type ] block
             | "op" ( "+" | "-" | "*" | "/" | "%" ) params "->" type block } "}" ;
-function    = "fn" IDENT [ tparams ] params [ "->" type ] block ;
+function    = [ "async" ] "fn" IDENT [ tparams ] params [ "->" type ] block ;
 tparams     = "<" IDENT { "," IDENT } ">" ;
 params      = "(" [ param { "," param } [ "," ] ] ")" ;
 param       = IDENT ":" type ;
@@ -217,12 +240,12 @@ class       = [ "abstract" ] "class" IDENT [ tparams ] [ ":" IDENT { "," IDENT }
 member      = { modifier } IDENT ":" type [ "=" expr ]
             | "init" params block
             | { modifier } "fn" IDENT params [ "->" type ] ( block | (* abstract *) ) ;
-modifier    = "private" | "static" | "abstract" | "override" ;
+modifier    = "private" | "static" | "abstract" | "override" | "async" ;
 interface   = "interface" IDENT [ ":" IDENT { "," IDENT } ] "{" { "fn" IDENT params [ "->" type ] } "}" ;
 enum        = "enum" IDENT "{" variant { [ "," ] variant } "}" ;
 variant     = IDENT [ params ] ;
 type        = base [ "?" ] ;
-base        = "int" | "float" | "bool" | "str" | "void" | IDENT [ "<" type { "," type } ">" ]
+base        = "int" | "float" | "bool" | "str" | "void" | [ IDENT "." ] IDENT [ "<" type { "," type } ">" ]
             | "[" type "]" | "{" type ":" type "}" | "fn" "(" [ type { "," type } ] ")" [ "->" type ] ;
 
 block       = "{" { statement } "}" ;
@@ -243,9 +266,9 @@ equality    = comparison { ( "==" | "!=" ) comparison } ;
 comparison  = additive { ( "<" | "<=" | ">" | ">=" ) additive } ;
 additive    = term { ( "+" | "-" ) term } ;
 term        = unary { ( "*" | "/" | "%" ) unary } ;
-unary       = ( "-" | "!" ) unary | cast ;
+unary       = ( "-" | "!" | "await" ) unary | cast ;
 cast        = postfix { ( "as" | "is" ) IDENT } ;
-postfix     = primary { "." IDENT [ args ] | "[" expr "]" } ;
+postfix     = primary { "." IDENT [ args ] | "[" expr "]" | "?" } ;
 primary     = INT | FLOAT | STRING | "true" | "false" | "none" | "self"
             | IDENT [ "<" type { "," type } ">" ] [ args ]
             | "super" ( args | "." IDENT args )
@@ -257,12 +280,11 @@ args        = "(" [ expr { "," expr } [ "," ] ] ")" ;
 
 ## Not yet supported
 
-Bounds on type parameters (`T: Show`), generic interfaces, enums and structs, inheritance
-with generic classes, operators on classes or with the struct on the right (`2.0 * v`),
-closures that change captured variables, global variables, module namespaces
-(`import ... as x`), crate features, string indexing, tuples, exceptions (`try`/`catch`),
-concurrency.
+Bounds on type parameters (`T: Show`), generic interfaces and enums, inheritance with
+generic classes, operators on classes, closures that change captured variables, global
+variables, `async` instance methods, `await` inside lambdas, sharing objects between threads,
+a package registry, string indexing, tuples, exceptions (`try`/`catch`; use `Result`).
 
 ---
 
-Previous: [20. How It Works](20-how-it-works.md) · Back to the [docs index](README.md)
+Previous: [25. How It Works](25-how-it-works.md)

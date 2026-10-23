@@ -1,17 +1,18 @@
-# 17. Rust Interop
+# 19. Rust Interop
 
 Kalinga compiles to Rust, so it can use Rust code directly: your own Rust files, Rust's
 standard library, and any library (crate) from [crates.io](https://crates.io). This is how
 Kalinga programs get graphics, audio, networking, machine learning and anything else the
 Rust ecosystem provides.
 
-There are four pieces:
+The pieces:
 
 | Declaration | Meaning |
 |---|---|
 | `use rust "native/stats.rs"` | compile this Rust file into the program |
 | `use crate "rand" = "0.8"` | use a crates.io library (the build switches to `cargo`) |
 | `extern fn name(params) -> T` | a Rust function Kalinga can call |
+| `extern fn name(params) -> T = rust { ... }` | the same, with the Rust body written inline |
 | `extern type Name` | a Rust type Kalinga can hold and pass around |
 
 ## Calling a Rust function
@@ -62,6 +63,7 @@ This program uses Rust code (`use rust`, `use crate` or `extern fn`): check that
 | `[T]` | `Vec<T>` |
 | `{K: V}` | `std::collections::BTreeMap<K, V>` |
 | `T?` | `Option<T>` |
+| `Result<T, E>` | `Result<T, E>` |
 | a Kalinga `struct` / `enum` | the Rust type of the same name: `crate::Vec2` |
 | `extern type T` | your Rust type `T` (it must implement `Clone`) |
 | `fn(A) -> B` | `std::rc::Rc<dyn Fn(A) -> B>` |
@@ -85,6 +87,46 @@ fn main() {
 
 ```text
 3.0 -8
+```
+
+## Inline Rust bodies
+
+A short Rust function can be written right in the Kalinga file, after `= rust`. The
+parameters have their Rust types from the table above:
+
+```kalinga
+extern fn clamp_byte(x: int) -> int = rust { x.clamp(0, 255) }
+extern fn shout(s: str) -> str = rust { s.to_uppercase() + "!" }
+
+fn main() {
+    print(clamp_byte(300), shout("hi"))
+}
+```
+
+```text
+255 HI!
+```
+
+Inline bodies can use crates too: `extern fn roll(n: int) -> int = rust { fastrand::i64(1..=n) }`
+together with `use crate "fastrand" = "2"`.
+
+## Rust functions that can fail
+
+An `extern fn` that returns a `Result` maps to Rust's `Result`, so Rust errors arrive as
+Kalinga `Err` values (see [16. Error Handling](16-error-handling.md)):
+
+```kalinga
+extern fn parse_hex(s: str) -> Result<int, str> = rust {
+    i64::from_str_radix(&s, 16).map_err(|e| e.to_string())
+}
+
+fn main() {
+    print(parse_hex("ff"), parse_hex("zz"))
+}
+```
+
+```text
+Ok(255) Err(invalid digit found in string)
 ```
 
 ## Opaque Rust types
@@ -154,6 +196,10 @@ fn main() {
 - The first build that uses a crate downloads and compiles it (needs internet, takes a
   while); after that, builds are fast again. Compiled crates are shared between programs.
 - Version strings follow Cargo's rules: `"0.8"` means any compatible 0.8.x release.
+- Crate features go after the version: `use crate "macroquad" = "0.4" features ["audio"]`.
+  When several files use the same crate, their features are combined.
+- In a utkal project, list crates in `utkal.toml` under `[rust-dependencies]` instead; then
+  no `use crate` lines are needed (see [18. Packages with utkal](18-packages.md)).
 
 ## A pattern for libraries
 
@@ -172,16 +218,23 @@ my-game/
     └── window_glue.rs      pub fn draw_texture(t: Texture, x: f64, y: f64) { ... }
 ```
 
-The rest of the game is written in plain Kalinga against `window.kl`.
+The rest of the game is written in plain Kalinga against `window.kl`. This is exactly how
+`std/game` is made: `game.kl` declares friendly classes and `extern fn`s, and
+`game_glue.rs` calls macroquad. A utkal package can carry its own glue the same way.
+
+## Shipping
+
+On Windows, programs are linked with the C runtime built in (`+crt-static`), so a built
+`.exe` runs on any Windows PC without installing the Visual C++ runtime. This applies to
+programs that use crates as well.
 
 ## Limits in this version
 
 - Rust code receives copies; it cannot keep references to Kalinga objects or call back
   into Kalinga except through function values passed to it.
-- Only crates.io version requirements are supported (no features, git or path
-  dependencies yet).
+- Crates come from crates.io (no git or path crates yet).
 - `extern fn`s cannot be generic.
 
 ---
 
-Previous: [16. Modules](16-modules.md) · Next: [18. Safety and Errors](18-safety-and-errors.md)
+Previous: [18. Packages with utkal](18-packages.md) · Next: [20. Threads](20-threads.md)

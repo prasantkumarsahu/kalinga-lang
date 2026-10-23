@@ -1,4 +1,4 @@
-# 18. Safety and Errors
+# 23. Safety and Errors
 
 Kalinga is designed so that mistakes are caught as early as possible — ideally by the
 compiler, otherwise by a clear runtime error — and never turn into silent memory
@@ -15,6 +15,8 @@ corruption.
 | No accidental mutation | Variables are immutable unless declared with `var` |
 | No surprise type conversions | Every conversion is written explicitly |
 | Overrides and interfaces match | Signatures are checked at compile time |
+| No ignored failures | Operations that can fail return a `Result` that must be handled (chapter 16) |
+| No data races | Only values cross threads; objects stay on their thread (chapter 20) |
 
 The generated Rust code contains no `unsafe` blocks, so these guarantees are backed by the
 Rust compiler as well.
@@ -51,6 +53,10 @@ Common compile errors and what to do:
 | `` `A` is abstract and cannot be created `` | Creating an abstract class | Create a subclass |
 | `` cannot tell what `T` is `` | Generic call without enough information | Write the type: `Stack<int>()` |
 | `` cannot change `n` inside a lambda `` | Assigning to a captured variable | Keep shared state in an object |
+| `` `?` can only be used in a function that returns a `Result` `` | `?` in a function that cannot fail | Return a `Result`, or `match` the value |
+| `` `Thread.spawn` cannot use `p` here `` | An object used inside a thread | Copy the values the thread needs, or use a `Channel` |
+| `` `await` can only be used inside an `async fn` `` | `await` in a normal function | Make the function `async`, or use `Async.run(...)` |
+| `` `Vec2` is defined in both `a` and `b` `` | Two imported packages have the name | `import "a" as a` and write `a.Vec2` |
 
 ## Runtime errors
 
@@ -83,8 +89,13 @@ runtime error: index out of bounds: the len is 3 but the index is 5
 | `Random.int(5, 5): the second number must be greater than the first` | an empty range |
 | `key not found: plums` | `m["plums"]` when the map has no such key (use `m.get(k)`) |
 | `field `value` was read before it was set` | a generic class's `T` field read before `init` set it |
+| `called unwrap() on an error: ...` | `r.unwrap()` on an `Err` |
+| `a thread stopped with an error (see above)` | `task.join()` on a thread that hit a runtime error |
 
 Float division by zero is not an error; it produces `inf` or `NaN` as in most languages.
+
+When `main` returns a `Result` and it is an `Err`, the program prints `error: ` and the
+error and exits with code `1` (chapter 16).
 
 ## Re-entrant objects
 
@@ -136,4 +147,4 @@ programs that build and drop many such cycles will use more memory than necessar
 
 ---
 
-Previous: [17. Rust Interop](17-rust-interop.md) · Next: [19. Tooling](19-tooling.md)
+Previous: [22. Making a Game](22-making-a-game.md) · Next: [24. Tooling](24-tooling.md)

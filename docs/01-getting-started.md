@@ -6,7 +6,8 @@ Kalinga compiles your program to Rust and then uses the Rust compiler to make a 
 executable, so you need a Rust toolchain:
 
 1. Install Rust from <https://rustup.rs>. This gives you `cargo` and `rustc`.
-2. From the root of the `kalinga-lang` repository, install the Kalinga compiler:
+2. From the root of the `kalinga-lang` repository, install the Kalinga compiler and the
+   `utkal` package manager:
 
    ```bash
    cargo install --path .
@@ -18,7 +19,7 @@ executable, so you need a Rust toolchain:
    kalinga -v
    ```
 
-   It prints the installed version, for example `kalinga 0.2.0`. Run `kalinga` on its own
+   It prints the installed version, for example `kalinga 0.4.0`. Run `kalinga` on its own
    to see the list of commands.
 
 ## Your first program
@@ -102,10 +103,22 @@ kalinga check hello.kl
 Reports errors only. It is fast because it skips the Rust step, which makes it useful in
 editors.
 
+## Projects
+
+For a program with several files, packages or Rust crates, let `utkal` set up a project:
+
+```bash
+utkal new my-app
+cd my-app
+utkal run
+```
+
+See [18. Packages with utkal](18-packages.md).
+
 ## Editor support
 
 Install the VS Code extension for highlighting, snippets, live errors and a ▶ Run button.
-See [Tooling](19-tooling.md).
+See [Tooling](24-tooling.md).
 
 ---
 

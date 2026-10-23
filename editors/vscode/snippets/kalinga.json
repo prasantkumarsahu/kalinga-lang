@@ -288,5 +288,104 @@
       "}"
     ],
     "description": "Frame loop with delta time"
+  },
+  "result function": {
+    "prefix": "resfn",
+    "body": [
+      "fn ${1:name}(${2}) -> Result<${3:int}, str> {",
+      "\t$0",
+      "\treturn Ok(${4:0})",
+      "}"
+    ],
+    "description": "Function that can fail: returns Ok(value) or Err(message)"
+  },
+  "match result": {
+    "prefix": "matchr",
+    "body": [
+      "match ${1:result} {",
+      "\tOk(${2:value}) => $0",
+      "\tErr(${3:e}) => print(\"error:\", ${3:e})",
+      "}"
+    ],
+    "description": "Handle both cases of a Result"
+  },
+  "extern rust body": {
+    "prefix": "externr",
+    "body": [
+      "extern fn ${1:name}(${2}) -> ${3:int} = rust {",
+      "\t$0",
+      "}"
+    ],
+    "description": "Rust function written inline"
+  },
+  "thread spawn": {
+    "prefix": "spawn",
+    "body": [
+      "let ${1:task} = Thread.spawn(fn() -> ${2:int} {",
+      "\t$0",
+      "})",
+      "let ${3:result} = ${1:task}.join()"
+    ],
+    "description": "Run work on another thread and wait for its result"
+  },
+  "channel": {
+    "prefix": "channel",
+    "body": [
+      "let ${1:ch} = Channel<${2:int}>()",
+      "Thread.spawn(fn() {",
+      "\t${1:ch}.send(${3:1})",
+      "\t${1:ch}.close()",
+      "})",
+      "while true {",
+      "\tif let ${4:v} = ${1:ch}.receive() {",
+      "\t\t$0",
+      "\t} else {",
+      "\t\tbreak",
+      "\t}",
+      "}"
+    ],
+    "description": "Send values from a thread through a channel"
+  },
+  "async fn": {
+    "prefix": "asyncfn",
+    "body": [
+      "async fn ${1:name}(${2}) -> ${3:int} {",
+      "\tawait Time.wait(${4:0.1})",
+      "\t$0",
+      "}"
+    ],
+    "description": "Async function; call it and `await` the result"
+  },
+  "import as": {
+    "prefix": "importas",
+    "body": [
+      "import \"${1:package}\" as ${2:name}"
+    ],
+    "description": "Import a package under a name: name.Thing"
+  },
+  "game class": {
+    "prefix": "gameclass",
+    "body": [
+      "import \"std/game\"",
+      "",
+      "class ${1:MyGame} : Game {",
+      "\tpos: Vec2 = Vec2(400.0, 300.0)",
+      "",
+      "\tfn update(input: Input, dt: float) {",
+      "\t\tif input.key_down(\"right\") { self.pos.x += 200.0 * dt }",
+      "\t\tif input.key_down(\"left\") { self.pos.x -= 200.0 * dt }",
+      "\t}",
+      "",
+      "\tfn draw(screen: Screen) {",
+      "\t\tscreen.clear(Color.BLACK)",
+      "\t\tscreen.circle(self.pos, 20.0, Color.YELLOW)$0",
+      "\t}",
+      "}",
+      "",
+      "fn main() {",
+      "\tWindow.run(\"${2:My Game}\", 800, 600, ${1:MyGame}())",
+      "}"
+    ],
+    "description": "A complete std/game program"
   }
 }

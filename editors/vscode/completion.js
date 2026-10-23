@@ -7,7 +7,7 @@
 
 const KEYWORDS = [
   "let", "var", "if", "else", "while", "for", "in", "match", "return", "break", "continue",
-  "true", "false", "none", "fn", "as", "is",
+  "true", "false", "none", "fn", "as", "is", "await",
 ];
 const PRIMITIVES = ["int", "float", "bool", "str", "void"];
 
@@ -65,9 +65,70 @@ const LIBRARY = {
       f("now", [], "float", "Seconds since the program started (for frame timing)."),
       f("millis", [], "int", "Milliseconds since 1970 (wall clock)."),
       f("sleep", [["seconds", "float"]], "void", "Pauses the program."),
+      f("wait", [["seconds", "float"]], "Async<void>", "Pauses an `async fn` without blocking other jobs: `await Time.wait(0.5)`."),
+    ],
+  },
+  Thread: {
+    values: {},
+    fns: [
+      f("spawn", [["job", "fn() -> T"]], "Task<T>", "Runs `job` on a new thread; `task.join()` gives its result. Captured values are copied; objects cannot cross threads."),
+      f("cores", [], "int", "Number of CPU cores."),
+    ],
+  },
+  Async: {
+    values: {},
+    fns: [
+      f("spawn", [["job", "Async<T>"]], "Async<T>", "Starts an async job in the background; `await` it later."),
+      f("all", [["jobs", "[Async<T>]"]], "Async<[T]>", "Waits for all jobs; the results are in the same order."),
+      f("run", [["job", "Async<T>"]], "T", "Runs an async job to the end from code that is not `async`."),
     ],
   },
 };
+
+/** Built-in generic types and their methods. */
+const BUILTIN_TYPES = {
+  Result: { params: ["T", "E"], doc: "`Ok(value)` or `Err(error)`; unwrap with `match` or `?`." },
+  Channel: { params: ["T"], doc: "A queue for sending values between threads: `Channel<int>()`." },
+  Shared: { params: ["T"], doc: "A value several threads can read and change: `Shared<int>(0)`." },
+  Task: { params: ["T"], doc: "A running thread, from `Thread.spawn`." },
+  Async: { params: ["T"], doc: "A running async job, from calling an `async fn`." },
+};
+
+function builtinTypeMethods(name, args) {
+  const p = (n, type) => ({ name: n, type });
+  const [t, e] = [args[0] || "T", args[1] || "E"];
+  switch (name) {
+    case "Result":
+      return [
+        { name: "is_ok", params: [], ret: "bool", doc: "Whether this is `Ok`." },
+        { name: "is_err", params: [], ret: "bool", doc: "Whether this is `Err`." },
+        { name: "ok", params: [], ret: t + "?", doc: "The `Ok` value, or `none`." },
+        { name: "err", params: [], ret: e + "?", doc: "The `Err` value, or `none`." },
+        { name: "unwrap_or", params: [p("fallback", t)], ret: t, doc: "The `Ok` value, or `fallback`." },
+        { name: "unwrap", params: [], ret: t, doc: "The `Ok` value; stops the program with the error if it is `Err`." },
+      ];
+    case "Channel":
+      return [
+        { name: "send", params: [p("value", t)], ret: "void", doc: "Puts a value in the channel." },
+        { name: "receive", params: [], ret: t + "?", doc: "Waits for a value; `none` once the channel is closed and empty." },
+        { name: "try_receive", params: [], ret: t + "?", doc: "A value if one is waiting, else `none` (never blocks)." },
+        { name: "close", params: [], ret: "void", doc: "No more values will be sent." },
+      ];
+    case "Shared":
+      return [
+        { name: "get", params: [], ret: t, doc: "A copy of the value." },
+        { name: "set", params: [p("value", t)], ret: "void", doc: "Replaces the value." },
+        { name: "update", params: [p("f", `fn(${t}) -> ${t}`)], ret: "void", doc: "Replaces the value with `f(value)`, with no other thread in between." },
+      ];
+    case "Task":
+      return [
+        { name: "join", params: [], ret: t, doc: "Waits for the thread and returns its result." },
+        { name: "is_done", params: [], ret: "bool", doc: "Whether the thread has finished." },
+      ];
+    default:
+      return [];
+  }
+}
 
 const BUILTINS = {
   print: { params: ["values..."], ret: "void", doc: "Prints the values separated by spaces, then a newline." },
@@ -98,6 +159,7 @@ function arrayMethods(elem) {
     { name: "find", params: [p("f", `fn(${elem}) -> bool`)], ret: elem + "?", doc: "The first element for which `f` returns true." },
     { name: "sort", params: [], ret: "void", doc: "Sorts in place (int, float, str, bool; needs `var`)." },
     { name: "sort_by", params: [p("f", `fn(${elem}, ${elem}) -> bool`)], ret: "void", doc: "Sorts in place; `f(a, b)` is true when `a` comes first." },
+    { name: "par_map", params: [p("f", `fn(${elem}) -> U`)], ret: "[U]", doc: "Like `map`, split over all CPU cores (values only: no objects)." },
   ];
 }
 
@@ -317,9 +379,13 @@ function analyze(text, dir) {
   };
   for (const m of code.matchAll(/\bextern\s+type\s+([A-Za-z_]\w*)/g)) model.externTypes.add(m[1]);
 
-  for (const m of code.matchAll(/^[ \t]*import[ \t]+"([^"\n]*)"/gm)) model.imports.push(m[1]);
   // The import path itself is masked (string contents); read it from the original text.
-  model.imports = [...text.matchAll(/^[ \t]*import[ \t]+"([^"\n]+)"/gm)].map((m) => m[1]);
+  // `import "pkg" as name` keeps the package's declarations under `name.`.
+  model.aliases = new Map();
+  for (const m of text.matchAll(/^[ \t]*import[ \t]+"([^"\n]+)"(?:[ \t]+as[ \t]+([A-Za-z_]\w*))?/gm)) {
+    if (m[2]) model.aliases.set(m[2], m[1]);
+    else model.imports.push(m[1]);
+  }
 
   const fnsAt = (start, end, wantDepth) => {
     const out = [];
@@ -433,8 +499,9 @@ function analyze(text, dir) {
 
   // Top-level functions
   for (const { at, h, mods } of fnsAt(0, code.length, 0)) {
-    if ([...mods].some((x) => x !== "extern")) continue;
-    const fn = { name: h.name, tparams: h.tparams, params: h.params, ret: h.ret, doc: docAbove(text, at), extern: mods.has("extern") };
+    if ([...mods].some((x) => x !== "extern" && x !== "async")) continue;
+    const ret = mods.has("async") ? `Async<${h.ret || "void"}>` : h.ret;
+    const fn = { name: h.name, tparams: h.tparams, params: h.params, ret, doc: docAbove(text, at), extern: mods.has("extern"), async: mods.has("async") };
     model.functions.set(fn.name, fn);
     if (h.bodyOpen >= 0) model.bodies.push({ start: h.bodyOpen, end: matchBrace(code, h.bodyOpen), params: h.params, cls: null, owner: null, kind: "fn" });
   }
@@ -446,6 +513,7 @@ function analyze(text, dir) {
  * `{ text, dir }` for an import written in a file located in `dir`, or null.
  */
 function withImports(model, load) {
+  model.namespaces = new Map();
   if (!load) return model;
   const seen = new Set();
   const queue = model.imports.map((p) => [p, model.dir]);
@@ -461,7 +529,34 @@ function withImports(model, load) {
     for (const t of other.externTypes) model.externTypes.add(t);
     for (const p of other.imports) queue.push([p, res.dir]);
   }
+  // `import "pkg" as name`: the package's declarations, reachable as `name.Thing`. Its
+  // classes are also known as `name.Class`, so values like `name.Point(1, 2)` have a type.
+  for (const [alias, path] of model.aliases) {
+    const res = load(path, model.dir);
+    if (!res) continue;
+    const ns = withImports(analyze(res.text, res.dir), load);
+    model.namespaces.set(alias, ns);
+    for (const [k, v] of ns.classes) if (!model.classes.has(`${alias}.${k}`)) model.classes.set(`${alias}.${k}`, v);
+    for (const [k, v] of ns.interfaces) if (!model.interfaces.has(`${alias}.${k}`)) model.interfaces.set(`${alias}.${k}`, v);
+    for (const [k, v] of ns.enums) if (!model.enums.has(`${alias}.${k}`)) model.enums.set(`${alias}.${k}`, v);
+  }
   return model;
+}
+
+/** Completions after `name.` for `import "pkg" as name`. */
+function namespaceItems(ns) {
+  const items = [];
+  for (const f of ns.functions.values()) {
+    items.push({ label: f.name, kind: "function", detail: `fn ${f.name}${sigText(f.params, f.ret)}`, documentation: f.doc, insertText: callSnippet(f.name, f.params), snippet: true, sortText: "1" + f.name });
+  }
+  for (const c of ns.classes.values()) {
+    const init = findInit(ns, c.name);
+    const params = c.struct ? c.fields.map((x) => ({ name: x.name, type: x.type })) : init ? init.params : [];
+    items.push({ label: c.name, kind: c.abstract ? "class" : "constructor", detail: `${c.struct ? "struct" : "class"} ${c.name}${sigText(params, "")}`, documentation: c.doc, insertText: c.abstract ? c.name : callSnippet(c.name, params), snippet: !c.abstract, sortText: "2" + c.name });
+  }
+  for (const i of ns.interfaces.values()) items.push({ label: i.name, kind: "interface", detail: "interface " + i.name, documentation: i.doc, insertText: i.name, sortText: "2" + i.name });
+  for (const e of ns.enums.values()) items.push({ label: e.name, kind: "enum", detail: "enum " + e.name, documentation: e.doc, insertText: e.name, sortText: "2" + e.name });
+  return items;
 }
 
 // ---------------------------------------------------------------- class helpers
@@ -593,7 +688,8 @@ function methodsOf(model, type) {
   if (isArray(type)) return arrayMethods(elemOf(type));
   if (isMap(type)) return mapMethods(...mapKV(type));
   if (model.interfaces.has(type)) return interfaceMethods(model, type);
-  const [name] = splitGeneric(type);
+  const [name, targs] = splitGeneric(type);
+  if (BUILTIN_TYPES[name] && !model.classes.has(name)) return builtinTypeMethods(name, targs);
   if (model.classes.has(name)) {
     return classMethods(model, name).map((m) => ({
       ...m,
@@ -628,8 +724,25 @@ function memberType(model, type, seg) {
 
 /** Best-effort static type of a receiver expression like `self.items[0].name`. */
 function chainType(model, scope, chain) {
-  const segs = splitChain(chain);
+  let segs = splitChain(chain);
   let type = null;
+  // `alias.Thing(...)` for `import "pkg" as alias`.
+  const ns = segs.length > 1 && !scope.locals.has(segs[0]) && model.namespaces && model.namespaces.get(segs[0]);
+  if (ns) {
+    const [seg, indexes] = stripIndexes(segs[1]);
+    type = atomType(ns, { locals: new Map() }, seg);
+    if (type && ns.classes.has(splitGeneric(type)[0])) type = `${segs[0]}.${type}`;
+    for (let k = 0; k < indexes && type; k++) type = indexType(type);
+    if (!type) return null;
+    segs = segs.slice(2);
+    for (const s of segs) {
+      const [seg2, idx2] = stripIndexes(s);
+      type = memberType(model, unwrapOptional(type) === type ? type : null, seg2);
+      for (let k = 0; k < idx2 && type; k++) type = indexType(type);
+      if (!type) return null;
+    }
+    return type;
+  }
   for (let i = 0; i < segs.length; i++) {
     const [seg, indexes] = stripIndexes(segs[i]);
     if (i === 0) type = atomType(model, scope, seg);
@@ -671,6 +784,12 @@ function atomType(model, scope, seg) {
       return r ? r[1] : "void";
     }
     if (model.classes.has(n)) return call[2] ? n + call[2].replace(/\s+/g, "") : n;
+    if ((n === "Channel" || n === "Shared") && call[2]) return n + call[2].replace(/\s+/g, "");
+    if (n === "Shared") {
+      const arg = splitTop(seg.slice(seg.indexOf("(") + 1, matchClose(seg, seg.indexOf("(")) - 1), ",")[0];
+      const t = arg && exprType(model, scope, arg);
+      return t ? `Shared<${t}>` : null;
+    }
     if (model.functions.has(n)) return model.functions.get(n).ret;
     if (BUILTINS[n]) return BUILTINS[n].ret;
     return null;
@@ -712,8 +831,10 @@ function exprType(model, scope, expr) {
     const en = /^([A-Z]\w*)\./.exec(expr)[1];
     if (model.enums.has(en)) return en;
   }
+  // `Channel<int>()`, `Stack<str>()`: the `<` is not a comparison.
+  if (/^[A-Z]\w*\s*<[^()]*>\s*\(/.test(expr)) return chainType(model, scope, expr);
   // `a + b`: the left operand decides the type for arithmetic and joins.
-  const m = /^((?:[^\s+\-*\/%<>=!&|]|\([^)]*\)|\[[^\]]*\])+)\s*([-+*\/%<>=!&|]{1,2})/.exec(expr);
+  const m =/^((?:[^\s+\-*\/%<>=!&|]|\([^)]*\)|\[[^\]]*\])+)\s*([-+*\/%<>=!&|]{1,2})/.exec(expr);
   if (m && !/^[\[{"-]/.test(expr)) {
     const op = m[2];
     if (["==", "!=", "<", "<=", ">", ">=", "&&", "||"].includes(op)) return "bool";
@@ -924,6 +1045,18 @@ function typeItems(model, exclude) {
   for (const t of model.externTypes) {
     items.push({ label: t, kind: "class", detail: "extern type " + t, insertText: t, sortText: "1" + t });
   }
+  for (const [name, b] of Object.entries(BUILTIN_TYPES)) {
+    if (model.classes.has(name)) continue;
+    items.push({
+      label: name,
+      kind: "class",
+      detail: `${name}<${b.params.join(", ")}>`,
+      documentation: b.doc,
+      insertText: `${name}<${b.params.map((t, i) => `\${${i + 1}:${t === "E" ? "str" : "int"}}`).join(", ")}>`,
+      snippet: true,
+      sortText: "2" + name,
+    });
+  }
   return items;
 }
 
@@ -977,6 +1110,11 @@ function complete(text, offset, options = {}) {
     const recv = receiverBefore(code, dot);
     if (!recv) return [];
     const scope = scopeAt(model, offset);
+    if (model.namespaces.has(recv) && !scope.locals.has(recv)) return namespaceItems(model.namespaces.get(recv));
+    const qualified = /^([A-Za-z_]\w*)\.([A-Z]\w*)$/.exec(recv);
+    if (qualified && model.namespaces.has(qualified[1]) && !scope.locals.has(qualified[1])) {
+      return typeMemberItems(model.namespaces.get(qualified[1]), qualified[2], scope);
+    }
     if (/^[A-Z]\w*$/.test(recv) && !scope.locals.has(recv)) return typeMemberItems(model, recv, scope);
     return memberItems(model, chainType(model, scope, recv), scope, recv === "super");
   }
@@ -1019,7 +1157,8 @@ function complete(text, offset, options = {}) {
       kw("fn", "method", "fn ${1:name}(${2}) -> ${3:void} {\n\t$0\n}"),
       kw("init", "constructor", "init(${1}) {\n\t$0\n}"),
       kw("private", "only usable inside this class", "private "),
-      kw("static fn", "method called on the class", "static fn ${1:name}(${2}) -> ${3:void} {\n\t$0\n}")
+      kw("static fn", "method called on the class", "static fn ${1:name}(${2}) -> ${3:void} {\n\t$0\n}"),
+      kw("static async fn", "async function on the class", "static async fn ${1:name}(${2}) -> ${3:int} {\n\t$0\n}")
     );
     if (cls.abstract) items.push(kw("abstract fn", "method subclasses must implement", "abstract fn ${1:name}(${2}) -> ${3:void}"));
     const parent = parentOf(model, cls.name);
@@ -1046,12 +1185,14 @@ function complete(text, offset, options = {}) {
   if (depth === 0) {
     const top = {
       fn: "fn",
+      "async fn": "async fn ${1:name}(${2}) -> ${3:int} {\n\t$0\n}",
       class: "class",
       "abstract class": "abstract class",
       struct: "struct",
       interface: "interface",
       enum: "enum",
       import: 'import "${1:file.kl}"',
+      "import as": 'import "${1:package}" as ${2:name}',
       "use rust": 'use rust "${1:native/file.rs}"',
       "use crate": 'use crate "${1:name}" = "${2:1}"',
       "extern fn": "extern fn ${1:name}(${2}) -> ${3:int}",
@@ -1116,6 +1257,15 @@ function complete(text, offset, options = {}) {
   for (const lib of Object.keys(LIBRARY)) {
     items.push({ label: lib, kind: "module", detail: `built-in ${lib} library`, insertText: lib, sortText: "4" + lib });
   }
+  for (const alias of model.namespaces.keys()) {
+    items.push({ label: alias, kind: "module", detail: `package ${model.aliases.get(alias)}`, insertText: alias, sortText: "3" + alias });
+  }
+  items.push(
+    { label: "Ok", kind: "constructor", detail: "Ok(value): a successful Result", insertText: "Ok(${1})", snippet: true, sortText: "4Ok" },
+    { label: "Err", kind: "constructor", detail: "Err(error): a failed Result", insertText: "Err(${1})", snippet: true, sortText: "4Err" },
+    { label: "Channel", kind: "constructor", detail: "Channel<T>(): send values between threads", insertText: "Channel<${1:int}>()", snippet: true, sortText: "4Channel" },
+    { label: "Shared", kind: "constructor", detail: "Shared<T>(value): a value threads share", insertText: "Shared<${1:int}>(${2:0})", snippet: true, sortText: "4Shared" }
+  );
   for (const [name, b] of Object.entries(BUILTINS)) {
     const params = b.params.map((p) => ({ name: p.split(":")[0].replace("...", "") || "x" }));
     items.push({
@@ -1173,7 +1323,15 @@ function signatureHelp(text, offset, options = {}) {
   let target = null; // { name, params, ret, doc }
   if (/\.\s*$/.test(head)) {
     const recv = receiverBefore(code, head.replace(/\s*$/, "").length - 1);
-    if (/^[A-Z]\w*$/.test(recv) && !scope.locals.has(recv)) {
+    const ns = !scope.locals.has(recv) && model.namespaces.get(recv);
+    if (ns) {
+      if (ns.functions.has(name)) target = { ...ns.functions.get(name), name: `${recv}.${name}` };
+      else if (ns.classes.has(name)) {
+        const c = ns.classes.get(name);
+        const init = findInit(ns, name);
+        target = { name: `${recv}.${name}`, params: c.struct ? c.fields.map((x) => ({ name: x.name, type: x.type })) : init ? init.params : [], ret: "", doc: c.doc };
+      }
+    } else if (/^[A-Z]\w*$/.test(recv) && !scope.locals.has(recv)) {
       if (LIBRARY[recv] && !model.classes.has(recv)) {
         const fn = LIBRARY[recv].fns.find((x) => x.name === name);
         if (fn) target = { ...fn, name: `${recv}.${fn.name}` };

@@ -50,17 +50,22 @@ Read these in order the first time. Each chapter builds on the previous one.
 | 13 | [Generics](13-generics.md) | `fn first<T>`, `class Stack<T>` |
 | 14 | [Structs and Operators](14-structs-and-operators.md) | Value types, `mut fn`, `op +` — fast game math |
 | 15 | [Standard Library](15-standard-library.md) | `Math`, `Random`, `Time` |
-| 16 | [Modules](16-modules.md) | Splitting a program across files with `import` |
-| 17 | [Rust Interop](17-rust-interop.md) | `use rust`, `use crate`, `extern fn`, `extern type` |
-| 18 | [Safety and Errors](18-safety-and-errors.md) | Compile errors, runtime errors and what Kalinga guarantees |
+| 16 | [Error Handling](16-error-handling.md) | `Result<T, E>`, `Ok` / `Err`, `?` |
+| 17 | [Modules](17-modules.md) | Splitting a program across files with `import` |
+| 18 | [Packages with utkal](18-packages.md) | Projects, git and path packages, `import ... as`, `utkal.lock` |
+| 19 | [Rust Interop](19-rust-interop.md) | `use rust`, `use crate`, `extern fn`, inline `rust { }` bodies |
+| 20 | [Threads](20-threads.md) | `Thread.spawn`, `Channel`, `Shared`, `par_map` |
+| 21 | [Async](21-async.md) | `async fn`, `await`, `Async.all`, timers |
+| 22 | [Making a Game](22-making-a-game.md) | `std/game`: window, drawing, input, images, sounds |
+| 23 | [Safety and Errors](23-safety-and-errors.md) | Compile errors, runtime errors and what Kalinga guarantees |
 
 ## Reference
 
 | Document | Contents |
 |---|---|
-| [Tooling](19-tooling.md) | `kalinga` commands and the VS Code extension |
-| [How It Works](20-how-it-works.md) | How Kalinga code becomes Rust, and why it is fast |
-| [Language Reference](21-reference.md) | Keywords, types, operator precedence, built-ins, grammar |
+| [Tooling](24-tooling.md) | `kalinga` and `utkal` commands, the VS Code extension |
+| [How It Works](25-how-it-works.md) | How Kalinga code becomes Rust, and why it is fast |
+| [Language Reference](26-reference.md) | Keywords, types, operator precedence, built-ins, grammar |
 
 ## Conventions in these docs
 
@@ -68,5 +73,5 @@ Read these in order the first time. Each chapter builds on the previous one.
   compiled by the test suite (`cargo test`), so they always match the current compiler.
 - Blocks marked `kalinga error` must be rejected by the compiler; the test suite checks that too.
 - Blocks marked `text` show program output or compiler messages.
-- Examples that need other files (`import`, `use rust`, `use crate`) are checked by the test
-  suite's import and interop tests instead.
+- Examples that need other files or downloads (`import`, `use rust`, `use crate`, packages,
+  `std/game`) are checked by the test suite's import, interop, package and game tests instead.

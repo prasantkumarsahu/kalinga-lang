@@ -95,6 +95,7 @@ true
 | `now()` | `float` | seconds since the program started; use differences for frame timing |
 | `millis()` | `int` | milliseconds since 1970 (the wall clock) |
 | `sleep(seconds)` | — | pauses the program |
+| `wait(seconds)` | `Async<void>` | pauses an `async fn` without blocking other async jobs (chapter 21) |
 
 A typical frame loop measures the time since the last frame and moves things by that much:
 
@@ -120,4 +121,4 @@ true
 
 ---
 
-Previous: [14. Structs and Operators](14-structs-and-operators.md) · Next: [16. Modules](16-modules.md)
+Previous: [14. Structs and Operators](14-structs-and-operators.md) · Next: [16. Error Handling](16-error-handling.md)

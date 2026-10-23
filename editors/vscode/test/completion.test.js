@@ -355,3 +355,68 @@ test("struct body and top-level keywords", () => {
   const top = labels(complete(V3 + "\n", V3.length + 1));
   for (const k of ["struct", "use rust", "use crate", "extern fn", "extern type"]) assert.ok(top.includes(k), k);
 });
+
+// ---------------------------------------------------------------- v0.4
+
+test("threads, channels, shared values and results", () => {
+  assert.deepStrictEqual(labels(at3("    Thread.|")), ["cores", "spawn"]);
+  assert.ok(labels(at3("    let t = Thread.spawn(fn() => 1)\n    t.|")).includes("join"));
+  assert.deepStrictEqual(labels(at3("    let c = Channel<int>()\n    c.|")), ["close", "receive", "send", "try_receive"]);
+  assert.ok(labels(at3("    let s = Shared<int>(0)\n    s.|")).includes("update"));
+  assert.ok(labels(at3("    let xs = [1, 2]\n    xs.|")).includes("par_map"));
+  const rsrc = "fn parse(s: str) -> Result<int, str> {\n    return Ok(1)\n}\nfn main() {\n    let r = parse(\"1\")\n    r.|\n}\n";
+  const r = labels(complete(rsrc.replace("|", ""), rsrc.indexOf("|")));
+  assert.deepStrictEqual(r, ["err", "is_err", "is_ok", "ok", "unwrap", "unwrap_or"]);
+  assert.ok(labels(at3("    let n = Shared(0)\n    n.|")).includes("get"));
+  const general = labels(at3("    |"));
+  for (const k of ["Ok", "Err", "Channel", "Shared", "Thread", "Async", "await"]) assert.ok(general.includes(k), k);
+  assert.ok(labels(at3("    let x: |")).includes("Result"));
+});
+
+test("async functions", () => {
+  const src = "async fn load(n: int) -> int {\n    return n\n}\nfn main() {\n    let job = load(1)\n    job|\n}\n";
+  const items = complete(src.replace("|", ""), src.indexOf("|"));
+  assert.strictEqual(items.find((i) => i.label === "job").detail, "job: Async<int>");
+  assert.ok(labels(at3("    Async.|")).includes("all"));
+  assert.ok(labels(at3("    Time.|")).includes("wait"));
+  const top = labels(complete("\n", 1));
+  assert.ok(top.includes("async fn") && top.includes("import as"));
+});
+
+test("`import ... as` namespaces", () => {
+  const lib = "struct Point {\n    x: int\n    y: int\n    fn sum() -> int { return self.x + self.y }\n    static fn origin() -> Point { return Point(0, 0) }\n}\nfn describe(p: Point) -> str { return \"p\" }\n";
+  const load = (p) => (p === "geo" ? { text: lib, dir: "", key: "geo" } : null);
+  const run = (body) => {
+    const src = 'import "geo" as g\nfn main() {\n' + body + "\n}\n";
+    return complete(src.replace("|", ""), src.indexOf("|"), { load });
+  };
+  assert.deepStrictEqual(labels(run("    g.|")), ["Point", "describe"]);
+  assert.deepStrictEqual(labels(run("    let p = g.Point(1, 2)\n    p.|")), ["sum", "x", "y"]);
+  assert.deepStrictEqual(labels(run("    g.Point.|")), ["origin"]);
+  assert.ok(labels(run("    |")).includes("g"));
+  assert.ok(!labels(run("    |")).includes("describe"), "aliased names stay behind the alias");
+  const src = 'import "geo" as g\nfn main() {\n    g.describe(|\n}\n';
+  assert.strictEqual(signatureHelp(src.replace("|", ""), src.indexOf("|"), { load }).label, "g.describe(p: Point) -> str");
+});
+
+test("package and std import paths", () => {
+  const path = require("path");
+  const pk = require("../packages");
+  const root = path.resolve("/proj");
+  const files = {
+    [path.join(root, "utkal.toml")]: '[package]\nname = "app"\n\n[dependencies]\ngeo = { path = "../geo" }\nmathx = { git = "https://x/mathx", tag = "v1" }\n',
+    [path.join(root, "utkal.lock")]: '[[package]]\nname = "mathx"\nsource = "git https://x/mathx tag v1"\ncommit = "0123456789abcdef"\n',
+    [path.resolve("/geo/utkal.toml")]: '[package]\nname = "geo"\n[dependencies]\nunits = { path = "units" }\n',
+  };
+  const dirs = pk.packageDirs(root, (p) => files[p] || null, path.resolve("/home/.utkal"));
+  assert.strictEqual(dirs.get("geo"), path.resolve("/geo"));
+  assert.strictEqual(dirs.get("units"), path.resolve("/geo/units"));
+  assert.strictEqual(dirs.get("mathx"), path.join(path.resolve("/home/.utkal"), "cache", "src", "mathx-0123456789ab"));
+  const ctx = { packages: dirs, std: path.resolve("/tmp/std-0.4.0") };
+  assert.strictEqual(pk.resolveImport("geo", root, ctx), path.join(path.resolve("/geo"), "src", "lib.kl"));
+  assert.strictEqual(pk.resolveImport("geo/shapes", root, ctx), path.join(path.resolve("/geo"), "src", "shapes.kl"));
+  assert.strictEqual(pk.resolveImport("std/game", root, ctx), path.join(ctx.std, "game.kl"));
+  assert.strictEqual(pk.resolveImport("util.kl", root, ctx), path.join(root, "util.kl"));
+  assert.strictEqual(pk.resolveImport("nope", root, ctx), null);
+  assert.strictEqual(pk.stdDir("/t", () => ["std-0.3.0", "std-0.10.1", "std-0.4.0", "cargo"]), path.join("/t", "kalinga-build", "std-0.10.1"));
+});

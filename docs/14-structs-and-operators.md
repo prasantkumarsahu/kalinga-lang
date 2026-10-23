@@ -207,4 +207,4 @@ ball at (5.0, 3.0)
 
 ---
 
-Previous: [13. Generics](13-generics.md) · Next: [15. Standard Library](15-standard-library.md)
+Previous: [13. Generics](13-generics.md) · Next: [15. Standard Library: Math, Random, Time](15-standard-library.md)

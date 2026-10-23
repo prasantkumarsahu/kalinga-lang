@@ -58,10 +58,21 @@ Nessie is imaginary
 - **Functions**: lambdas, function types, `map`/`filter`/`sort_by`, generics.
 - **Value types**: `struct`s with operator overloading (`pos += vel * dt`), stored inline
   like Rust structs — built for game math and numeric code.
-- **Standard library**: `Math`, `Random`, `Time`.
-- **Modules**: `import "file.kl"`.
+- **Errors as values**: `Result<T, E>`, `Ok` / `Err`, and `?` to pass errors on. No
+  exceptions.
+- **Threads**: `Thread.spawn`, channels, shared values and `par_map` over every core.
+  Only values cross threads, so data races cannot happen and single-threaded code stays
+  fast.
+- **Async**: `async fn` / `await` with a built-in runtime: timers, background jobs,
+  `Async.all`.
+- **Games**: `import "std/game"` for a window, 2D drawing, input, images and sounds (on
+  macroquad), with Pong and Asteroids as examples.
+- **Standard library**: `Math`, `Random`, `Time`, `std/math2d` (`Vec2`, `Rect`).
+- **Modules and packages**: `import "file.kl"`; the `utkal` package manager for git and
+  path packages, with per-package namespaces (`import "mathx" as mx`) and a lock file.
 - **Rust interop**: call your own Rust code and any crates.io library with `use rust`,
-  `use crate` and `extern fn` — the way to graphics, audio and ML libraries.
+  `use crate`, `extern fn` and inline `= rust { ... }` bodies — the way to graphics, audio
+  and ML libraries.
 - **Fast and safe**: compiles to Rust and then native code; no null, no unchecked
   indexing, no silent overflow, no `unsafe` in generated code.
 
@@ -69,12 +80,20 @@ Nessie is imaginary
 
 The full guide, with runnable examples for every feature, is in [docs/](docs/README.md):
 getting started, basics, control flow, functions, arrays and strings, maps, optionals,
-enums and match, classes, inheritance, interfaces, lambdas, generics, modules, safety,
-tooling, internals and a language reference. See [CHANGELOG.md](CHANGELOG.md) for what is new.
+enums and match, classes, inheritance, interfaces, lambdas, generics, structs, error
+handling, modules, packages, Rust interop, threads, async, making a game, safety, tooling,
+internals and a language reference. See [CHANGELOG.md](CHANGELOG.md) for what is new.
 
 ## Usage
 
-Requires a Rust toolchain (`rustc` on PATH).
+Requires a Rust toolchain (`rustc` on PATH; `cargo` for crates and games; `git` for git
+packages). Install both commands, `kalinga` and `utkal`:
+
+```bash
+cargo install --path .
+```
+
+Or run straight from the repository:
 
 ```bash
 cargo run -- run examples/oop.kl
@@ -91,10 +110,23 @@ cargo run -- emit examples/oop.kl
 `emit` prints the generated Rust so you can see exactly what your program becomes.
 `check <file> [--stdin]` only reports errors, which editors use for live diagnostics.
 
+```bash
+cargo run -- run examples/pong/main.kl
+```
+
+Projects with packages use `utkal`:
+
+```bash
+utkal new my-game
+cd my-game
+utkal add mathx --git https://github.com/someone/mathx --version 0.4
+utkal run
+```
+
 ## Editor support
 
-A VS Code extension with syntax highlighting, snippets, live errors and a Run button is in
-[editors/vscode](editors/vscode/README.md).
+A VS Code extension with syntax highlighting, completion, snippets, live errors, a Run
+button and `utkal.toml` hints is in [editors/vscode](editors/vscode/README.md).
 
 ## Language
 
@@ -111,10 +143,13 @@ A VS Code extension with syntax highlighting, snippets, live errors and a Run bu
 | Classes | fields with optional defaults, `init(...)`, methods, `self`, `private`, `static fn`, generic `class Stack<T>` |
 | Inheritance | `class B : A` — single base class; `override fn`; `super(...)`, `super.method()`; `abstract class` / `abstract fn`; `x is B`, `x as B` |
 | Interfaces | `interface I : J { fn m() -> str }`, `class C : Base, I, J`; interfaces work as types |
-| Modules | `import "lib/shapes.kl"` |
-| Structs | `struct Vec2 { x: float, y: float }`, `mut fn`, `op +(o: Vec2) -> Vec2` |
+| Modules | `import "lib/shapes.kl"`, `import "std/game"`, `import "mathx" as mx` (packages) |
+| Errors | `fn f() -> Result<int, str>`, `return Err("...")`, `let v = f()?`, `match r { Ok(v) => ... Err(e) => ... }` |
+| Threads | `Thread.spawn(fn() => work())` → `Task<T>`, `.join()`; `Channel<T>()`, `Shared(0)`, `xs.par_map(f)` |
+| Async | `async fn load() -> int { await Time.wait(0.5) ... }`, `await job`, `Async.all([...])`, `Async.spawn(job)` |
+| Structs | `struct Vec2 { x: float, y: float }`, `mut fn`, `op +(o: Vec2) -> Vec2`, `2.0 * v`, generic `struct Grid<T>`, `static ORIGIN: Vec2 = ...` |
 | Library | `Math.sqrt(x)`, `Math.lerp(a, b, t)`, `Random.int(1, 7)`, `Time.now()` |
-| Rust interop | `use rust "native/x.rs"`, `use crate "rand" = "0.8"`, `extern fn f(x: int) -> int`, `extern type T` |
+| Rust interop | `use rust "native/x.rs"`, `use crate "rand" = "0.8" features ["..."]`, `extern fn f(x: int) -> int`, `extern fn g(x: int) -> int = rust { x * 2 }`, `extern type T` |
 | Built-ins | `print(a, b, ...)`, `len(x)`, `str(x)`, `int(x)`, `float(x)`, `input(prompt)` |
 | Array methods | `push(v)`, `pop()` → `T?`, `len()`, `contains(v)`, `map(f)`, `filter(f)`, `find(f)`, `sort()`, `sort_by(f)` |
 | Map methods | `m[k]`, `get(k)` → `V?`, `has(k)`, `remove(k)`, `keys()`, `values()`, `len()` |
@@ -128,6 +163,8 @@ Statements end at a newline (`;` is optional). Comments use `//` and `/* */`.
 - Immutable by default; assigning to a `let` variable is a compile error.
 - No implicit conversions: `"n=" + 5` is an error, write `"n=" + str(5)`.
 - Array indexing is bounds-checked; integer overflow and division by zero stop the program with a `runtime error:` message instead of corrupting memory.
+- Failures that are part of normal use are `Result` values the compiler makes you handle.
+- Threads share no objects, so there are no data races.
 - Overrides and interface implementations are checked against the original signature.
 - The generated Rust contains no `unsafe`.
 
@@ -150,13 +187,17 @@ through a different reference (for example `a.f(a)` where `f` modifies `a`) stop
 
 | Path | Purpose |
 |---|---|
+| `src/main.rs`, `src/bin/utkal.rs` | the `kalinga` and `utkal` commands |
 | `src/lexer.rs`, `src/token.rs` | tokens, newline handling |
 | `src/parser.rs`, `src/ast.rs` | syntax tree |
 | `src/checker.rs` | class/interface model, inheritance and override rules |
 | `src/codegen.rs` | type checking of bodies, Rust generation, runtime prelude |
-| `src/driver.rs` | invokes `rustc` and runs the program |
-| `examples/` | `hello.kl`, `oop.kl`, `fib.kl`, `inventory.kl`, `pipeline.kl`, `particles.kl`, `shapes/` (modules), `interop/` (Rust) |
-| `tests/examples.rs` | end-to-end tests |
+| `src/namespaces.rs` | package namespaces |
+| `src/project.rs` | `utkal.toml`, `utkal.lock`, fetching packages |
+| `src/driver.rs` | loads files and packages, invokes `rustc` / `cargo` and runs the program |
+| `std/` | bundled modules: `math2d.kl`, `game.kl` and its Rust glue |
+| `examples/` | `hello.kl`, `oop.kl`, `fib.kl`, `inventory.kl`, `pipeline.kl`, `particles.kl`, `shapes/` (modules), `interop/` (Rust), `pong/`, `asteroids/` |
+| `tests/examples.rs`, `tests/utkal.rs` | end-to-end tests of the compiler and of utkal |
 | `editors/vscode/` | VS Code extension |
 | `docs/` | language guide and reference |
 | `tests/docs.rs` | compiles every example in `docs/` |

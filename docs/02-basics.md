@@ -242,7 +242,7 @@ fn main() {
 abcd 25
 ```
 
-For operator precedence, see the [Language Reference](21-reference.md#operator-precedence).
+For operator precedence, see the [Language Reference](26-reference.md#operator-precedence).
 
 ---
 
