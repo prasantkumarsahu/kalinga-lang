@@ -2,9 +2,7 @@
   "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
   "name": "Kalinga",
   "scopeName": "source.kalinga",
-  "fileTypes": [
-    "kl"
-  ],
+  "fileTypes": ["kl"],
   "patterns": [
     {
       "include": "#comments"

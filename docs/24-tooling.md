@@ -10,7 +10,9 @@
 | `kalinga emit <file.kl>` | Print the generated Rust code. |
 | `kalinga check <file.kl>` | Report errors only; does not invoke `rustc`. `fn main()` is optional here, so files that are only imported can be checked too. |
 | `kalinga -v` (also `-version`, `--version`) | Print the installed version, e.g. `kalinga 0.4.0`. |
-| `kalinga check <name.kl> --stdin` | Check source read from stdin, reporting errors under `<name.kl>`. Used by editors for unsaved files. |
+| `kalinga check <name.kl> --stdin` | Check source read from stdin, reporting errors under `<name.kl>`. |
+| `kalinga fix <file.kl or folder>...` | Update code written for an earlier version of Kalinga, in place. |
+| `kalinga lsp` | Run the language server on stdin / stdout; editors start it (see below). |
 
 Exit codes:
 
@@ -78,26 +80,31 @@ The extension lives in [`editors/vscode`](../editors/vscode/README.md).
 
 ### Features
 
-- Syntax highlighting for keywords, types, classes, functions, strings, numbers and
-  comments; inline `= rust { ... }` bodies are highlighted as Rust
-- Code completion: members after `.` (inherited ones too; `private` ones only inside their
-  class), enum variants after `Enum.`, static methods after `Class.`, map/array/string
-  methods, variables (including lambda parameters and `match` bindings), types after `:`,
-  `->` and `<`, `match` arm patterns, `override fn` stubs in a class body, and declarations
-  from imported files, `std/` modules and utkal packages (`alias.` after
-  `import "pkg" as alias` too). Built-ins: `Math`, `Random`, `Time`, `Thread`, `Async`, and
-  the methods of `Result`, `Channel`, `Shared` and `Task`. `///` doc comments above a
-  declaration appear as its documentation.
+The extension starts the Kalinga language server (`kalinga lsp`). The server is the compiler
+itself, so the editor sees exactly what the compiler sees, and any editor that speaks the
+Language Server Protocol (Neovim, Helix, Zed, Emacs, ...) can use it by running
+`kalinga lsp`.
+
+- Errors as you type, all of them at once: every broken class rule and every type error,
+  not only the first; errors inside imported files appear on the `import` line
+- Completion: members after `.` (inherited ones too; `private` ones only inside their
+  type), enum variants after `Enum.`, `static fn`s, constants and static variables after
+  `Type.`, library functions after `Math.` and the others, variables in scope (including
+  lambda parameters and `match` bindings), functions, constructors with their arguments,
+  types after `:`, `->` and `<`, `match` arm patterns, `override fn` stubs in a class
+  body, `alias.` after `import "pkg" as alias`, and standard modules and packages inside
+  `import "`. `///` doc comments above a declaration appear as its documentation.
 - Hover over a name to see its type or signature and its `///` documentation
-  (variables, functions, classes, structs, fields, methods, enum variants, library
-  functions and package names)
-- Parameter hints while typing the arguments of a call (functions, generic functions,
-  constructors, methods, static methods, enum variants and function-typed variables)
-- Errors underlined as you type (runs `kalinga check --stdin` about 0.4 s after you stop);
-  errors inside imported files appear on the `import` line
+- Parameter hints while typing the arguments of any call
+- Go to definition, find references, and rename (renaming a method also renames the
+  methods it overrides or implements, so the program still compiles)
+- The outline of a file (document symbols)
+- Quick fixes: mark a method `override fn`, remove a wrong `override`, add a method an
+  interface or abstract base class requires
+- Syntax highlighting; inline `= rust { ... }` bodies are highlighted as Rust
 - ▶ **Run** button in the editor title bar, and `Ctrl+F5`
 - Commands (Ctrl+Shift+P): **Kalinga: Run File**, **Kalinga: Build Executable**,
-  **Kalinga: Show Generated Rust**
+  **Kalinga: Show Generated Rust**, **Kalinga: Restart Language Server**
 - Comment toggling (`Ctrl+/`), bracket matching, auto-closing pairs, auto-indent
 - Hints for `utkal.toml` keys and values (with a TOML extension that reads JSON schemas,
   such as Even Better TOML)
@@ -141,16 +148,16 @@ cargo install --path .
 
 ```bash
 cd editors/vscode
-npx @vscode/vsce package
-code --install-extension kalinga-lang-0.5.0.vsix
+npm install
+npm run package
+code --install-extension kalinga-lang-0.6.0.vsix
 ```
 
 ### Settings
 
 | Setting | Default | Meaning |
 |---|---|---|
-| `kalinga.compilerPath` | `kalinga` | Path to the compiler, if it is not on PATH |
-| `kalinga.checkOnType` | `true` | When `false`, check only on open and save |
+| `kalinga.compilerPath` | `kalinga` | Path to the compiler, if it is not on PATH; it also runs the language server |
 
 ## Running the compiler's tests
 
@@ -168,7 +175,9 @@ This runs:
   rewrites the snapshots; review them with `git diff` before committing;
 - **documentation tests**: every complete example in these docs must compile and print
   exactly the output shown after it;
-- **command-line and utkal tests**, including local packages and a local git repository.
+- **command-line and utkal tests**, including local packages and a local git repository;
+- **language server tests**: completion, hover, signature help, navigation, rename and quick
+  fixes on example programs (`cargo test -p kalinga-lsp`), and the protocol over stdio.
 
 `cargo test -- --ignored` also runs the tests that download crates or open a window. The
 same checks, plus `cargo fmt --check` and `cargo clippy -- -D warnings`, run on Windows,

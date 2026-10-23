@@ -1,20 +1,12 @@
 {
   "main function": {
     "prefix": "main",
-    "body": [
-      "fn main() {",
-      "\t$0",
-      "}"
-    ],
+    "body": ["fn main() {", "\t$0", "}"],
     "description": "Program entry point"
   },
   "function": {
     "prefix": "fn",
-    "body": [
-      "fn ${1:name}(${2:param}: ${3:int}) -> ${4:int} {",
-      "\t$0",
-      "}"
-    ],
+    "body": ["fn ${1:name}(${2:param}: ${3:int}) -> ${4:int} {", "\t$0", "}"],
     "description": "Function"
   },
   "class": {
@@ -49,178 +41,98 @@
   },
   "interface": {
     "prefix": "interface",
-    "body": [
-      "interface ${1:Name} {",
-      "\tfn ${2:method}() -> ${3:str}",
-      "}"
-    ],
+    "body": ["interface ${1:Name} {", "\tfn ${2:method}() -> ${3:str}", "}"],
     "description": "Interface"
   },
   "method": {
     "prefix": "meth",
-    "body": [
-      "fn ${1:name}() -> ${2:str} {",
-      "\treturn ${3:self.field}$0",
-      "}"
-    ],
+    "body": ["fn ${1:name}() -> ${2:str} {", "\treturn ${3:self.field}$0", "}"],
     "description": "Method"
   },
   "override method": {
     "prefix": "override",
-    "body": [
-      "override fn ${1:name}() -> ${2:str} {",
-      "\t$0",
-      "}"
-    ],
+    "body": ["override fn ${1:name}() -> ${2:str} {", "\t$0", "}"],
     "description": "Override a base-class method"
   },
   "init": {
     "prefix": "init",
-    "body": [
-      "init(${1:name}: ${2:str}) {",
-      "\tself.${1:name} = ${1:name}$0",
-      "}"
-    ],
+    "body": ["init(${1:name}: ${2:str}) {", "\tself.${1:name} = ${1:name}$0", "}"],
     "description": "Constructor"
   },
   "if": {
     "prefix": "if",
-    "body": [
-      "if ${1:cond} {",
-      "\t$0",
-      "}"
-    ]
+    "body": ["if ${1:cond} {", "\t$0", "}"]
   },
   "if else": {
     "prefix": "ife",
-    "body": [
-      "if ${1:cond} {",
-      "\t$2",
-      "} else {",
-      "\t$0",
-      "}"
-    ]
+    "body": ["if ${1:cond} {", "\t$2", "} else {", "\t$0", "}"]
   },
   "if let": {
     "prefix": "iflet",
-    "body": [
-      "if let ${1:value} = ${2:optional} {",
-      "\t$0",
-      "}"
-    ],
+    "body": ["if let ${1:value} = ${2:optional} {", "\t$0", "}"],
     "description": "Unwrap an optional value"
   },
   "while": {
     "prefix": "while",
-    "body": [
-      "while ${1:cond} {",
-      "\t$0",
-      "}"
-    ]
+    "body": ["while ${1:cond} {", "\t$0", "}"]
   },
   "for range": {
     "prefix": "forr",
-    "body": [
-      "for ${1:i} in ${2:0}..${3:n} {",
-      "\t$0",
-      "}"
-    ],
+    "body": ["for ${1:i} in ${2:0}..${3:n} {", "\t$0", "}"],
     "description": "Loop over a number range"
   },
   "for each": {
     "prefix": "for",
-    "body": [
-      "for ${1:item} in ${2:items} {",
-      "\t$0",
-      "}"
-    ],
+    "body": ["for ${1:item} in ${2:items} {", "\t$0", "}"],
     "description": "Loop over an array"
   },
   "print": {
     "prefix": "pr",
-    "body": [
-      "println(${1})$0"
-    ]
+    "body": ["println(${1})$0"]
   },
   "enum": {
     "prefix": "enum",
-    "body": [
-      "enum ${1:Name} {",
-      "\t${2:First}",
-      "\t${3:Second}(${4:value}: ${5:int})",
-      "}"
-    ],
+    "body": ["enum ${1:Name} {", "\t${2:First}", "\t${3:Second}(${4:value}: ${5:int})", "}"],
     "description": "Enum with a plain and a payload variant"
   },
   "match": {
     "prefix": "match",
-    "body": [
-      "match ${1:value} {",
-      "\t${2:Pattern} => $3",
-      "\t_ => $0",
-      "}"
-    ],
+    "body": ["match ${1:value} {", "\t${2:Pattern} => $3", "\t_ => $0", "}"],
     "description": "Match on an enum, int, str or bool"
   },
   "lambda": {
     "prefix": "lam",
-    "body": [
-      "fn(${1:x}) => ${0:x}"
-    ],
+    "body": ["fn(${1:x}) => ${0:x}"],
     "description": "Short lambda"
   },
   "lambda block": {
     "prefix": "lamb",
-    "body": [
-      "fn(${1:x}: ${2:int}) -> ${3:int} {",
-      "\t$0",
-      "}"
-    ],
+    "body": ["fn(${1:x}: ${2:int}) -> ${3:int} {", "\t$0", "}"],
     "description": "Lambda with a block body"
   },
   "import": {
     "prefix": "import",
-    "body": [
-      "import \"${1:file}.kl\""
-    ],
+    "body": ["import \"${1:file}.kl\""],
     "description": "Import another file"
   },
   "abstract class": {
     "prefix": "aclass",
-    "body": [
-      "abstract class ${1:Name} {",
-      "\tabstract fn ${2:method}() -> ${3:str}",
-      "\t$0",
-      "}"
-    ],
+    "body": ["abstract class ${1:Name} {", "\tabstract fn ${2:method}() -> ${3:str}", "\t$0", "}"],
     "description": "Abstract class"
   },
   "static fn": {
     "prefix": "sfn",
-    "body": [
-      "static fn ${1:name}(${2}) -> ${3:int} {",
-      "\t$0",
-      "}"
-    ],
+    "body": ["static fn ${1:name}(${2}) -> ${3:int} {", "\t$0", "}"],
     "description": "Static method"
   },
   "generic class": {
     "prefix": "gclass",
-    "body": [
-      "class ${1:Holder}<${2:T}> {",
-      "\t${3:value}: ${2:T}?",
-      "\t$0",
-      "}"
-    ],
+    "body": ["class ${1:Holder}<${2:T}> {", "\t${3:value}: ${2:T}?", "\t$0", "}"],
     "description": "Generic class"
   },
   "if let as": {
     "prefix": "ifas",
-    "body": [
-      "if let ${1:d} = ${2:value} as ${3:Class} {",
-      "\t$0",
-      "}"
-    ],
+    "body": ["if let ${1:d} = ${2:value} as ${3:Class} {", "\t$0", "}"],
     "description": "Downcast with if let"
   },
   "struct": {
@@ -239,41 +151,27 @@
   },
   "mut fn": {
     "prefix": "mfn",
-    "body": [
-      "mut fn ${1:name}(${2}) {",
-      "\t$0",
-      "}"
-    ],
+    "body": ["mut fn ${1:name}(${2}) {", "\t$0", "}"],
     "description": "Struct method that changes self"
   },
   "operator": {
     "prefix": "op",
-    "body": [
-      "op ${1|+,-,*,/,%|}(${2:other}: ${3:Type}) -> ${4:Type} {",
-      "\treturn $0",
-      "}"
-    ],
+    "body": ["op ${1|+,-,*,/,%|}(${2:other}: ${3:Type}) -> ${4:Type} {", "\treturn $0", "}"],
     "description": "Operator overload in a struct"
   },
   "use rust": {
     "prefix": "userust",
-    "body": [
-      "use rust \"${1:native/file.rs}\""
-    ],
+    "body": ["use rust \"${1:native/file.rs}\""],
     "description": "Compile a Rust file into the program"
   },
   "use crate": {
     "prefix": "usecrate",
-    "body": [
-      "use crate \"${1:name}\" = \"${2:1}\""
-    ],
+    "body": ["use crate \"${1:name}\" = \"${2:1}\""],
     "description": "Use a crates.io library"
   },
   "extern fn": {
     "prefix": "extern",
-    "body": [
-      "extern fn ${1:name}(${2}) -> ${3:int}"
-    ],
+    "body": ["extern fn ${1:name}(${2}) -> ${3:int}"],
     "description": "Declare a Rust function"
   },
   "game loop": {
@@ -291,41 +189,22 @@
   },
   "result function": {
     "prefix": "resfn",
-    "body": [
-      "fn ${1:name}(${2}) -> Result<${3:int}, str> {",
-      "\t$0",
-      "\treturn Ok(${4:0})",
-      "}"
-    ],
+    "body": ["fn ${1:name}(${2}) -> Result<${3:int}, str> {", "\t$0", "\treturn Ok(${4:0})", "}"],
     "description": "Function that can fail: returns Ok(value) or Err(message)"
   },
   "match result": {
     "prefix": "matchr",
-    "body": [
-      "match ${1:result} {",
-      "\tOk(${2:value}) => $0",
-      "\tErr(${3:e}) => println(\"error:\", ${3:e})",
-      "}"
-    ],
+    "body": ["match ${1:result} {", "\tOk(${2:value}) => $0", "\tErr(${3:e}) => println(\"error:\", ${3:e})", "}"],
     "description": "Handle both cases of a Result"
   },
   "extern rust body": {
     "prefix": "externr",
-    "body": [
-      "extern fn ${1:name}(${2}) -> ${3:int} = rust {",
-      "\t$0",
-      "}"
-    ],
+    "body": ["extern fn ${1:name}(${2}) -> ${3:int} = rust {", "\t$0", "}"],
     "description": "Rust function written inline"
   },
   "thread spawn": {
     "prefix": "spawn",
-    "body": [
-      "let ${1:task} = Thread.spawn(fn() -> ${2:int} {",
-      "\t$0",
-      "})",
-      "let ${3:result} = ${1:task}.join()"
-    ],
+    "body": ["let ${1:task} = Thread.spawn(fn() -> ${2:int} {", "\t$0", "})", "let ${3:result} = ${1:task}.join()"],
     "description": "Run work on another thread and wait for its result"
   },
   "channel": {
@@ -348,19 +227,12 @@
   },
   "async fn": {
     "prefix": "asyncfn",
-    "body": [
-      "async fn ${1:name}(${2}) -> ${3:int} {",
-      "\tawait Time.wait(${4:0.1})",
-      "\t$0",
-      "}"
-    ],
+    "body": ["async fn ${1:name}(${2}) -> ${3:int} {", "\tawait Time.wait(${4:0.1})", "\t$0", "}"],
     "description": "Async function; call it and `await` the result"
   },
   "import as": {
     "prefix": "importas",
-    "body": [
-      "import \"${1:package}\" as ${2:name}"
-    ],
+    "body": ["import \"${1:package}\" as ${2:name}"],
     "description": "Import a package under a name: name.Thing"
   },
   "game class": {

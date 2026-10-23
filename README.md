@@ -126,8 +126,11 @@ utkal run
 
 ## Editor support
 
-A VS Code extension with syntax highlighting, completion, snippets, live errors, a Run
-button and `utkal.toml` hints is in [editors/vscode](editors/vscode/README.md).
+`kalinga lsp` is a language server built on the compiler: errors as you type, completion,
+hover, signature help, go to definition, find references, rename, outline and quick fixes,
+for any editor that speaks the Language Server Protocol. The VS Code extension in
+[editors/vscode](editors/vscode/README.md) uses it, and adds syntax highlighting, snippets,
+a Run button and `utkal.toml` hints.
 
 ## Language
 
@@ -190,14 +193,15 @@ through a different reference (for example `a.f(a)` where `f` modifies `a`) stop
 |---|---|
 | `src/main.rs`, `src/bin/utkal.rs` | the `kalinga` and `utkal` commands |
 | `crates/kalinga-syntax/` | tokens, lexer, syntax tree, parser, source positions and errors |
-| `crates/kalinga-sema/` | package namespaces; class/interface model, inheritance and override rules |
-| `crates/kalinga-codegen/` | type checking of bodies, Rust generation, runtime prelude |
+| `crates/kalinga-sema/` | package namespaces; the declaration model and its rules; type checking into a typed tree; the built-ins registry; the name index editors use |
+| `crates/kalinga-codegen/` | Rust generation from the typed tree; the runtime (`runtime/*.rs`) |
+| `crates/kalinga-lsp/` | the language server (`kalinga lsp`) |
 | `crates/kalinga-project/` | `utkal.toml`, `utkal.lock`, fetching packages |
 | `crates/kalinga-driver/` | loads files and packages, invokes `rustc` / `cargo` and runs the program |
-| `crates/kalinga-driver/std/` | bundled modules: `math2d.kl`, `game.kl` and its Rust glue |
+| `crates/kalinga-driver/std/` | bundled modules: `math2d.kl`, `fs.kl`, `game.kl` and their Rust glue |
 | `examples/` | `hello.kl`, `oop.kl`, `fib.kl`, `inventory.kl`, `pipeline.kl`, `particles.kl`, `shapes/` (modules), `interop/` (Rust), `pong/`, `asteroids/` |
 | `tests/ui/`, `tests/ui.rs` | output snapshot tests: each `.kl` with its expected `.stdout` / `.stderr` / `.exit` (`BLESS=1` updates them) |
 | `tests/cli.rs`, `tests/utkal.rs` | command-line behaviour of `kalinga` and `utkal` |
-| `editors/vscode/` | VS Code extension |
+| `editors/vscode/` | VS Code extension (a client of `kalinga lsp`) |
 | `docs/` | language guide and reference |
 | `tests/docs.rs` | compiles every example in `docs/` and checks its documented output |

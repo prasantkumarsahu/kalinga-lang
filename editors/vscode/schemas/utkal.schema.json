@@ -9,8 +9,15 @@
       "type": "object",
       "required": ["name"],
       "properties": {
-        "name": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9_-]*$", "description": "Package name: letters, digits, `-` and `_`. Other projects import it by this name." },
-        "version": { "type": "string", "description": "This package's version, e.g. \"0.1.0\". Tag releases as `v0.1.0` so others can ask for versions." },
+        "name": {
+          "type": "string",
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]*$",
+          "description": "Package name: letters, digits, `-` and `_`. Other projects import it by this name."
+        },
+        "version": {
+          "type": "string",
+          "description": "This package's version, e.g. \"0.1.0\". Tag releases as `v0.1.0` so others can ask for versions."
+        },
         "kalinga": { "type": "string", "description": "The Kalinga version the package is written for, e.g. \"0.4\"." }
       },
       "additionalProperties": false
@@ -23,7 +30,12 @@
         "oneOf": [
           {
             "required": ["path"],
-            "properties": { "path": { "type": "string", "description": "A folder holding the package's utkal.toml, relative to this file." } },
+            "properties": {
+              "path": {
+                "type": "string",
+                "description": "A folder holding the package's utkal.toml, relative to this file."
+              }
+            },
             "additionalProperties": false
           },
           {
@@ -33,7 +45,10 @@
               "tag": { "type": "string", "description": "An exact tag, e.g. \"v0.4.0\"." },
               "branch": { "type": "string", "description": "A branch; `utkal update` moves to its newest commit." },
               "rev": { "type": "string", "description": "A commit hash." },
-              "version": { "type": "string", "description": "A version requirement matched against tags: \"0.4\" (= ^0.4), \"~1.2.3\", \"=1.0.0\", \">=0.3\" or \"*\"." }
+              "version": {
+                "type": "string",
+                "description": "A version requirement matched against tags: \"0.4\" (= ^0.4), \"~1.2.3\", \"=1.0.0\", \">=0.3\" or \"*\"."
+              }
             },
             "additionalProperties": false
           }

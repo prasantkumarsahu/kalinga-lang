@@ -1,3 +1,7 @@
 .vscode/**
 *.vsix
 test/**
+eslint.config.mjs
+.prettierrc.json
+.prettierignore
+node_modules/.bin/**
