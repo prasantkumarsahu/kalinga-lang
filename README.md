@@ -67,7 +67,8 @@ Nessie is imaginary
   `Async.all`.
 - **Games**: `import "std/game"` for a window, 2D drawing, input, images and sounds (on
   macroquad), with Pong and Asteroids as examples.
-- **Standard library**: `Math`, `Random`, `Time`, `std/math2d` (`Vec2`, `Rect`).
+- **Standard library**: `Math`, `Random`, `Time`, `std/math2d` (`Vec2`, `Rect`), `std/fs`
+  (files and folders).
 - **Modules and packages**: `import "file.kl"`; the `utkal` package manager for git and
   path packages, with per-package namespaces (`import "mathx" as mx`) and a lock file.
 - **Rust interop**: call your own Rust code and any crates.io library with `use rust`,

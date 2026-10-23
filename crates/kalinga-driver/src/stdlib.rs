@@ -11,6 +11,8 @@ const FILES: &[(&str, &str)] = &[
     ("math2d.kl", include_str!("../std/math2d.kl")),
     ("game.kl", include_str!("../std/game.kl")),
     ("game_glue.rs", include_str!("../std/game_glue.rs")),
+    ("fs.kl", include_str!("../std/fs.kl")),
+    ("fs_glue.rs", include_str!("../std/fs_glue.rs")),
 ];
 
 /// The folder holding this compiler version's std files, written if missing or stale.

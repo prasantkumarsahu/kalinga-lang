@@ -4,10 +4,12 @@
 //! - every ```` ```kalinga error ```` block must be rejected, with the first line of the
 //!   following ```` ```text ```` block as the first line of the error.
 //!
-//! Programs that read input get `Asha` and `20` on stdin. Blocks that need other files
-//! (`import`, `use rust`, `use crate`) are covered by the UI tests instead.
+//! Programs that read input get `Asha` and `20` on stdin, and each runs in its own
+//! folder. Blocks that need other files (`import` of a file or package, `use rust`,
+//! `use crate`) are covered by the UI tests instead.
 
 use std::io::Write;
+use std::path::Path;
 use std::process::{Command, Stdio};
 use std::sync::Mutex;
 
@@ -79,9 +81,11 @@ fn doc_blocks() -> Vec<Block> {
     blocks
 }
 
-fn kalinga(args: &[&str], stdin: &str) -> (i32, String) {
+/// Runs `kalinga` in `dir`.
+fn kalinga(args: &[&str], stdin: &str, dir: &Path) -> (i32, String) {
     let mut child = Command::new(env!("CARGO_BIN_EXE_kalinga"))
         .args(args)
+        .current_dir(dir)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -96,7 +100,7 @@ fn kalinga(args: &[&str], stdin: &str) -> (i32, String) {
 /// Checks one block; `None` when it is as documented.
 fn verify(b: &Block, id: usize) -> Option<String> {
     let at = format!("{}:{}", b.file, b.line);
-    let (code, checked) = kalinga(&["check", "main.kl", "--stdin"], &b.code);
+    let (code, checked) = kalinga(&["check", "main.kl", "--stdin"], &b.code, Path::new("."));
     if b.expect_error {
         let expected = b.output.as_deref().and_then(|o| o.lines().next()).unwrap_or("");
         return match (code, checked.lines().next()) {
@@ -111,12 +115,11 @@ fn verify(b: &Block, id: usize) -> Option<String> {
         return Some(format!("{}: does not compile:\n{}", at, checked));
     }
     let expected = b.output.as_deref()?;
-    // Each block gets its own folder, so build files never collide.
+    // Each block runs in its own folder, so build files and files it writes never collide.
     let dir = std::env::temp_dir().join("kalinga-doc-tests").join(id.to_string());
     std::fs::create_dir_all(&dir).unwrap();
-    let file = dir.join("main.kl");
-    std::fs::write(&file, &b.code).unwrap();
-    let (_, got) = kalinga(&["run", file.to_str().unwrap()], "Asha\n20\n");
+    std::fs::write(dir.join("main.kl"), &b.code).unwrap();
+    let (_, got) = kalinga(&["run", "main.kl"], "Asha\n20\n", &dir);
     (got.trim() != expected.trim()).then(|| format!("{}: output differs\n--- docs\n{}--- got\n{}", at, expected, got))
 }
 

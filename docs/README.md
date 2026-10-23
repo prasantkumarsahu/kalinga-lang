@@ -49,7 +49,7 @@ Read these in order the first time. Each chapter builds on the previous one.
 | 12 | [Lambdas](12-lambdas.md) | Function values, captures, `map`/`filter`/`sort_by` |
 | 13 | [Generics](13-generics.md) | `fn first<T>`, `class Stack<T>` |
 | 14 | [Structs and Operators](14-structs-and-operators.md) | Value types, `mut fn`, `op +` — fast game math |
-| 15 | [Standard Library](15-standard-library.md) | `Math`, `Random`, `Time` |
+| 15 | [Standard Library](15-standard-library.md) | `Math`, `Random`, `Time`, files with `std/fs` |
 | 16 | [Error Handling](16-error-handling.md) | `Result<T, E>`, `Ok` / `Err`, `?` |
 | 17 | [Modules](17-modules.md) | Splitting a program across files with `import` |
 | 18 | [Packages with utkal](18-packages.md) | Projects, git and path packages, `import ... as`, `utkal.lock` |

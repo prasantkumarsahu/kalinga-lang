@@ -68,6 +68,7 @@ executable:
 | Import | Contents |
 |---|---|
 | `import "std/math2d"` | `Vec2` and `Rect` structs with operators and geometry helpers |
+| `import "std/fs"` | reading and writing files, listing folders; see [15. Standard Library](15-standard-library.md#files-and-folders-stdfs) |
 | `import "std/game"` | a window, drawing, input, images and sounds (includes `std/math2d`); see [22. Making a Game](22-making-a-game.md) |
 
 ```kalinga

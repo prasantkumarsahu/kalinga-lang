@@ -1,7 +1,8 @@
-# 15. Standard Library: Math, Random, Time
+# 15. Standard Library: Math, Random, Time, Files
 
 Three built-in libraries are always available: `Math`, `Random` and `Time`. They are used
-like static methods: `Math.sqrt(2.0)`.
+like static methods: `Math.sqrt(2.0)`. Files and folders come with `import "std/fs"`
+([below](#files-and-folders-stdfs)).
 
 ## Math
 
@@ -118,6 +119,59 @@ fn main() {
 ```text
 true
 ```
+
+## Files and folders: std/fs
+
+`import "std/fs"` gives `File`, `Dir` and `Path`. Paths are relative to the folder the
+program runs in, and `/` works on every system. Everything that can fail returns a
+`Result` (see [Error Handling](16-error-handling.md)) whose error says what went wrong:
+
+```kalinga
+import "std/fs"
+
+fn save(score: int) -> Result<void, str> {
+    Dir.create("saves")?
+    File.write(Path.join("saves", "best.txt"), "{score}\n")?
+    return Ok()
+}
+
+fn load() -> Result<int, str> {
+    let text = File.read("saves/best.txt")?
+    if let n = text.trim().parse_int() {
+        return Ok(n)
+    }
+    return Err("the save file is damaged")
+}
+
+fn main() {
+    save(420).unwrap()
+    println(load(), Dir.list("saves").unwrap())
+    match File.read("missing.txt") {
+        Ok(text) => println(text)
+        Err(e) => println(e)
+    }
+}
+```
+
+```text
+Ok(420) [best.txt]
+cannot read `missing.txt`: not found
+```
+
+| Function | Returns | Notes |
+|---|---|---|
+| `File.read(path)` | `Result<str, str>` | the whole file as text |
+| `File.read_lines(path)` | `Result<[str], str>` | the lines, without line endings |
+| `File.write(path, text)` | `Result<void, str>` | creates the file or replaces its contents |
+| `File.append(path, text)` | `Result<void, str>` | adds to the end, creating the file if needed |
+| `File.exists(path)` | `bool` | an existing file (not a folder) |
+| `File.delete(path)`, `File.copy(from, to)`, `File.rename(from, to)` | `Result<void, str>` | `rename` also moves folders |
+| `Dir.list(path)` | `Result<[str], str>` | names inside, sorted |
+| `Dir.create(path)` | `Result<void, str>` | also creates missing parent folders |
+| `Dir.exists(path)` | `bool` | an existing folder |
+| `Dir.delete(path)` | `Result<void, str>` | the folder must be empty |
+| `Path.join(a, b)` | `str` | `"saves" + "/" + "best.txt"` |
+| `Path.name(p)`, `Path.parent(p)`, `Path.extension(p)` | `str` | `"best.txt"`, `"saves"`, `"txt"` |
 
 ---
 

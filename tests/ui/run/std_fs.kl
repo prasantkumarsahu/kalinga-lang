@@ -1,0 +1,33 @@
+// Works inside `target/`, which git ignores; cleans up after itself.
+import "std/fs"
+
+fn clean(dir: str) {
+    for name in ["notes.txt", "copy.txt", "moved.txt"] {
+        File.delete(Path.join(dir, name))
+    }
+    Dir.delete(Path.join(dir, "inner"))
+    Dir.delete(dir)
+}
+
+fn main() {
+    let dir = "target/ui-std-fs"
+    clean(dir)
+    Dir.create(Path.join(dir, "inner")).unwrap()
+    let file = Path.join(dir, "notes.txt")
+    File.write(file, "one\r\ntwo\n").unwrap()
+    File.append(file, "three\n").unwrap()
+    println(File.read_lines(file).unwrap())
+    println(File.exists(file), File.exists(dir), Dir.exists(dir))
+    File.copy(file, Path.join(dir, "copy.txt")).unwrap()
+    File.rename(Path.join(dir, "copy.txt"), Path.join(dir, "moved.txt")).unwrap()
+    println(Dir.list(dir).unwrap())
+    match File.read(Path.join(dir, "missing.txt")) {
+        Ok(text) => println(text)
+        Err(e) => println(e)
+    }
+    println(Dir.delete(dir))
+    println(Path.name("a/b/c.tar.gz"), Path.parent("a\\b\\c.txt"), Path.extension("c.tar.gz"), Path.extension(".hidden") == "")
+    println(Path.join("saves", "slot1.txt"), Path.join("saves/", "slot1.txt"))
+    clean(dir)
+    println(Dir.exists(dir))
+}

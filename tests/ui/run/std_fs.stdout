@@ -1,0 +1,8 @@
+[one, two, three]
+true false true
+[inner, moved.txt, notes.txt]
+cannot read `target/ui-std-fs/missing.txt`: not found
+Err(cannot delete `target/ui-std-fs`: the folder is not empty)
+c.tar.gz a/b gz true
+saves/slot1.txt saves/slot1.txt
+false

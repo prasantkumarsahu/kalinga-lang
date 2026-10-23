@@ -1,0 +1,121 @@
+// Files and folders. Use with `import "std/fs"`.
+//
+// Paths are relative to the folder the program runs in, and may use `/` on every system.
+// Everything that can fail returns a `Result` whose error says what went wrong, such as
+// "cannot read `notes.txt`: not found".
+
+use rust "fs_glue.rs"
+
+/// Reading and writing files.
+class File {
+    /// The whole file as text.
+    static fn read(path: str) -> Result<str, str> {
+        return fs_read(path)
+    }
+
+    /// The file's lines, without their line endings.
+    static fn read_lines(path: str) -> Result<[str], str> {
+        let text = fs_read(path)?
+        var lines: [str] = []
+        for line in text.split("\n") {
+            lines.push(if line.ends_with("\r") { line[..len(line) - 1] } else { line })
+        }
+        if len(lines) > 0 && lines[len(lines) - 1] == "" {
+            lines.pop()
+        }
+        return Ok(lines)
+    }
+
+    /// Creates the file, or replaces what it holds, with `text`.
+    static fn write(path: str, text: str) -> Result<void, str> {
+        return fs_write(path, text)
+    }
+
+    /// Adds `text` to the end of the file, creating it if needed.
+    static fn append(path: str, text: str) -> Result<void, str> {
+        return fs_append(path, text)
+    }
+
+    /// Whether `path` is an existing file (not a folder).
+    static fn exists(path: str) -> bool {
+        return fs_is_file(path)
+    }
+
+    static fn delete(path: str) -> Result<void, str> {
+        return fs_delete_file(path)
+    }
+
+    /// Copies a file, replacing `to` if it exists.
+    static fn copy(from: str, to: str) -> Result<void, str> {
+        return fs_copy(from, to)
+    }
+
+    /// Moves or renames a file or folder.
+    static fn rename(from: str, to: str) -> Result<void, str> {
+        return fs_rename(from, to)
+    }
+}
+
+/// Folders.
+class Dir {
+    /// The names of the files and folders inside, sorted.
+    static fn list(path: str) -> Result<[str], str> {
+        return fs_list(path)
+    }
+
+    /// Creates the folder, and any missing folders above it.
+    static fn create(path: str) -> Result<void, str> {
+        return fs_create_dir(path)
+    }
+
+    /// Whether `path` is an existing folder.
+    static fn exists(path: str) -> bool {
+        return fs_is_dir(path)
+    }
+
+    /// Deletes an empty folder.
+    static fn delete(path: str) -> Result<void, str> {
+        return fs_delete_dir(path)
+    }
+}
+
+/// Working with path text; these do not look at the disk.
+class Path {
+    /// `a` and `b` joined with `/`: `Path.join("saves", "slot1.txt")` is `"saves/slot1.txt"`.
+    static fn join(a: str, b: str) -> str {
+        if a == "" || a.ends_with("/") || a.ends_with("\\") {
+            return a + b
+        }
+        return a + "/" + b
+    }
+
+    /// The last part: `Path.name("saves/slot1.txt")` is `"slot1.txt"`.
+    static fn name(path: str) -> str {
+        return fs_name(path)
+    }
+
+    /// Everything before the last part: `Path.parent("saves/slot1.txt")` is `"saves"`.
+    static fn parent(path: str) -> str {
+        return fs_parent(path)
+    }
+
+    /// The text after the last `.` of the name, or `""`: `Path.extension("a.txt")` is `"txt"`.
+    static fn extension(path: str) -> str {
+        return fs_extension(path)
+    }
+}
+
+extern fn fs_read(path: str) -> Result<str, str>
+extern fn fs_write(path: str, text: str) -> Result<void, str>
+extern fn fs_append(path: str, text: str) -> Result<void, str>
+extern fn fs_delete_file(path: str) -> Result<void, str>
+extern fn fs_copy(from: str, to: str) -> Result<void, str>
+extern fn fs_rename(from: str, to: str) -> Result<void, str>
+extern fn fs_is_file(path: str) -> bool
+extern fn fs_is_dir(path: str) -> bool
+extern fn fs_list(path: str) -> Result<[str], str>
+extern fn fs_create_dir(path: str) -> Result<void, str>
+extern fn fs_delete_dir(path: str) -> Result<void, str>
+extern fn fs_name(path: str) -> str
+extern fn fs_parent(path: str) -> str
+extern fn fs_extension(path: str) -> str
