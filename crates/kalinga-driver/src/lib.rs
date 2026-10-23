@@ -1,5 +1,8 @@
 //! Turns a `.kl` file into Rust source, then into a native executable via `rustc`.
 
+// Library code reports problems instead of panicking.
+#![warn(clippy::unwrap_used)]
+
 mod error;
 mod stdlib;
 

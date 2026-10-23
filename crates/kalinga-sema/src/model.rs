@@ -489,76 +489,81 @@ pub(crate) fn resolve_type(t: &TypeExpr, names: &TypeNames, tparams: &[String]) 
             }
             Type::Optional(Box::new(i))
         }
-        TypeExpr::Named(n, args, pos) => {
-            if tparams.contains(n) {
-                if !args.is_empty() {
-                    return err(format!("type parameter `{}` does not take type arguments", n), *pos);
-                }
-                return Ok(Type::Param(n.clone()));
-            }
-            if matches!(n.as_str(), "Channel" | "Shared" | "Task" | "Async") {
-                if args.len() != 1 {
-                    return err(format!("`{}` needs one type: `{}<int>`", n, n), *pos);
-                }
-                let t = Box::new(resolve_type(&args[0], names, tparams)?);
-                return Ok(match n.as_str() {
-                    "Channel" => Type::Channel(t),
-                    "Shared" => Type::Shared(t),
-                    "Async" => Type::Async(t),
-                    _ => Type::Task(t),
-                });
-            }
-            if n == "Result" {
-                if args.len() != 2 {
-                    return err("`Result` needs two types: `Result<T, E>` (value type, error type)", *pos);
-                }
-                let t = resolve_type(&args[0], names, tparams)?;
-                let e = resolve_type(&args[1], names, tparams)?;
-                if e == Type::Void {
-                    return err("the error type of a `Result` cannot be void", *pos);
-                }
-                return Ok(Type::Result(Box::new(t), Box::new(e)));
-            }
-            if let Some(&arity) = names.struct_arity.get(n) {
-                if args.len() != arity {
-                    return err(format!("`{}` needs {} type argument(s), e.g. `{}<int>`", n, arity, n), *pos);
-                }
-                let mut targs = Vec::new();
-                for a in args {
-                    targs.push(resolve_type(a, names, tparams)?);
-                }
-                return Ok(Type::Struct(n.clone(), targs));
-            }
-            if let Some(&arity) = names.generic.get(n) {
-                if args.len() != arity {
-                    return err(format!("`{}` needs {} type argument(s), e.g. `{}<int>`", n, arity, n), *pos);
-                }
-                let mut targs = Vec::new();
-                for a in args {
-                    let t = resolve_type(a, names, tparams)?;
-                    if t == Type::Void {
-                        return err("`void` cannot be a type argument", *pos);
-                    }
-                    targs.push(t);
-                }
-                return Ok(Type::Generic(n.clone(), targs));
-            }
-            if !args.is_empty() {
-                return err(format!("`{}` is not generic and takes no type arguments", n), *pos);
-            }
-            if names.classes.contains(n) {
-                Type::Class(n.clone())
-            } else if names.ifaces.contains(n) {
-                Type::Interface(n.clone())
-            } else if names.enums.contains(n) {
-                Type::Enum(n.clone())
-            } else if names.structs.contains(n) {
-                Type::Struct(n.clone(), vec![])
-            } else if names.externs.contains(n) {
-                Type::Extern(n.clone())
-            } else {
-                return err(format!("unknown type `{}`", n), *pos);
-            }
+        TypeExpr::Named(n, args, pos) => resolve_named(n, args, *pos, names, tparams)?,
+    })
+}
+
+/// A named type, `Name` or `Name<args>`: a type parameter, a built-in generic type, or a
+/// declared class, interface, enum, struct or extern type.
+fn resolve_named(n: &str, args: &[TypeExpr], pos: Span, names: &TypeNames, tparams: &[String]) -> Result<Type> {
+    if tparams.iter().any(|t| t == n) {
+        if !args.is_empty() {
+            return err(format!("type parameter `{}` does not take type arguments", n), pos);
         }
+        return Ok(Type::Param(n.to_string()));
+    }
+    if matches!(n, "Channel" | "Shared" | "Task" | "Async") {
+        if args.len() != 1 {
+            return err(format!("`{}` needs one type: `{}<int>`", n, n), pos);
+        }
+        let t = Box::new(resolve_type(&args[0], names, tparams)?);
+        return Ok(match n {
+            "Channel" => Type::Channel(t),
+            "Shared" => Type::Shared(t),
+            "Async" => Type::Async(t),
+            _ => Type::Task(t),
+        });
+    }
+    if n == "Result" {
+        if args.len() != 2 {
+            return err("`Result` needs two types: `Result<T, E>` (value type, error type)", pos);
+        }
+        let t = resolve_type(&args[0], names, tparams)?;
+        let e = resolve_type(&args[1], names, tparams)?;
+        if e == Type::Void {
+            return err("the error type of a `Result` cannot be void", pos);
+        }
+        return Ok(Type::Result(Box::new(t), Box::new(e)));
+    }
+    if let Some(&arity) = names.struct_arity.get(n) {
+        if args.len() != arity {
+            return err(format!("`{}` needs {} type argument(s), e.g. `{}<int>`", n, arity, n), pos);
+        }
+        let mut targs = Vec::new();
+        for a in args {
+            targs.push(resolve_type(a, names, tparams)?);
+        }
+        return Ok(Type::Struct(n.to_string(), targs));
+    }
+    if let Some(&arity) = names.generic.get(n) {
+        if args.len() != arity {
+            return err(format!("`{}` needs {} type argument(s), e.g. `{}<int>`", n, arity, n), pos);
+        }
+        let mut targs = Vec::new();
+        for a in args {
+            let t = resolve_type(a, names, tparams)?;
+            if t == Type::Void {
+                return err("`void` cannot be a type argument", pos);
+            }
+            targs.push(t);
+        }
+        return Ok(Type::Generic(n.to_string(), targs));
+    }
+    if !args.is_empty() {
+        return err(format!("`{}` is not generic and takes no type arguments", n), pos);
+    }
+    let n = n.to_string();
+    Ok(if names.classes.contains(&n) {
+        Type::Class(n)
+    } else if names.ifaces.contains(&n) {
+        Type::Interface(n)
+    } else if names.enums.contains(&n) {
+        Type::Enum(n)
+    } else if names.structs.contains(&n) {
+        Type::Struct(n, vec![])
+    } else if names.externs.contains(&n) {
+        Type::Extern(n)
+    } else {
+        return err(format!("unknown type `{}`", n), pos);
     })
 }

@@ -60,43 +60,35 @@ impl Checker<'_> {
     }
 
     pub(super) fn library_call(&self, cx: &mut Ctx, ns: &str, name: &str, args: &[Expr], pos: Span) -> Result<TExpr> {
-        let what = format!("{}.{}", ns, name);
-        if builtins::function(&what).is_none() {
+        let call = LibCall { what: format!("{}.{}", ns, name), args, pos };
+        if builtins::function(&call.what).is_none() {
             return err(format!("`{}` has no function `{}`", ns, name), pos);
         }
-        let arity = |n: usize| -> Result<()> {
-            if args.len() == n {
-                Ok(())
-            } else {
-                err(format!("`{}` takes {} argument(s), but {} were given", what, n, args.len()), pos)
-            }
-        };
-        let done = |op, args, ty| Ok(texpr(TExprKind::Builtin { op, args }, ty, pos));
-        match (ns, name) {
-            (
-                "Math",
-                "sqrt" | "sin" | "cos" | "tan" | "asin" | "acos" | "atan" | "exp" | "ln" | "log10" | "floor" | "ceil"
-                | "round",
-            ) => {
-                arity(1)?;
-                let x = self.float_arg(cx, &args[0], &what)?;
-                done(Builtin::MathUnary(name.to_string()), vec![x], Type::Float)
-            }
-            ("Math", "pow" | "atan2" | "hypot") => {
-                arity(2)?;
-                let a = self.float_arg(cx, &args[0], &what)?;
-                let b = self.float_arg(cx, &args[1], &what)?;
+        match ns {
+            "Math" => self.math_call(cx, name, &call),
+            "Random" => self.random_call(cx, name, &call),
+            _ => self.runtime_call(cx, name, &call),
+        }
+    }
+
+    fn math_call(&self, cx: &mut Ctx, name: &str, call: &LibCall) -> Result<TExpr> {
+        let (args, what) = (call.args, call.what.as_str());
+        match name {
+            "pow" | "atan2" | "hypot" => {
+                call.arity(2)?;
+                let a = self.float_arg(cx, &args[0], what)?;
+                let b = self.float_arg(cx, &args[1], what)?;
                 let f = if name == "pow" { "powf" } else { name };
-                done(Builtin::MathBinary(f.to_string()), vec![a, b], Type::Float)
+                call.done(Builtin::MathBinary(f.to_string()), vec![a, b], Type::Float)
             }
-            ("Math", "lerp") => {
-                arity(3)?;
-                let a = self.float_arg(cx, &args[0], &what)?;
-                let b = self.float_arg(cx, &args[1], &what)?;
-                let t = self.float_arg(cx, &args[2], &what)?;
-                done(Builtin::Lerp, vec![a, b, t], Type::Float)
+            "lerp" => {
+                call.arity(3)?;
+                let a = self.float_arg(cx, &args[0], what)?;
+                let b = self.float_arg(cx, &args[1], what)?;
+                let t = self.float_arg(cx, &args[2], what)?;
+                call.done(Builtin::Lerp, vec![a, b, t], Type::Float)
             }
-            ("Math", "abs" | "sign" | "min" | "max" | "clamp") => {
+            "abs" | "sign" | "min" | "max" | "clamp" => {
                 let (n, op) = match name {
                     "abs" => (1, Builtin::Abs),
                     "sign" => (1, Builtin::Sign),
@@ -104,46 +96,98 @@ impl Checker<'_> {
                     "max" => (2, Builtin::Max),
                     _ => (3, Builtin::Clamp),
                 };
-                arity(n)?;
-                let (vs, t) = self.same_number_args(cx, args, &what)?;
-                done(op, vs, t)
+                call.arity(n)?;
+                let (vs, t) = self.same_number_args(cx, args, what)?;
+                call.done(op, vs, t)
             }
-            ("Random", _) => self.random_call(cx, name, args, pos, &what),
-            ("Thread", "spawn") => {
-                arity(1)?;
+            // sqrt, sin, cos, tan, asin, acos, atan, exp, ln, log10, floor, ceil, round
+            _ => {
+                call.arity(1)?;
+                let x = self.float_arg(cx, &args[0], what)?;
+                call.done(Builtin::MathUnary(name.to_string()), vec![x], Type::Float)
+            }
+        }
+    }
+
+    fn random_call(&self, cx: &mut Ctx, name: &str, call: &LibCall) -> Result<TExpr> {
+        let args = call.args;
+        match name {
+            "int" => {
+                call.arity(2)?;
+                let lo = self.expr_to(cx, &args[0], &Type::Int)?;
+                let hi = self.expr_to(cx, &args[1], &Type::Int)?;
+                call.done(Builtin::RandInt, vec![lo, hi], Type::Int)
+            }
+            "float" => {
+                call.arity(0)?;
+                call.done(Builtin::RandFloat, vec![], Type::Float)
+            }
+            "chance" => {
+                call.arity(1)?;
+                let p = self.float_arg(cx, &args[0], &call.what)?;
+                call.done(Builtin::Chance, vec![p], Type::Bool)
+            }
+            "seed" => {
+                call.arity(1)?;
+                let n = self.expr_to(cx, &args[0], &Type::Int)?;
+                call.done(Builtin::Seed, vec![n], Type::Void)
+            }
+            "pick" => {
+                call.arity(1)?;
+                let xs = self.expr(cx, &args[0], None)?;
+                let Type::Array(elem) = xs.ty.clone() else {
+                    return err(format!("`Random.pick` needs an array, found `{}`", xs.ty), args[0].pos);
+                };
+                call.done(Builtin::Pick, vec![xs], Type::Optional(elem))
+            }
+            // shuffle
+            _ => {
+                call.arity(1)?;
+                let place = self.place(cx, &args[0])?;
+                if !matches!(place.ty(), Type::Array(_)) {
+                    return err(format!("`Random.shuffle` needs an array, found `{}`", place.ty()), args[0].pos);
+                }
+                Ok(texpr(TExprKind::Mutate { place, op: Mutation::Shuffle, args: vec![] }, Type::Void, call.pos))
+            }
+        }
+    }
+
+    /// `Thread`, `Time` and `Async`.
+    fn runtime_call(&self, cx: &mut Ctx, name: &str, call: &LibCall) -> Result<TExpr> {
+        let args = call.args;
+        match call.what.as_str() {
+            "Thread.spawn" => {
+                call.arity(1)?;
                 let f = self.thread_lambda(cx, &args[0], vec![], "Thread.spawn")?;
                 let ret = match &f.ty {
                     Type::Func(_, r) => (**r).clone(),
                     other => other.clone(),
                 };
-                done(Builtin::Spawn, vec![f], Type::Task(Box::new(ret)))
+                call.done(Builtin::Spawn, vec![f], Type::Task(Box::new(ret)))
             }
-            ("Thread", "cores") => {
-                arity(0)?;
-                done(Builtin::Cores, vec![], Type::Int)
+            "Thread.cores" => {
+                call.arity(0)?;
+                call.done(Builtin::Cores, vec![], Type::Int)
             }
-            ("Time", "wait") => {
-                arity(1)?;
-                let secs = self.float_arg(cx, &args[0], &what)?;
-                done(Builtin::Wait, vec![secs], Type::Async(Box::new(Type::Void)))
-            }
-            ("Async", "spawn" | "run") => {
-                arity(1)?;
-                let job = self.expr(cx, &args[0], None)?;
-                let Type::Async(inner) = job.ty.clone() else {
-                    return err(
-                        format!("`{}` needs the result of calling an `async fn`, not `{}`", what, job.ty),
-                        args[0].pos,
-                    );
-                };
-                if name == "spawn" {
-                    done(Builtin::AsyncSpawn, vec![job], Type::Async(inner))
+            "Time.wait" | "Time.sleep" => {
+                call.arity(1)?;
+                let secs = self.float_arg(cx, &args[0], &call.what)?;
+                if name == "wait" {
+                    call.done(Builtin::Wait, vec![secs], Type::Async(Box::new(Type::Void)))
                 } else {
-                    done(Builtin::AsyncRun, vec![job], *inner)
+                    call.done(Builtin::Sleep, vec![secs], Type::Void)
                 }
             }
-            ("Async", "all") => {
-                arity(1)?;
+            "Time.now" => {
+                call.arity(0)?;
+                call.done(Builtin::Now, vec![], Type::Float)
+            }
+            "Time.millis" => {
+                call.arity(0)?;
+                call.done(Builtin::Millis, vec![], Type::Int)
+            }
+            "Async.all" => {
+                call.arity(1)?;
                 let jobs = self.expr(cx, &args[0], None)?;
                 let inner = match &jobs.ty {
                     Type::Array(elem) => match &**elem {
@@ -158,72 +202,45 @@ impl Checker<'_> {
                         args[0].pos,
                     );
                 };
-                done(Builtin::AsyncAll, vec![jobs], Type::Async(Box::new(Type::Array(Box::new(inner)))))
+                call.done(Builtin::AsyncAll, vec![jobs], Type::Async(Box::new(Type::Array(Box::new(inner)))))
             }
-            ("Time", "now") => {
-                arity(0)?;
-                done(Builtin::Now, vec![], Type::Float)
+            // Async.spawn, Async.run
+            _ => {
+                call.arity(1)?;
+                let job = self.expr(cx, &args[0], None)?;
+                let Type::Async(inner) = job.ty.clone() else {
+                    return err(
+                        format!("`{}` needs the result of calling an `async fn`, not `{}`", call.what, job.ty),
+                        args[0].pos,
+                    );
+                };
+                if name == "spawn" {
+                    call.done(Builtin::AsyncSpawn, vec![job], Type::Async(inner))
+                } else {
+                    call.done(Builtin::AsyncRun, vec![job], *inner)
+                }
             }
-            ("Time", "millis") => {
-                arity(0)?;
-                done(Builtin::Millis, vec![], Type::Int)
-            }
-            ("Time", "sleep") => {
-                arity(1)?;
-                let secs = self.float_arg(cx, &args[0], &what)?;
-                done(Builtin::Sleep, vec![secs], Type::Void)
-            }
-            _ => err(format!("`{}` has no function `{}`", ns, name), pos),
+        }
+    }
+}
+
+/// A call to a library function: `what` is its full name (`Math.sqrt`).
+struct LibCall<'e> {
+    what: String,
+    args: &'e [Expr],
+    pos: Span,
+}
+
+impl LibCall<'_> {
+    fn arity(&self, n: usize) -> Result<()> {
+        if self.args.len() == n {
+            Ok(())
+        } else {
+            err(format!("`{}` takes {} argument(s), but {} were given", self.what, n, self.args.len()), self.pos)
         }
     }
 
-    fn random_call(&self, cx: &mut Ctx, name: &str, args: &[Expr], pos: Span, what: &str) -> Result<TExpr> {
-        let arity = |n: usize| -> Result<()> {
-            if args.len() == n {
-                Ok(())
-            } else {
-                err(format!("`{}` takes {} argument(s), but {} were given", what, n, args.len()), pos)
-            }
-        };
-        let done = |op, args, ty| Ok(texpr(TExprKind::Builtin { op, args }, ty, pos));
-        match name {
-            "int" => {
-                arity(2)?;
-                let lo = self.expr_to(cx, &args[0], &Type::Int)?;
-                let hi = self.expr_to(cx, &args[1], &Type::Int)?;
-                done(Builtin::RandInt, vec![lo, hi], Type::Int)
-            }
-            "float" => {
-                arity(0)?;
-                done(Builtin::RandFloat, vec![], Type::Float)
-            }
-            "chance" => {
-                arity(1)?;
-                let p = self.float_arg(cx, &args[0], what)?;
-                done(Builtin::Chance, vec![p], Type::Bool)
-            }
-            "seed" => {
-                arity(1)?;
-                let n = self.expr_to(cx, &args[0], &Type::Int)?;
-                done(Builtin::Seed, vec![n], Type::Void)
-            }
-            "pick" => {
-                arity(1)?;
-                let xs = self.expr(cx, &args[0], None)?;
-                let Type::Array(elem) = xs.ty.clone() else {
-                    return err(format!("`Random.pick` needs an array, found `{}`", xs.ty), args[0].pos);
-                };
-                done(Builtin::Pick, vec![xs], Type::Optional(elem))
-            }
-            "shuffle" => {
-                arity(1)?;
-                let place = self.place(cx, &args[0])?;
-                if !matches!(place.ty(), Type::Array(_)) {
-                    return err(format!("`Random.shuffle` needs an array, found `{}`", place.ty()), args[0].pos);
-                }
-                Ok(texpr(TExprKind::Mutate { place, op: Mutation::Shuffle, args: vec![] }, Type::Void, pos))
-            }
-            _ => err(format!("`Random` has no function `{}`", name), pos),
-        }
+    fn done(&self, op: Builtin, args: Vec<TExpr>, ty: Type) -> Result<TExpr> {
+        Ok(texpr(TExprKind::Builtin { op, args }, ty, self.pos))
     }
 }

@@ -149,7 +149,8 @@ impl Lexer {
                 }
                 Some('"') => {
                     // A string inside the interpolation, e.g. "{m["key"]}".
-                    code.push(self.bump().unwrap());
+                    self.bump();
+                    code.push('"');
                     loop {
                         match self.bump() {
                             None | Some('\n') => return err("unterminated string", pos),
@@ -371,7 +372,8 @@ impl Lexer {
                     while let Some(d) = self.bump() {
                         out.push(d);
                         if d == '*' && self.peek() == Some('/') {
-                            out.push(self.bump().unwrap());
+                            self.bump();
+                            out.push('/');
                             break;
                         }
                     }
@@ -384,7 +386,7 @@ impl Lexer {
     }
 
     fn symbol(&mut self, pos: Span) -> Result<()> {
-        let c = self.bump().unwrap();
+        let Some(c) = self.bump() else { return Ok(()) };
         let next = self.peek();
         let two = |l: &mut Self, t: Tok| {
             l.bump();

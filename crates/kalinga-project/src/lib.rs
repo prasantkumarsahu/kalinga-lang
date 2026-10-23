@@ -5,6 +5,9 @@
 //! `~/.utkal/cache/src/<name>-<commit>`. `utkal.lock` pins each git package to a commit,
 //! so builds are repeatable until `utkal update`.
 
+// Library code reports problems instead of panicking.
+#![warn(clippy::unwrap_used)]
+
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::process::Command;

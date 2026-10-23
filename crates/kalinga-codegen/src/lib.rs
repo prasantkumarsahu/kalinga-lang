@@ -6,6 +6,9 @@
 //! through `Rc<RefCell<dyn __I_Class>>` so calls dispatch dynamically; leaf classes use the
 //! concrete struct for static dispatch.
 
+// Library code reports problems instead of panicking.
+#![warn(clippy::unwrap_used)]
+
 mod expr;
 mod items;
 mod stmt;

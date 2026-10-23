@@ -16,6 +16,8 @@ unsafe_code = "forbid"
 [workspace.lints.clippy]
 dbg_macro = "warn"
 todo = "warn"
+# Long functions are split into named steps; the limit is in clippy.toml.
+too_many_lines = "warn"
 
 # The `kalinga` and `utkal` commands, and the end-to-end tests.
 [package]

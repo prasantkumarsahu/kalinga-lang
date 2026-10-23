@@ -135,7 +135,9 @@ impl Scope {
         self.0.iter().any(|s| s.contains(n))
     }
     fn add(&mut self, n: &str) {
-        self.0.last_mut().unwrap().insert(n.to_string());
+        if let Some(innermost) = self.0.last_mut() {
+            innermost.insert(n.to_string());
+        }
     }
     fn push(&mut self) {
         self.0.push(HashSet::new());
@@ -192,10 +194,6 @@ impl<'a> Resolver<'a> {
             return Some(err(format!("package `{}` has no `{}`", alias, name), pos));
         }
         Some(Ok(self.final_name(unit, name)))
-    }
-
-    fn is_alias(&self, n: &str, pos: Span, scope: &Scope) -> bool {
-        !scope.has(n) && self.units.file_aliases.get(pos.file as usize).is_some_and(|a| a.contains_key(n))
     }
 
     fn rewrite(&self, prog: &mut Program) -> Result<()> {
@@ -409,34 +407,44 @@ impl<'a> Resolver<'a> {
         Ok(())
     }
 
-    fn expr(&self, e: &mut Expr, sc: &mut Scope) -> Result<()> {
+    /// Rewrites `alias.Name(...)` and `alias.Name` into plain references to the package's
+    /// declaration; `false` when `e` is not such a reference.
+    fn qualified(&self, e: &mut Expr, sc: &mut Scope) -> Result<bool> {
         let pos = e.pos;
-        // `alias.Name(...)` and `alias.Name` become plain references.
         match &mut e.kind {
             ExprKind::MethodCall(recv, name, args) => {
                 if let ExprKind::Ident(a) = &recv.kind
-                    && self.is_alias(a, recv.pos, sc)
+                    && !sc.has(a)
+                    && let Some(resolved) = self.resolve_qualified(a, name, pos)
                 {
-                    let resolved = self.resolve_qualified(a, name, pos).unwrap()?;
+                    let resolved = resolved?;
                     let mut args = std::mem::take(args);
                     for x in &mut args {
                         self.expr(x, sc)?;
                     }
                     e.kind = ExprKind::Call(resolved, vec![], args);
-                    return Ok(());
+                    return Ok(true);
                 }
             }
             ExprKind::Field(recv, name) => {
                 if let ExprKind::Ident(a) = &recv.kind
-                    && self.is_alias(a, recv.pos, sc)
+                    && !sc.has(a)
+                    && let Some(resolved) = self.resolve_qualified(a, name, pos)
                 {
-                    let resolved = self.resolve_qualified(a, name, pos).unwrap()?;
-                    e.kind = ExprKind::Ident(resolved);
-                    return Ok(());
+                    e.kind = ExprKind::Ident(resolved?);
+                    return Ok(true);
                 }
             }
             _ => {}
         }
+        Ok(false)
+    }
+
+    fn expr(&self, e: &mut Expr, sc: &mut Scope) -> Result<()> {
+        if self.qualified(e, sc)? {
+            return Ok(());
+        }
+        let pos = e.pos;
         match &mut e.kind {
             ExprKind::Ident(n) => {
                 if !sc.has(n) {

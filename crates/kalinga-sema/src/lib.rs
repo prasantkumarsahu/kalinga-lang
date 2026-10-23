@@ -2,6 +2,9 @@
 //! interfaces, structs, enums, functions and their types), the rules they must follow, and
 //! type checking of every body into the typed tree.
 
+// Library code reports problems instead of panicking.
+#![warn(clippy::unwrap_used)]
+
 pub mod builtins;
 mod declare;
 pub mod model;
