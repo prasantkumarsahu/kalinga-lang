@@ -5,6 +5,12 @@
   "version": "0.6.0",
   "publisher": "kalinga",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/prasantkumarsahu/kalinga-lang",
+    "directory": "editors/vscode"
+  },
+  "icon": "icons/kalinga.png",
   "engines": {
     "vscode": "^1.82.0"
   },
@@ -41,7 +47,11 @@
         "extensions": [
           ".kl"
         ],
-        "configuration": "./language-configuration.json"
+        "configuration": "./language-configuration.json",
+        "icon": {
+          "light": "./icons/kalinga-light.svg",
+          "dark": "./icons/kalinga-dark.svg"
+        }
       }
     ],
     "grammars": [
