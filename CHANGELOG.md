@@ -1,19 +1,76 @@
 # Changelog
 
-## Unreleased
+## 0.5.0 — stable
 
-- **Doc comments**: `///` above a declaration is its documentation, written in Markdown.
-  Plain `//` comments no longer count as documentation. `std/game`, `std/math2d` and the
-  examples use `///`.
-- **Hover in VS Code**: types of variables, and signatures plus `///` docs of functions,
-  methods, classes, structs, fields, interfaces, enum variants, library functions and
-  package names.
+From this release on, code that compiles keeps compiling in 0.x: any unavoidable change
+comes with a `kalinga fix` rule (see [Stability](docs/27-stability.md)).
 
+### Breaking changes
+- **`print` no longer ends the line; `println` does.** `println()` prints an empty line, and
+  `print` shows its text at once. `kalinga fix` (and `utkal fix`) rewrites 0.4's `print(...)`
+  to `println(...)`.
+- **Member constants are `const NAME: Type = value`**, no longer `static NAME: ...`; the
+  parser says so and `kalinga fix` rewrites them.
 - **`override fn` for interface methods too.** A method that comes from anything after `:`
-  in `class C : Base, Iface`, whether a base class or an interface, must be marked
-  `override fn`; the compiler says what to add (`method `update` implements `Game.update`;
-  mark it `override fn``). `override` on a method that comes from nowhere is still an error.
-  The editor offers `override fn` stubs for unwritten interface methods.
+  in `class C : Base, Iface`, a base class or an interface, must be marked `override fn`;
+  the compiler says what to add, and the editor offers a quick fix.
+- The VS Code setting `kalinga.checkOnType` is gone: the language server checks every edit.
+
+### Language
+- **Strings**: `s[i]` (one character), slices `s[a..b]` / `xs[a..b]` (either end optional),
+  and `split`, `replace`, `starts_with`, `ends_with`, `find`, `code_at`, `chars`,
+  `parse_int`, `parse_float`; `[str].join(sep)`; built-ins `chr(code)` and `args()`.
+- **Recursive enums**: `Add(left: Expr, right: Expr)`, also through structs and optionals.
+- **Constants and static variables**: top-level `const NAME: T = value`, and `const` /
+  `static var` members of classes and structs, used as `Type.NAME`. Values that depend on
+  themselves are rejected.
+- **`if` and `match` as values**: `let x = if a > b { a } else { b }`,
+  `let n = match d { Up => 1, _ => 0 }`; one-line match arms take commas.
+- **Loops**: `while let x = optional { }`, `for i, x in xs`, `for k, v in m`, and inclusive
+  ranges `a..=b` (in slices too).
+- **Named arguments**: `clamp(15, low: 0, high: 10)`, `Rect(w: 10, h: 5)`, checked against
+  the parameters; struct fields with defaults may be skipped.
+- **Whole-number literals where a float is expected**: `Vec2(600, 300)`; variables still
+  need `float(x)`.
+- **`std/fs`**: `File`, `Dir` and `Path` for reading, writing and listing, with `Result`
+  errors worded the same on every system.
+- **`test fn`** with `assert(condition[, message])` and `assert_eq(value, expected)`.
+- **Doc comments**: `///` above a declaration is its documentation (Markdown); plain `//` is
+  not.
+
+### Tooling
+- **`kalinga lsp`**, a language server built on the compiler: errors as you type (all of
+  them at once), completion, hover with docs, signature help, go to definition, find
+  references, rename (methods together with what they override or implement), outline,
+  quick fixes and formatting.
+- **`kalinga fmt`** / **`utkal fmt`** lay code out in one standard style (`--check` for CI).
+  They change only whitespace and line breaks and check that the tokens are unchanged.
+- **`kalinga test`** / **`utkal test`** run `test fn`s, each on its own thread, and report
+  failures with the Kalinga file and line.
+- **`kalinga fix`** / **`utkal fix`** update code for a new version.
+- The compiler reports up to 20 errors at once instead of the first, and the parser keeps
+  going after a mistake in one declaration.
+
+### Editor
+- VS Code extension 0.6.0: a thin client of `kalinga lsp` (the old JavaScript completion
+  engine is gone), with a Run Tests in File command, Format Document, a `test` snippet, and a
+  Kalinga icon for `.kl` files: a 24-spoke wheel after the Ashoka Chakra.
+
+### Internals
+- The compiler is a Cargo workspace: `kalinga-syntax`, `kalinga-sema`, `kalinga-codegen`,
+  `kalinga-driver`, `kalinga-project`, `kalinga-fmt` and `kalinga-lsp`.
+- Type checking produces a typed tree that code generation prints; the runtime is real Rust
+  files (`crates/kalinga-codegen/runtime/`), checked by rustfmt and the compiler.
+- One registry of built-in functions and methods feeds the type checker, the editor and the
+  docs, and tests keep them in step.
+- Errors are typed values in every library crate; spans cover whole names.
+- Tests: output snapshots for every UI case, every doc example run and its output checked,
+  the language server's features, the formatter on all repository code. CI runs on
+  Windows, Linux and macOS, with clippy, rustfmt, ESLint and Prettier.
+
+### Fixes
+- Async timers that are due at the same time now finish in time order, also on a busy
+  machine.
 
 ## 0.4.0 — first playable
 
