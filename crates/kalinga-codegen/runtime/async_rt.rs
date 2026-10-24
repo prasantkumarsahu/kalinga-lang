@@ -82,8 +82,10 @@ fn __block_on<T: 'static>(main: impl std::future::Future<Output = T> + 'static) 
         let next = __EXEC.with(|e| {
             let mut b = e.borrow_mut();
             let ex = b.as_mut().unwrap();
-            let (due, later): (Vec<_>, Vec<_>) = ex.timers.drain(..).partition(|(t, _)| *t <= now);
+            let (mut due, later): (Vec<_>, Vec<_>) = ex.timers.drain(..).partition(|(t, _)| *t <= now);
             ex.timers = later;
+            // Timers that are due together still finish in time order.
+            due.sort_by_key(|(t, _)| *t);
             for (_, w) in due {
                 w.wake();
             }

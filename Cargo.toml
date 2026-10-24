@@ -26,6 +26,8 @@ description = "Kalinga: a simple, safe, object-oriented language that compiles t
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+# `cargo run -- run file.kl` runs the compiler (`utkal` with `--bin utkal`).
+default-run = "kalinga"
 
 [dependencies]
 kalinga-driver = { path = "crates/kalinga-driver" }

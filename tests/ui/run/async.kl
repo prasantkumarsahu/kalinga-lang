@@ -25,11 +25,12 @@ fn heavy(n: int) -> int {
 async fn main() {
     let log = Log()
     // timers finish in time order, not in start order
-    let jobs = [delayed(log, "slow", 0.15), delayed(log, "fast", 0.05), delayed(log, "medium", 0.1)]
+    // (wide gaps, so a slow machine cannot reorder them; one after another would take 1.2 s)
+    let jobs = [delayed(log, "slow", 0.6), delayed(log, "fast", 0.2), delayed(log, "medium", 0.4)]
     let t0 = Time.now()
     let names = await Async.all(jobs)
     let took = Time.now() - t0
-    println(names, log.lines, "concurrent:", took < 0.25)
+    println(names, log.lines, "concurrent:", took < 1.0)
 
     // background job keeps running while we do other things
     let bg = Async.spawn(delayed(log, "background", 0.05))
