@@ -92,8 +92,10 @@ internals and a language reference. See [CHANGELOG.md](CHANGELOG.md) for what is
 
 Requires a Rust toolchain (`rustc` on PATH; `cargo` for crates and games; `git` for git
 packages). Download `kalinga` and `utkal` for Windows, Linux or macOS from
-[Releases](https://github.com/prasantkumarsahu/kalinga-lang/releases) (with the VS Code
-extension as a `.vsix`), or build and install both commands:
+[Releases](https://github.com/prasantkumarsahu/kalinga-lang/releases), or build and install
+both commands. The VS Code extension is on the Marketplace as
+[Kalinga Language](https://marketplace.visualstudio.com/items?itemName=PrasantKumarSahu.kalinga-lang)
+(and a `.vsix` with each release):
 
 ```bash
 cargo install --path .

@@ -2,7 +2,8 @@ name: Release
 
 # Pushing a tag `vX.Y.Z` builds `kalinga` and `utkal` for Windows, Linux and macOS and the
 # VS Code extension, and publishes them as a GitHub release whose notes are the tag's
-# CHANGELOG section. Running it by hand (Actions → Release → Run workflow) on any branch,
+# CHANGELOG section, and publishes the extension to the VS Code Marketplace (with the
+# `VSCE_PAT` secret; a version already there is skipped). Running it by hand (Actions → Release → Run workflow) on any branch,
 # or a pull request that changes this file, builds everything as artifacts and publishes
 # nothing.
 
@@ -115,3 +116,16 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh release create "$GITHUB_REF_NAME" dist/* --title "Kalinga ${GITHUB_REF_NAME#v}" --notes-file notes.md
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Publish the extension to the VS Code Marketplace
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+        run: |
+          if [[ -z "$VSCE_PAT" ]]; then
+            echo "::warning::no VSCE_PAT secret: the extension was not published to the Marketplace"
+            exit 0
+          fi
+          # The exact .vsix attached to the release; a version already published is skipped.
+          npx --yes @vscode/vsce@3.6.2 publish --packagePath dist/kalinga-lang-*.vsix --skip-duplicate

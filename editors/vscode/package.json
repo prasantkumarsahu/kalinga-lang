@@ -2,8 +2,8 @@
   "name": "kalinga-lang",
   "displayName": "Kalinga Language",
   "description": "Kalinga language support (.kl) from the Kalinga language server: errors as you type, completion, hover, signature help, go to definition, find references, rename, outline and quick fixes; plus syntax highlighting, snippets, run commands and utkal.toml hints",
-  "version": "0.6.1",
-  "publisher": "kalinga",
+  "version": "0.6.2",
+  "publisher": "PrasantKumarSahu",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -26,7 +26,8 @@
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "package": "vsce package"
+    "package": "vsce package",
+    "publish": "vsce publish --skip-duplicate"
   },
   "dependencies": {
     "vscode-languageclient": "9.0.1"

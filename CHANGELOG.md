@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+### Editor (VS Code extension 0.6.2)
+- On the VS Code Marketplace as **Kalinga Language** (`PrasantKumarSahu.kalinga-lang`);
+  each release publishes it. The extension ID changed from `kalinga.kalinga-lang`: if you
+  installed a `.vsix` before, uninstall that one.
+
 ## 0.5.1
 
 Fixes only: no new syntax, nothing that changes what working code does.

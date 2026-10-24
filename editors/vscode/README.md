@@ -53,6 +53,16 @@ compiler itself, so what the editor shows is exactly what the compiler sees:
    path of `target/release/kalinga.exe` (or `target/debug/kalinga.exe`) instead.
 
 2. Install the extension. Either:
+   - **From the Marketplace**: search for **Kalinga Language** in VS Code's Extensions
+     view, or run
+
+     ```bash
+     code --install-extension PrasantKumarSahu.kalinga-lang
+     ```
+
+   - **Download the `.vsix`** from
+     [Releases](https://github.com/prasantkumarsahu/kalinga-lang/releases) and run
+     `code --install-extension kalinga-lang-<version>.vsix`.
    - **Package it** (needs Node.js), from `editors/vscode`:
 
      ```bash
@@ -64,7 +74,7 @@ compiler itself, so what the editor shows is exactly what the compiler sees:
      ```
 
      ```bash
-     code --install-extension kalinga-lang-0.6.0.vsix
+     code --install-extension kalinga-lang-0.6.2.vsix
      ```
 
    - **Or try it without installing**: open `editors/vscode` in VS Code and press `F5`
@@ -86,7 +96,7 @@ every file, such as **Material Icon Theme**, need to be told about it:
 
 1. Copy the extension's icon to a folder of your own under VS Code's extensions folder,
    for example (Windows) from
-   `%USERPROFILE%\.vscode\extensions\kalinga.kalinga-lang-<version>\icons\kalinga-dark.svg`
+   `%USERPROFILE%\.vscode\extensions\prasantkumarsahu.kalinga-lang-<version>\icons\kalinga-dark.svg`
    to `%USERPROFILE%\.vscode\extensions\icons\kalinga.svg` (`kalinga-light.svg` suits
    light themes).
 2. Add to your settings (`settings.json`):
