@@ -38,6 +38,7 @@ pub fn analyze(prog: &Program, m: &Model) -> (std::result::Result<TypedProgram, 
         cast_targets: RefCell::new(HashSet::new()),
         index: RefCell::new(Index::default()),
         bounds: RefCell::new(Bounds::new()),
+        shared: RefCell::new(HashSet::new()),
     };
     let mut out = TypedProgram::default();
     let mut errors = vec![];
@@ -94,7 +95,12 @@ impl<'a> BodyDecl<'a> {
 #[derive(Clone)]
 struct Var {
     ty: Type,
+    /// Can be changed here (a `var`, not seen from inside a lambda as a copy).
     mutable: bool,
+    /// Declared with `var`.
+    is_var: bool,
+    /// A `var` some lambda changes, so lambdas share it instead of copying it.
+    shared: bool,
     /// Seen from inside a lambda that captured it.
     captured: bool,
     /// Where it is declared.
@@ -102,6 +108,7 @@ struct Var {
 }
 
 /// Variables from outside a lambda that its body uses.
+#[derive(Clone)]
 struct LambdaFrame {
     /// Scopes at or above this index belong to the lambda.
     boundary: usize,
@@ -109,6 +116,7 @@ struct LambdaFrame {
 }
 
 /// Where in the program a body is being checked.
+#[derive(Clone)]
 struct Ctx {
     scopes: Vec<HashMap<String, Var>>,
     /// Class whose method / init body this is.
@@ -154,7 +162,8 @@ impl Ctx {
         let mut var = self.scopes[idx][name].clone();
         for frame in &self.lambdas {
             if idx < frame.boundary {
-                var.mutable = false;
+                // A copy, unless a lambda changes it.
+                var.mutable &= var.shared;
                 var.captured = true;
                 let mut caps = frame.captures.borrow_mut();
                 if !caps.iter().any(|(n, _)| n == name) {
@@ -165,12 +174,14 @@ impl Ctx {
         Some(var)
     }
 
-    fn declare(&mut self, name: &str, ty: Type, mutable: bool, pos: Span) -> Result<()> {
+    /// `declare`, for a `var` that may be `shared` with lambdas that change it.
+    fn declare_var(&mut self, name: &str, ty: Type, mutable: bool, shared: bool, pos: Span) -> Result<()> {
         let scope = self.scopes.last_mut().expect("a body always has a scope");
         if scope.contains_key(name) {
             return err(format!("`{}` is already declared in this scope", name), pos);
         }
-        scope.insert(name.to_string(), Var { ty, mutable, captured: false, decl: pos });
+        let var = Var { ty, mutable, is_var: mutable, shared: mutable && shared, captured: false, decl: pos };
+        scope.insert(name.to_string(), var);
         Ok(())
     }
 
@@ -212,6 +223,8 @@ struct Checker<'a> {
     index: RefCell<Index>,
     /// The bounds of the type parameters in scope (the generic item being checked).
     bounds: RefCell<Bounds>,
+    /// Where the `var`s that a lambda changes are declared: lambdas share these.
+    shared: RefCell<HashSet<Span>>,
 }
 
 impl Checker<'_> {
@@ -343,8 +356,24 @@ impl Checker<'_> {
         }
     }
 
-    /// Checks a function, method, operator or init body.
+    /// Checks a function, method, operator or init body. When a lambda turns out to change
+    /// a `var` from outside it, that `var` becomes shared and the body is checked again.
     fn body(&self, cx: &mut Ctx, sig: Signature, decl: BodyDecl) -> Result<TBody> {
+        let start = cx.clone();
+        loop {
+            let shared = self.shared.borrow().len();
+            let refs = self.index.borrow().refs.len();
+            let r = self.body_once(cx, sig.clone(), &decl);
+            if r.is_err() && self.shared.borrow().len() > shared {
+                self.index.borrow_mut().refs.truncate(refs);
+                *cx = start.clone();
+                continue;
+            }
+            return r;
+        }
+    }
+
+    fn body_once(&self, cx: &mut Ctx, sig: Signature, decl: &BodyDecl) -> Result<TBody> {
         for ((p, t), param) in sig.params.iter().zip(decl.params) {
             self.declare(cx, p, t.clone(), false, param.pos)?;
         }

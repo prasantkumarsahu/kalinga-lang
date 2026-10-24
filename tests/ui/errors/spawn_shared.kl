@@ -1,0 +1,9 @@
+fn main() {
+    var hits = 0
+    let count = fn() {
+        hits += 1
+    }
+    count()
+    let t = Thread.spawn(fn() => hits * 2)
+    println(t.join())
+}

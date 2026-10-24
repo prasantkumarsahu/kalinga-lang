@@ -27,7 +27,16 @@ impl Gen<'_> {
 
     fn stmt(&self, s: &TStmt, depth: usize) -> String {
         match s {
-            TStmt::Let { name, mutable, ty, value } => {
+            // A `var` a lambda changes lives in a shared cell.
+            TStmt::Let { name, shared: true, ty, value, .. } => {
+                format!(
+                    "let {}: Rc<RefCell<{}>> = Rc::new(RefCell::new({}));",
+                    rid(name),
+                    self.rty(ty),
+                    self.expr(value)
+                )
+            }
+            TStmt::Let { name, mutable, ty, value, .. } => {
                 let kw = if *mutable { "let mut" } else { "let" };
                 format!("{} {}: {} = {};", kw, rid(name), self.rty(ty), self.expr(value))
             }
@@ -141,6 +150,7 @@ impl Gen<'_> {
     pub(crate) fn place(&self, p: &TPlace, n: &mut usize) -> (String, String) {
         match p {
             TPlace::Local { name, .. } => (String::new(), rid(name)),
+            TPlace::SharedLocal { name, .. } => (String::new(), format!("(*{}.borrow_mut())", rid(name))),
             TPlace::SelfField { field, .. } => (String::new(), format!("self.{}", rid(field))),
             TPlace::Static { owner, name, .. } => (String::new(), format!("(*{}::__s_{}().borrow_mut())", owner, name)),
             TPlace::StructField { base, field, .. } => {

@@ -64,7 +64,12 @@ impl Checker<'_> {
         if let Some(v) = cx.lookup(name) {
             return match v.ty.clone() {
                 Type::Func(ps, r) => {
-                    let f = texpr(TExprKind::Local(name.to_string()), v.ty, pos);
+                    let kind = if v.shared {
+                        TExprKind::SharedLocal(name.to_string())
+                    } else {
+                        TExprKind::Local(name.to_string())
+                    };
+                    let f = texpr(kind, v.ty, pos);
                     self.call_value(cx, f, &ps, &r, args, pos, name)
                 }
                 other => err(format!("`{}` is a `{}`, not a function", name, other), pos),

@@ -29,6 +29,8 @@ pub enum TExprKind {
     None,
     /// A local variable or parameter.
     Local(String),
+    /// A `var` that a lambda changes: the lambda and the code around it share it.
+    SharedLocal(String),
     /// A top-level function used as a value.
     FnRef(String),
     /// `self` in a struct method: a copy of the value.
@@ -301,6 +303,11 @@ pub enum TPlace {
         name: String,
         ty: Type,
     },
+    /// A `var` shared with the lambdas that change it.
+    SharedLocal {
+        name: String,
+        ty: Type,
+    },
     /// `self.field`; `wrapped` as in `TExprKind::SelfField`.
     SelfField {
         field: String,
@@ -338,6 +345,7 @@ impl TPlace {
     pub fn ty(&self) -> &Type {
         match self {
             TPlace::Local { ty, .. }
+            | TPlace::SharedLocal { ty, .. }
             | TPlace::SelfField { ty, .. }
             | TPlace::StructField { ty, .. }
             | TPlace::ObjectField { ty, .. }
@@ -352,6 +360,8 @@ pub enum TStmt {
     Let {
         name: String,
         mutable: bool,
+        /// Shared with lambdas that change it (`SharedLocal`).
+        shared: bool,
         ty: Type,
         value: TExpr,
     },

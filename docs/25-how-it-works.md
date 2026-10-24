@@ -163,6 +163,7 @@ The rules behind it:
 | `"a {x} b"` | `format!("a {} b", show(x))` |
 | `match e { V(x) => ... }` | `match e { E::V(x) => ... }` |
 | `fn(x) => x + k` | `{ let k = k.clone(); Rc::new(move \|x\| x + k) }` |
+| `var n` that a lambda changes; `n += 1`; reading `n` | `let n = Rc::new(RefCell::new(..))`; `*n.borrow_mut() += 1`; `__kl_get(&n)` (a copy, so no borrow is held) |
 | `x as Dog` | a generated `__as_Dog()` hook on the object's trait |
 | `a + b` (struct) | `a.__op_0(b)`, the struct's `op +` method |
 | `use rust "f.rs"` | `#[path = "..."] mod __rs_f; use __rs_f::*;` |

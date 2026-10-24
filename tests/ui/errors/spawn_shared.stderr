@@ -1,0 +1,3 @@
+tests/ui/errors/spawn_shared.kl:7:26: error: `Thread.spawn` cannot use `hits` here: it is changed by a lambda, so it cannot move to another thread (use a `Shared<int>`)
+7 |     let t = Thread.spawn(fn() => hits * 2)
+  |                          ^^

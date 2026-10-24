@@ -1,0 +1,116 @@
+struct Point {
+    x: int
+    y: int
+
+    mut fn move_by(dx: int) {
+        self.x += dx
+    }
+}
+
+fn make_counter() -> fn() -> int {
+    var count = 0
+    return fn() -> int {
+        count += 1
+        return count
+    }
+}
+
+fn main() {
+    // A counter: the lambda changes `n`, and the code around it sees the change.
+    var n = 0
+    let inc = fn() {
+        n += 1
+    }
+    inc()
+    inc()
+    println(n)
+
+    // Two lambdas sharing one variable.
+    var total = 0
+    let add = fn(x: int) {
+        total += x
+    }
+    let reset = fn() {
+        total = 0
+    }
+    add(5)
+    add(7)
+    println(total)
+    reset()
+    println(total)
+
+    // Changes made outside are seen inside.
+    total = 40
+    add(2)
+    println(total)
+
+    // Each counter keeps its own variable.
+    let c1 = make_counter()
+    let c2 = make_counter()
+    println(c1(), c1(), c2())
+
+    // Arrays and maps changed in place, and a struct's `mut fn`.
+    var log: [str] = []
+    let note = fn(s: str) {
+        log.push(s)
+    }
+    note("a")
+    note("b")
+    println(log)
+    var seen: {str: int} = {}
+    let count = fn(w: str) {
+        if let c = seen.get(w) {
+            seen[w] = c + 1
+        } else {
+            seen[w] = 1
+        }
+    }
+    for w in ["x", "y", "x"] {
+        count(w)
+    }
+    println(seen)
+    var p = Point(0, 0)
+    let step = fn() {
+        p.move_by(3)
+        p.y = p.y + 1
+    }
+    step()
+    step()
+    println(p)
+
+    // Nested lambdas.
+    var depth = 0
+    let outer = fn() {
+        let inner = fn() {
+            depth += 10
+        }
+        inner()
+        depth += 1
+    }
+    outer()
+    println(depth)
+
+    // A variable no lambda changes is still copied when the lambda is made.
+    var greeting = "hello"
+    let greet = fn(name: str) => "{greeting}, {name}"
+    greeting = "bye"
+    println(greet("Asha"))
+
+    // Reading and changing in one statement, through a lambda that changes it too.
+    var x = 1
+    let bump = fn() -> int {
+        x += 100
+        return 1
+    }
+    x = x + bump()
+    println(x)
+
+    // Strings built up in a lambda.
+    var text = ""
+    let append = fn(s: str) {
+        text += s
+    }
+    append("ab")
+    append("cd")
+    println(text)
+}

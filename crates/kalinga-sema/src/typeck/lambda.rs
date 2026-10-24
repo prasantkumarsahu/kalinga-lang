@@ -38,6 +38,15 @@ impl Checker<'_> {
         let l = self.lambda(cx, ps, ret.as_ref(), body, Some(&hint), e.pos)?;
         let TExprKind::Lambda(parts) = &l.kind else { return Ok(l) };
         for (name, t) in &parts.captures {
+            if cx.peek(name).is_some_and(|v| v.shared) {
+                return err(
+                    format!(
+                        "`{}` cannot use `{}` here: it is changed by a lambda, so it cannot move to another thread (use a `Shared<{}>`)",
+                        what, name, t
+                    ),
+                    e.pos,
+                );
+            }
             if !self.m.is_sendable(t) {
                 return err(
                     format!(

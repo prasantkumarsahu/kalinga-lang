@@ -128,7 +128,9 @@ impl Checker<'_> {
 
     fn ident(&self, cx: &mut Ctx, name: &str, pos: Span) -> Result<TExpr> {
         if let Some(v) = cx.lookup(name) {
-            return Ok(texpr(TExprKind::Local(name.to_string()), v.ty, pos));
+            let kind =
+                if v.shared { TExprKind::SharedLocal(name.to_string()) } else { TExprKind::Local(name.to_string()) };
+            return Ok(texpr(kind, v.ty, pos));
         }
         if self.m.async_fns.contains(name) {
             return err(

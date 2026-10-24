@@ -312,10 +312,10 @@ value_block = "{" { statement } expr "}" ;
 ## Not yet supported
 
 Inheritance with generic classes (and generic classes implementing interfaces), type
-parameters on interface methods, operators on classes, closures that change captured
-variables, mutable global variables (use a `static var` member), `if let` as a value,
-`async` instance methods, `await` inside lambdas, sharing objects between threads, a
-package registry, tuples, exceptions (`try`/`catch`; use `Result`).
+parameters on interface methods, operators on classes, mutable global variables (use a
+`static var` member), `if let` as a value, `async` instance methods, `await` inside
+lambdas, sharing objects between threads, a package registry, tuples, exceptions
+(`try`/`catch`; use `Result`).
 
 ---
 

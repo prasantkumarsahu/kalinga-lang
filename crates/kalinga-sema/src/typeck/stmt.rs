@@ -109,8 +109,9 @@ impl Checker<'_> {
             }
             _ => {}
         }
+        let shared = mutable && self.shared.borrow().contains(&pos);
         self.declare(cx, name, value_t.ty.clone(), mutable, pos)?;
-        Ok(TStmt::Let { name: name.to_string(), mutable, ty: value_t.ty.clone(), value: value_t })
+        Ok(TStmt::Let { name: name.to_string(), mutable, shared, ty: value_t.ty.clone(), value: value_t })
     }
 
     fn in_loop<T>(&self, cx: &mut Ctx, f: impl FnOnce(&mut Ctx) -> Result<T>) -> Result<T> {

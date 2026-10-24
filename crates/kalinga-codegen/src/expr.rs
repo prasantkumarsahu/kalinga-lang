@@ -14,6 +14,7 @@ impl Gen<'_> {
             TExprKind::Bool(b) => b.to_string(),
             TExprKind::None => "None".into(),
             TExprKind::Local(name) => clone_if(rid(name), &e.ty),
+            TExprKind::SharedLocal(name) => format!("__kl_get(&{})", rid(name)),
             TExprKind::FnRef(name) => format!("(Rc::new({}) as {})", fn_id(name), self.rty(&e.ty)),
             TExprKind::StructSelf => "self.clone()".into(),
             TExprKind::ObjectSelf => format!("(self.__self.upgrade().unwrap() as {})", self.rty(&e.ty)),

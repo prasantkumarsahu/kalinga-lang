@@ -17,7 +17,9 @@ impl Checker<'_> {
 
     /// Declares a local variable or parameter and records the declaration.
     pub(super) fn declare(&self, cx: &mut Ctx, name: &str, ty: Type, mutable: bool, pos: Span) -> Result<()> {
-        cx.declare(name, ty.clone(), mutable, pos)?;
+        // A `var` that a lambda changes is shared with it.
+        let shared = mutable && self.shared.borrow().contains(&pos);
+        cx.declare_var(name, ty.clone(), mutable, shared, pos)?;
         self.note(pos, name, Symbol::Local { name: name.to_string(), decl: pos, mutable }, &ty, true);
         Ok(())
     }
@@ -50,8 +52,8 @@ impl Checker<'_> {
         let builtin =
             |recv: &TExpr| Some(Symbol::Builtin { receiver: registry_receiver(&recv.ty), name: name.to_string() });
         match kind {
-            TExprKind::Local(n) => {
-                cx.peek(n).map(|v| Symbol::Local { name: n.clone(), decl: v.decl, mutable: v.mutable })
+            TExprKind::Local(n) | TExprKind::SharedLocal(n) => {
+                cx.peek(n).map(|v| Symbol::Local { name: n.clone(), decl: v.decl, mutable: v.is_var })
             }
             TExprKind::FnRef(n) => Some(Symbol::Function(n.clone())),
             TExprKind::Static { owner, name, .. } if owner.is_empty() => Some(Symbol::Const(name.clone())),
@@ -97,8 +99,8 @@ impl Checker<'_> {
     /// Records the name an assignment stores into.
     pub(super) fn note_place(&self, cx: &Ctx, e: &Expr, p: &TPlace) {
         let (name, symbol) = match p {
-            TPlace::Local { name, .. } => {
-                (name, cx.peek(name).map(|v| Symbol::Local { name: name.clone(), decl: v.decl, mutable: v.mutable }))
+            TPlace::Local { name, .. } | TPlace::SharedLocal { name, .. } => {
+                (name, cx.peek(name).map(|v| Symbol::Local { name: name.clone(), decl: v.decl, mutable: v.is_var }))
             }
             TPlace::SelfField { field, .. } => (field, self.self_field_owner(cx, field).map(|o| member(o, field))),
             TPlace::ObjectField { recv, field, .. } => {
