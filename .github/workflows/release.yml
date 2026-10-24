@@ -152,8 +152,9 @@ jobs:
       - name: Release notes from the CHANGELOG
         run: |
           version="${GITHUB_REF_NAME#v}"
-          # The lines after `## <version>` up to the next `## `.
-          awk -v v="$version" 'index($0, "## " v) == 1 { on = 1; next } on && /^## / { exit } on' CHANGELOG.md > notes.md
+          # The lines after `## <version>` (exactly, or followed by a space: `## 0.6.1` is
+          # not `## 0.6.10`) up to the next `## `.
+          awk -v v="$version" '$0 == "## " v || index($0, "## " v " ") == 1 { on = 1; next } on && /^## / { exit } on' CHANGELOG.md > notes.md
           if [[ ! -s notes.md ]]; then
             echo "::error::CHANGELOG.md has no section for $version"
             exit 1
@@ -162,10 +163,18 @@ jobs:
           sed -i "s#](docs/#](https://github.com/$GITHUB_REPOSITORY/blob/$GITHUB_REF_NAME/docs/#g" notes.md
       - name: Checksums
         run: cd dist && sha256sum * > SHA256SUMS
+      # On "Re-run failed jobs" the release may exist already: its files and notes are
+      # replaced instead, so a later step that failed (an expired token) can be retried.
       - name: Create the release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" dist/* --title "Kalinga ${GITHUB_REF_NAME#v}" --notes-file notes.md
+        run: |
+          if gh release view "$GITHUB_REF_NAME" > /dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" dist/* --clobber
+            gh release edit "$GITHUB_REF_NAME" --notes-file notes.md
+          else
+            gh release create "$GITHUB_REF_NAME" dist/* --title "Kalinga ${GITHUB_REF_NAME#v}" --notes-file notes.md
+          fi
       - uses: actions/setup-node@v7
         with:
           node-version: 22
