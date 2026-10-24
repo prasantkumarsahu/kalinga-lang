@@ -251,7 +251,8 @@ Extensions view):
 code --install-extension PrasantKumarSahu.kalinga-lang
 ```
 
-or package it yourself:
+(VSCodium, Cursor and other editors find it on [Open VSX](https://open-vsx.org/extension/PrasantKumarSahu/kalinga-lang)), or package
+it yourself:
 
 ```bash
 cd editors/vscode
@@ -335,6 +336,20 @@ Linux and macOS for every push (`.github/workflows/ci.yml`).
    secret `VSCE_PAT`: an Azure DevOps personal access token with the **Marketplace →
    Manage** scope for **All accessible organizations**. Without it the release is still
    published and the workflow warns that the Marketplace step was skipped.
+5. It also publishes the extension to Open VSX, with the repository secret `OVSX_PAT`: an
+   access token from open-vsx.org (sign in with GitHub and sign the publisher agreement
+   first). The `PrasantKumarSahu` namespace is created once, by hand:
+
+   ```bash
+   npm install -g ovsx
+   ```
+
+   ```bash
+   ovsx create-namespace PrasantKumarSahu -p <token>
+   ```
+
+   Without the secret, the Open VSX step is skipped with a warning, like the Marketplace
+   one.
 
 ---
 
