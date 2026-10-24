@@ -1,0 +1,39 @@
+class Product {
+    var name: String
+    var price: Int
+
+    init(name: String, price: Int) {
+        self.name = name
+        self.price = price
+    }
+
+    fn describe() -> String {
+        return name + " costs " + price
+    }
+}
+
+class Discounted : Product {
+    var percent: Int = 10
+
+    fn describe() -> String {
+        return super.describe() + " (" + percent + "% off)"
+    }
+}
+
+fn find(products: [Product], name: String) -> Product? {
+    for p in products {
+        if p.name == name { return p }
+    }
+    return null
+}
+
+fn main() {
+    let products = [new Product("pen", 2), new Discounted("bag", 30)]
+    products.remove(0)
+    print(products.length)
+    let p = find(products, "bag")
+    print(p?.describe() ?? "not found")
+    for p in products {
+        print(p)
+    }
+}

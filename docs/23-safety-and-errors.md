@@ -53,7 +53,7 @@ Common compile errors and what to do:
 | `` field `x` is private to `A` `` | Using a private member from outside | Add a public method |
 | `` `A` is abstract and cannot be created `` | Creating an abstract class | Create a subclass |
 | `` cannot tell what `T` is `` | Generic call without enough information | Write the type: `Stack<int>()` |
-| `` cannot change `n` inside a lambda `` | Assigning to a captured variable | Keep shared state in an object |
+| `` cannot use `n` here: it is changed by a lambda `` | A thread lambda using a `var` that a lambda changes | Share it with a `Shared<T>` |
 | `` `?` can only be used in a function that returns a `Result` `` | `?` in a function that cannot fail | Return a `Result`, or `match` the value |
 | `` `Thread.spawn` cannot use `p` here `` | An object used inside a thread | Copy the values the thread needs, or use a `Channel` |
 | `` `await` can only be used inside an `async fn` `` | `await` in a normal function | Make the function `async`, or use `Async.run(...)` |

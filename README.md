@@ -141,6 +141,14 @@ for any editor that speaks the Language Server Protocol. The VS Code extension i
 [editors/vscode](editors/vscode/README.md) uses it, and adds syntax highlighting, snippets,
 a Run button and `utkal.toml` hints.
 
+## AI assistants
+
+[`skills/kalinga`](skills/kalinga) is a skill that teaches AI coding assistants (such as
+Claude) to read and write Kalinga: the rules that differ from Swift, Kotlin and Rust, the
+standard library, the tools, and example programs, all checked by the test suite. To use
+it with Claude Code, copy the folder to `~/.claude/skills/kalinga` (for every project) or
+to `.claude/skills/kalinga` in a project.
+
 ## Language
 
 | Feature | Syntax |

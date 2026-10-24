@@ -2,3 +2,4 @@
 *.vsix
 node_modules/
 editors/vscode/dist/
+skills/kalinga/evals/results/
