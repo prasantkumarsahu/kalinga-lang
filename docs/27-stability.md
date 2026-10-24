@@ -27,8 +27,8 @@ Kalinga 0.5 is the first **stable** release. From 0.5 on:
 - The syntax and meaning of programs: everything in these docs and the
   [Language Reference](26-reference.md).
 - The built-in functions and methods, and the `Math`, `Random`, `Time`, `Thread` and
-  `Async` libraries, and the standard modules (`std/math2d`, `std/fs`, `std/game`): what is
-  there stays, with the same signatures.
+  `Async` libraries, and the standard modules (`std/math2d`, `std/fs`, `std/game`, and
+  `std/reactive` from 0.6): what is there stays, with the same signatures.
 - The `kalinga` and `utkal` commands and their options, and the `utkal.toml` format.
 
 ## What may still change
@@ -44,12 +44,13 @@ Kalinga 0.5 is the first **stable** release. From 0.5 on:
 - **Performance**: how fast programs run and how much memory they use can change; the aim
   is that it only improves.
 
-## Not in 0.5
+## Not in 0.6
 
 These are known gaps, so code does not depend on them working in a particular way yet:
-tuples, `?.` on optionals, `async` instance methods, objects shared across threads (only
-values cross threads), exceptions (use `Result`), bounds on type parameters, generic
-interfaces and enums, and inheritance with generic classes.
+`?.` on optionals, `async` instance methods, objects shared across threads (only values
+cross threads), exceptions (use `Result`), inheritance with generic classes (and generic
+classes implementing interfaces), type parameters on interface methods, and tuples in
+`match` patterns.
 
 ## Versions
 
