@@ -244,13 +244,17 @@ fn fix_updates_0_4_code_once() {
     let ws = workspace("fix");
     ok(&utkal(&ws, &["new", "old"]));
     let app = ws.join("old");
+    // This compiler's language version, `major.minor`.
+    let version = env!("CARGO_PKG_VERSION").rsplit_once('.').map(|(v, _)| v.to_string()).unwrap();
+    let current = format!("kalinga = \"{}\"", version);
     let manifest = std::fs::read_to_string(app.join("utkal.toml")).unwrap();
-    write(&app.join("utkal.toml"), &manifest.replace(&format!("kalinga = \"{}\"", "0.5"), "kalinga = \"0.4\""));
+    assert!(manifest.contains(&current), "{}", manifest);
+    write(&app.join("utkal.toml"), &manifest.replace(&current, "kalinga = \"0.4\""));
     write(&app.join("src/main.kl"), "fn main() {\n    print(\"a\")\n}\n");
     ok(&utkal(&app, &["fix"]));
     assert_eq!(std::fs::read_to_string(app.join("src/main.kl")).unwrap(), "fn main() {\n    println(\"a\")\n}\n");
-    assert!(std::fs::read_to_string(app.join("utkal.toml")).unwrap().contains("kalinga = \"0.5\""));
-    // Now 0.5 code: a `print` added afterwards is meant, and a second fix leaves it.
+    assert!(std::fs::read_to_string(app.join("utkal.toml")).unwrap().contains(&current));
+    // Now current code: a `print` added afterwards is meant, and a second fix leaves it.
     write(&app.join("src/main.kl"), "fn main() {\n    print(\"a\")\n}\n");
     ok(&utkal(&app, &["fix"]));
     assert_eq!(std::fs::read_to_string(app.join("src/main.kl")).unwrap(), "fn main() {\n    print(\"a\")\n}\n");

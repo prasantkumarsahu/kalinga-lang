@@ -58,6 +58,7 @@ Read these in order the first time. Each chapter builds on the previous one.
 | 21 | [Async](21-async.md) | `async fn`, `await`, `Async.all`, timers |
 | 22 | [Making a Game](22-making-a-game.md) | `std/game`: window, drawing, input, images, sounds |
 | 23 | [Safety and Errors](23-safety-and-errors.md) | Compile errors, runtime errors and what Kalinga guarantees |
+| 28 | [Reactive Values](28-reactive.md) | `std/reactive`: signals, computed values, effects, scopes |
 
 ## Reference
 
@@ -75,4 +76,5 @@ Read these in order the first time. Each chapter builds on the previous one.
 - Blocks marked `kalinga error` must be rejected by the compiler; the test suite checks that too.
 - Blocks marked `text` show program output or compiler messages.
 - Examples that need other files or downloads (`import`, `use rust`, `use crate`, packages,
-  `std/game`) are checked by the test suite's import, interop, package and game tests instead.
+  `std/game`, `std/reactive`) are checked by the test suite's import, interop, package, game
+  and UI tests instead.

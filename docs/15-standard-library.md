@@ -2,7 +2,8 @@
 
 Three built-in libraries are always available: `Math`, `Random` and `Time`. They are used
 like static methods: `Math.sqrt(2.0)`. Files and folders come with `import "std/fs"`
-([below](#files-and-folders-stdfs)).
+([below](#files-and-folders-stdfs)), and values that keep each other up to date with
+`import "std/reactive"` ([chapter 28](28-reactive.md)).
 
 ## Math
 

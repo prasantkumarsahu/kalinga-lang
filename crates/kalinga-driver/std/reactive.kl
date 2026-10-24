@@ -1,0 +1,291 @@
+// Reactive values. Use with `import "std/reactive"`.
+//
+// A `Signal` holds a value. A `Computed` is worked out from signals (and other computed
+// values) and an `Effect` runs code; both see which values they read, and when one of
+// those changes, a computed value is worked out again the next time it is read and an
+// effect runs again. There is no garbage collector: every signal, computed value and
+// effect is a node in one graph, and a `Scope` frees the nodes made inside it. Signals,
+// computed values, effects and scopes are small handles: copies of one are the same thing.
+
+use rust "reactive_glue.rs"
+
+extern fn reactive_disposed()
+
+/// One signal, computed value or effect in the graph.
+class ReactiveNode {
+    /// An effect's code (computed values work themselves out in `Computed.get`).
+    run: fn() = fn() {}
+    is_effect: bool = false
+    /// A computed value whose inputs changed since it was last worked out.
+    dirty: bool = true
+    alive: bool = true
+    /// The nodes this one read the last time it ran.
+    deps: [int] = []
+    /// The nodes that read this one.
+    subs: [int] = []
+    /// The scope that owns this node (-1: none).
+    scope: int = -1
+}
+
+/// The graph every reactive value is part of.
+class ReactiveGraph {
+    static var nodes: [ReactiveNode] = []
+    /// The computed value or effect running now, which records what it reads (-1: none).
+    static var current: int = -1
+    /// The scope new nodes belong to (-1: none).
+    static var scope: int = -1
+    static var next_scope: int = 0
+    /// Inside `batch`: effects wait until it ends.
+    static var batch_depth: int = 0
+    /// Effects to run, each once.
+    static var pending: [int] = []
+
+    static fn add(is_effect: bool) -> int {
+        let n = ReactiveNode()
+        n.is_effect = is_effect
+        n.scope = ReactiveGraph.scope
+        ReactiveGraph.nodes.push(n)
+        return len(ReactiveGraph.nodes) - 1
+    }
+
+    /// `id` is read: the node running now depends on it.
+    static fn read(id: int) {
+        ReactiveGraph.check(id)
+        let c = ReactiveGraph.current
+        if c < 0 || c == id {
+            return
+        }
+        let reader = ReactiveGraph.nodes[c]
+        if !reader.deps.contains(id) {
+            reader.deps.push(id)
+            ReactiveGraph.nodes[id].subs.push(c)
+        }
+    }
+
+    static fn check(id: int) {
+        if !ReactiveGraph.nodes[id].alive {
+            reactive_disposed()
+        }
+    }
+
+    /// `id`'s value changed: what depends on it is out of date.
+    static fn changed(id: int) {
+        ReactiveGraph.check(id)
+        for s in ReactiveGraph.nodes[id].subs {
+            ReactiveGraph.mark(s)
+        }
+        ReactiveGraph.flush()
+    }
+
+    static fn mark(id: int) {
+        let n = ReactiveGraph.nodes[id]
+        if !n.alive {
+            return
+        }
+        if n.is_effect {
+            if !ReactiveGraph.pending.contains(id) {
+                ReactiveGraph.pending.push(id)
+            }
+            return
+        }
+        if n.dirty {
+            return
+        }
+        n.dirty = true
+        for s in n.subs {
+            ReactiveGraph.mark(s)
+        }
+    }
+
+    /// Runs the waiting effects (unless inside `batch`).
+    static fn flush() {
+        if ReactiveGraph.batch_depth > 0 {
+            return
+        }
+        while len(ReactiveGraph.pending) > 0 {
+            let id = ReactiveGraph.pending[0]
+            ReactiveGraph.pending = ReactiveGraph.pending[1..]
+            ReactiveGraph.run_effect(id)
+        }
+    }
+
+    /// Starts running node `id`: forgets what it read last time. Returns the node that was
+    /// running before, to give to `leave`.
+    static fn enter(id: int) -> int {
+        let n = ReactiveGraph.nodes[id]
+        for d in n.deps {
+            let dep = ReactiveGraph.nodes[d]
+            dep.subs = dep.subs.filter(fn(s) => s != id)
+        }
+        n.deps = []
+        n.dirty = false
+        let before = ReactiveGraph.current
+        ReactiveGraph.current = id
+        return before
+    }
+
+    static fn leave(before: int) {
+        ReactiveGraph.current = before
+    }
+
+    static fn run_effect(id: int) {
+        let n = ReactiveGraph.nodes[id]
+        if !n.alive {
+            return
+        }
+        let before = ReactiveGraph.enter(id)
+        n.run()
+        ReactiveGraph.leave(before)
+    }
+
+    /// Frees node `id`: it leaves the graph and lets go of its code.
+    static fn dispose(id: int) {
+        let n = ReactiveGraph.nodes[id]
+        if !n.alive {
+            return
+        }
+        ReactiveGraph.enter(id)
+        ReactiveGraph.leave(ReactiveGraph.current)
+        for s in n.subs {
+            let sub = ReactiveGraph.nodes[s]
+            sub.deps = sub.deps.filter(fn(d) => d != id)
+        }
+        n.subs = []
+        n.alive = false
+        n.run = fn() {}
+    }
+}
+
+/// Where a signal keeps its value.
+class SignalCell<T> {
+    value: T
+
+    init(value: T) {
+        self.value = value
+    }
+}
+
+/// A value that others can depend on: `let count = signal(0)`. Copies of it are the same
+/// signal.
+struct Signal<T> {
+    cell: SignalCell<T>
+    id: int
+
+    /// The value; a computed value or effect reading it runs again when it changes.
+    fn get() -> T {
+        ReactiveGraph.read(self.id)
+        return self.cell.value
+    }
+
+    /// The value, without depending on it.
+    fn peek() -> T {
+        ReactiveGraph.check(self.id)
+        return self.cell.value
+    }
+
+    /// Changes the value; what depends on it is updated.
+    fn set(value: T) {
+        self.cell.value = value
+        ReactiveGraph.changed(self.id)
+    }
+
+    /// Changes the value to `f(value)`.
+    fn update(f: fn(T) -> T) {
+        self.set(f(self.peek()))
+    }
+}
+
+/// A new signal holding `value`.
+fn signal<T>(value: T) -> Signal<T> {
+    return Signal(SignalCell(value), ReactiveGraph.add(false))
+}
+
+/// Where a computed value keeps its function and its last value.
+class ComputedCell<T> {
+    // The function, in an array: a field of type `fn() -> T` would need a default.
+    f: [fn() -> T] = []
+    value: T
+}
+
+/// A value worked out from others: `let total = computed(fn() => a.get() + b.get())`.
+struct Computed<T> {
+    cell: ComputedCell<T>
+    id: int
+
+    /// The value: worked out when first read, and again only after something it read has
+    /// changed.
+    fn get() -> T {
+        ReactiveGraph.read(self.id)
+        if ReactiveGraph.nodes[self.id].dirty {
+            let f = self.cell.f[0]
+            let before = ReactiveGraph.enter(self.id)
+            let v = f()
+            ReactiveGraph.leave(before)
+            self.cell.value = v
+        }
+        return self.cell.value
+    }
+}
+
+/// A new computed value worked out by `f`.
+fn computed<T>(f: fn() -> T) -> Computed<T> {
+    let cell = ComputedCell<T>()
+    cell.f.push(f)
+    return Computed(cell, ReactiveGraph.add(false))
+}
+
+/// Code that runs whenever a value it read changes.
+struct Effect {
+    id: int
+
+    /// Stops the effect for good.
+    fn dispose() {
+        ReactiveGraph.dispose(self.id)
+    }
+}
+
+/// Runs `run` now, and again whenever a value it read changes:
+/// `effect(fn() { println("count is {count.get()}") })`.
+fn effect(run: fn()) -> Effect {
+    let id = ReactiveGraph.add(true)
+    ReactiveGraph.nodes[id].run = run
+    ReactiveGraph.run_effect(id)
+    return Effect(id)
+}
+
+/// Owns the signals, computed values and effects made inside `run`; `dispose` frees them all.
+struct Scope {
+    id: int
+
+    /// Runs `f`; the reactive values it makes belong to this scope.
+    fn run(f: fn()) {
+        let before = ReactiveGraph.scope
+        ReactiveGraph.scope = self.id
+        f()
+        ReactiveGraph.scope = before
+    }
+
+    /// Frees everything made in this scope: its effects stop, and using its signals or
+    /// computed values is an error.
+    fn dispose() {
+        for i in 0..len(ReactiveGraph.nodes) {
+            if ReactiveGraph.nodes[i].scope == self.id {
+                ReactiveGraph.dispose(i)
+            }
+        }
+    }
+}
+
+/// A new scope.
+fn scope() -> Scope {
+    ReactiveGraph.next_scope += 1
+    return Scope(ReactiveGraph.next_scope - 1)
+}
+
+/// Runs `f`, holding back effects until it ends; each then runs once.
+fn batch(f: fn()) {
+    ReactiveGraph.batch_depth += 1
+    f()
+    ReactiveGraph.batch_depth -= 1
+    ReactiveGraph.flush()
+}

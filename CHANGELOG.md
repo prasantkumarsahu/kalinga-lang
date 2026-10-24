@@ -1,10 +1,44 @@
 # Changelog
 
-## Unreleased
+## 0.6.0
+
+Everything here is new; code written for 0.5 compiles and does the same thing.
+
+### Language
+- **Bounds on type parameters**: `fn largest<T: Ord>(xs: [T]) -> T?`,
+  `fn total<T: Shape>(xs: [T])` (call `Shape`'s methods on a `T`), `<T: Show + Eq>`. A
+  bound is an interface, `Show` (printable), `Eq` (`==`) or `Ord` (`<`, `sort`). A type that
+  does not meet a bound is reported where it is used, and generic code that needs a bound
+  is told which one to add. See [Generics](docs/13-generics.md#bounds).
+- **Generic interfaces**: `interface Store<T>`, `class Counter : Store<int>`, values of type
+  `Store<int>`, `interface Cache<T> : Store<T>`, and bounds such as `S: Store<int>`. See
+  [Interfaces](docs/11-interfaces.md#generic-interfaces).
+- **Generic enums**: `enum Tree<T> { Leaf, Node(value: T, left: Tree<T>, right: Tree<T>) }`;
+  variants learn `T` from their values or the expected type. See
+  [Enums](docs/08-enums-and-match.md#generic-enums).
+- **Lambdas can change outside variables**: a `var` that a lambda changes is shared with
+  it (`var count = 0; let inc = fn() { count += 1 }`), so counters and callbacks work.
+  Variables no lambda changes are still copied, as before. See
+  [Lambdas](docs/12-lambdas.md#lambdas-that-change-a-variable).
+- **Tuples**: `(int, str)`, `return (lo, hi)`, `let (lo, hi) = min_max(xs)`,
+  `for (name, age) in people`, `t.0`. See
+  [Functions](docs/04-functions.md#returning-several-values-tuples).
+- **`if let` as a value**: `let n = if let x = opt { x * 2 } else { 0 }`.
+
+### Standard library
+- **`std/reactive`**: `signal`, `computed`, `effect`, `batch` and `scope` keep values that
+  depend on each other up to date, with no garbage collector (a scope frees what was made
+  in it). See [Reactive Values](docs/28-reactive.md).
 
 ### Editor
+- Hover shows bounds; completion and signature help work on bounded type parameters and
+  on generic interface values, with their type arguments filled in.
 - On Open VSX the extension is `kalinga-lang.kalinga-lang`, in the `kalinga-lang`
-  namespace ([page](https://open-vsx.org/extension/kalinga-lang/kalinga-lang)); 0.5.3's release could not publish it there.
+  namespace ([page](https://open-vsx.org/extension/kalinga-lang/kalinga-lang)).
+
+### Tooling
+- The release workflow can be re-run after a failed publish step ("Re-run failed jobs"):
+  an existing release gets its files and notes replaced.
 
 ## 0.5.3
 

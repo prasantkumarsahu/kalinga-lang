@@ -399,7 +399,7 @@ fn import_as_namespaces() {
 #[test]
 fn package_and_std_import_paths() {
     let items = complete("import \"|");
-    for m in ["std/game", "std/math2d", "std/fs"] {
+    for m in ["std/game", "std/math2d", "std/fs", "std/reactive"] {
         assert!(has(&items, m), "{}", m);
     }
 }

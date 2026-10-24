@@ -1,0 +1,76 @@
+import "std/reactive"
+
+struct Todo {
+    title: str
+    done: bool
+}
+
+fn main() {
+    // A diamond: two computed values over one signal, and an effect over both that runs
+    // once per change.
+    let n = signal(2)
+    let square = computed(fn() => n.get() * n.get())
+    let half = computed(fn() => n.get() / 2)
+    var runs = 0
+    effect(fn() {
+        runs += 1
+        println("n={n.peek()} square={square.get()} half={half.get()}")
+    })
+    n.set(4)
+    n.update(fn(x) => x + 2)
+    println("effect ran", runs, "times")
+
+    // A computed value is only worked out when read, and only again after a change.
+    var work = 0
+    let slow = computed(fn() -> int {
+        work += 1
+        return n.get() + 1
+    })
+    println(slow.get(), slow.get(), work)
+    n.set(10)
+    println(work)
+    println(slow.get(), work)
+
+    // Batches: the effect sees only the final values.
+    let first = signal("Asha")
+    let last = signal("Rao")
+    let full = computed(fn() => "{first.get()} {last.get()}")
+    effect(fn() {
+        println("name:", full.get())
+    })
+    batch(fn() {
+        first.set("Ravi")
+        last.set("Das")
+    })
+
+    // Signals of any type; an effect that only reads some of them.
+    let todos = signal([Todo("write", false), Todo("test", true)])
+    let left = computed(fn() => todos.get().filter(fn(t) => !t.done).len())
+    effect(fn() {
+        println("todo left:", left.get())
+    })
+    todos.update(fn(ts) -> [Todo] {
+        var out = ts
+        out.push(Todo("ship", false))
+        return out
+    })
+
+    // Disposing: an effect stops, and a scope frees everything made in it.
+    let ticks = signal(0)
+    let e = effect(fn() {
+        println("tick", ticks.get())
+    })
+    ticks.set(1)
+    e.dispose()
+    ticks.set(2)
+    let s = scope()
+    s.run(fn() {
+        effect(fn() {
+            println("in scope:", ticks.get())
+        })
+    })
+    ticks.set(3)
+    s.dispose()
+    ticks.set(4)
+    println("done")
+}

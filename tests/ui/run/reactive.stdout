@@ -1,0 +1,17 @@
+n=2 square=4 half=1
+n=4 square=16 half=2
+n=6 square=36 half=3
+effect ran 3 times
+7 7 1
+n=10 square=100 half=5
+1
+11 2
+name: Asha Rao
+name: Ravi Das
+todo left: 1
+todo left: 2
+tick 0
+tick 1
+in scope: 2
+in scope: 3
+done
