@@ -1,0 +1,12 @@
+import "std/reactive"
+
+fn main() {
+    let s = scope()
+    var count = signal(0)
+    s.run(fn() {
+        count = signal(1)
+    })
+    println(count.get())
+    s.dispose()
+    println(count.get())
+}

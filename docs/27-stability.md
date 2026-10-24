@@ -58,4 +58,4 @@ its code is written for (`kalinga = "0.5"`); `utkal new` and `utkal fix` fill it
 
 ---
 
-Previous: [26. Language Reference](26-reference.md)
+Previous: [26. Language Reference](26-reference.md) · Next: [28. Reactive Values](28-reactive.md)
