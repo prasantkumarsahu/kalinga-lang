@@ -109,3 +109,12 @@ fn strings_keep_their_text() {
         "fn main() {\n    println(\"a  {x+1}  \\n\", \"{{}}\")\n}\n",
     );
 }
+
+#[test]
+fn interpolated_strings_on_reindented_lines() {
+    // Moving a line moves the code inside `{...}`; that must not count as a change.
+    check(
+        "fn main() {\nlet a = 1\n    f(fn() {\n    println(\"Hello, {a} {g(a)}\")\n    })\n}\n",
+        "fn main() {\n    let a = 1\n    f(fn() {\n        println(\"Hello, {a} {g(a)}\")\n    })\n}\n",
+    );
+}

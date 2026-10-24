@@ -23,7 +23,7 @@ mod spacing;
 
 use kalinga_syntax::error::{Diagnostic, Result, Span};
 use kalinga_syntax::lexer::{self, Piece};
-use kalinga_syntax::token::Tok;
+use kalinga_syntax::token::{StrPart, Tok};
 
 use spacing::{Item, render};
 
@@ -44,9 +44,21 @@ pub fn format(source: &str) -> Result<String> {
 }
 
 /// The tokens that make up the program: statement separators (newlines and `;`) do not
-/// count, since the formatter moves them.
+/// count, since the formatter moves them, and neither does where the code inside a
+/// string's `{...}` sits, since re-indenting a line moves it.
 fn tokens(source: &str) -> Result<Vec<Tok>> {
-    Ok(lexer::lex(source, 0)?.into_iter().map(|t| t.tok).filter(|t| !matches!(t, Tok::Newline | Tok::Semi)).collect())
+    let without_position = |p: StrPart| match p {
+        StrPart::Code(code, _) => StrPart::Code(code, Span::default()),
+        lit => lit,
+    };
+    Ok(lexer::lex(source, 0)?
+        .into_iter()
+        .map(|t| match t.tok {
+            Tok::InterpStr(parts) => Tok::InterpStr(parts.into_iter().map(without_position).collect()),
+            other => other,
+        })
+        .filter(|t| !matches!(t, Tok::Newline | Tok::Semi))
+        .collect())
 }
 
 /// One output line before indentation: its tokens and comments.
