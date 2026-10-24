@@ -268,11 +268,13 @@ fn run(args: &[&str]) -> CliResult<i32> {
 }
 
 /// Updates the project's code for this Kalinga version, and its `kalinga = "..."` line.
+/// The code's version is the one that line said before, so fixing twice changes nothing.
 fn fix() -> CliResult<i32> {
     let dir = project_dir()?;
+    let from = driver::fix::project_version(&dir);
     for folder in ["src", "tests"] {
         if dir.join(folder).is_dir() {
-            let report = driver::fix::fix_path(&dir.join(folder))?;
+            let report = driver::fix::fix_path(&dir.join(folder), from)?;
             for (file, n) in &report.changed {
                 println!("fixed {} place(s) in {}", n, file.display());
             }

@@ -238,3 +238,20 @@ fn rust_dependencies_from_the_manifest() {
     );
     assert_eq!(ok(&utkal(&app, &["run"])).trim(), "true");
 }
+
+#[test]
+fn fix_updates_0_4_code_once() {
+    let ws = workspace("fix");
+    ok(&utkal(&ws, &["new", "old"]));
+    let app = ws.join("old");
+    let manifest = std::fs::read_to_string(app.join("utkal.toml")).unwrap();
+    write(&app.join("utkal.toml"), &manifest.replace(&format!("kalinga = \"{}\"", "0.5"), "kalinga = \"0.4\""));
+    write(&app.join("src/main.kl"), "fn main() {\n    print(\"a\")\n}\n");
+    ok(&utkal(&app, &["fix"]));
+    assert_eq!(std::fs::read_to_string(app.join("src/main.kl")).unwrap(), "fn main() {\n    println(\"a\")\n}\n");
+    assert!(std::fs::read_to_string(app.join("utkal.toml")).unwrap().contains("kalinga = \"0.5\""));
+    // Now 0.5 code: a `print` added afterwards is meant, and a second fix leaves it.
+    write(&app.join("src/main.kl"), "fn main() {\n    print(\"a\")\n}\n");
+    ok(&utkal(&app, &["fix"]));
+    assert_eq!(std::fs::read_to_string(app.join("src/main.kl")).unwrap(), "fn main() {\n    print(\"a\")\n}\n");
+}

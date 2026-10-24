@@ -24,6 +24,8 @@ pub const LOCK: &str = "utkal.lock";
 pub struct Manifest {
     pub name: String,
     pub version: String,
+    /// `kalinga = "0.5"`: the language version the code is written for.
+    pub kalinga: Option<String>,
     pub deps: Vec<Dep>,
     pub rust_deps: Vec<CrateDep>,
 }
@@ -109,6 +111,7 @@ pub fn parse_manifest(text: &str) -> Result<Manifest> {
         )));
     }
     let version = package.get("version").and_then(|v| v.as_str()).unwrap_or("0.1.0").to_string();
+    let kalinga = package.get("kalinga").and_then(|v| v.as_str()).map(str::to_string);
 
     let mut deps = vec![];
     if let Some(table) = doc.get("dependencies") {
@@ -182,7 +185,7 @@ pub fn parse_manifest(text: &str) -> Result<Manifest> {
             rust_deps.push(CrateDep { name: cname.clone(), version, features, pos: Span::default() });
         }
     }
-    Ok(Manifest { name, version, deps, rust_deps })
+    Ok(Manifest { name, version, kalinga, deps, rust_deps })
 }
 
 pub fn valid_package_name(n: &str) -> bool {

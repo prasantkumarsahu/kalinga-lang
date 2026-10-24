@@ -12,7 +12,7 @@
 | `kalinga check <file.kl>` | Report errors only; does not invoke `rustc`. `fn main()` is optional here, so files that are only imported can be checked too. |
 | `kalinga -v` (also `-version`, `--version`) | Print the installed version, e.g. `kalinga 0.5.0`. |
 | `kalinga check <name.kl> --stdin` | Check source read from stdin, reporting errors under `<name.kl>`. |
-| `kalinga fix <file.kl or folder>...` | Update code written for an earlier version of Kalinga, in place. |
+| `kalinga fix [--from <version>] <file.kl or folder>...` | Update code written for an earlier version of Kalinga, in place. The code's version comes from the nearest `utkal.toml` (`kalinga = "0.4"`) or `--from 0.4`; changes that only suit older code are skipped when it is unknown, with a note saying so. |
 | `kalinga fmt [--check] <file.kl or folder>...` | Lay out code in the standard style, in place (see [Formatting](#formatting)). With `--check`, list the files that are not formatted and fail, changing nothing. |
 | `kalinga lsp` | Run the language server on stdin / stdout; editors start it (see below). |
 

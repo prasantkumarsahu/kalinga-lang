@@ -142,3 +142,22 @@ fn fmt_formats_files_and_check_reports_them() {
     let again = std::process::Command::new(kalinga).args(["fmt", "--check"]).arg(&dir).output().expect("run");
     assert!(again.status.success());
 }
+
+#[test]
+fn fix_leaves_print_alone_unless_the_code_is_from_0_4() {
+    let dir = std::env::temp_dir().join("kalinga-cli-fix");
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).expect("dir");
+    let file = dir.join("old.kl");
+    let source = "fn main() {\n    print(\"hi\")\n}\n";
+    std::fs::write(&file, source).expect("write");
+    let kalinga = env!("CARGO_BIN_EXE_kalinga");
+    // Outside a project the code's version is unknown: `print` may be meant.
+    let out = std::process::Command::new(kalinga).arg("fix").arg(&file).output().expect("run");
+    assert!(out.status.success());
+    assert!(String::from_utf8_lossy(&out.stdout).contains("left 1 `print(...)` call(s)"));
+    assert_eq!(std::fs::read_to_string(&file).expect("read"), source);
+    let out = std::process::Command::new(kalinga).args(["fix", "--from", "0.4"]).arg(&file).output().expect("run");
+    assert!(out.status.success());
+    assert_eq!(std::fs::read_to_string(&file).expect("read"), "fn main() {\n    println(\"hi\")\n}\n");
+}
