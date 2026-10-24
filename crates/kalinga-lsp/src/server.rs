@@ -25,7 +25,8 @@ pub fn capabilities() -> ServerCapabilities {
         text_document_sync: Some(TextDocumentSyncCapability::Kind(TextDocumentSyncKind::FULL)),
         hover_provider: Some(HoverProviderCapability::Simple(true)),
         completion_provider: Some(CompletionOptions {
-            trigger_characters: Some(vec![".".into()]),
+            // `"` and `/` open the list of paths in `import "..."`.
+            trigger_characters: Some(vec![".".into(), "\"".into(), "/".into()]),
             ..CompletionOptions::default()
         }),
         signature_help_provider: Some(SignatureHelpOptions {

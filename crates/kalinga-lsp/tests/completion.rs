@@ -405,6 +405,29 @@ fn package_and_std_import_paths() {
 }
 
 #[test]
+fn import_paths_offer_the_kl_files_next_to_this_one() {
+    let dir = temp_dir("import-files");
+    std::fs::create_dir_all(dir.join("ui")).expect("dir");
+    std::fs::create_dir_all(dir.join("target")).expect("dir");
+    for f in ["domain.kl", "storage.kl", "ui/screens.kl", "target/old.kl", "notes.txt"] {
+        std::fs::write(dir.join(f), "").expect("write");
+    }
+    let items = complete_in(&dir, "import \"|");
+    for f in ["domain.kl", "storage.kl", "ui/screens.kl", "std/reactive"] {
+        assert!(has(&items, f), "{} in {:?}", f, labels(&items));
+    }
+    assert!(!has(&items, "main.kl"), "not the file itself");
+    assert!(!has(&items, "target/old.kl"), "not build output");
+    assert!(!has(&items, "notes.txt"));
+    // The item replaces what is typed after the quote, so `ui/sc` still matches.
+    let items = complete_in(&dir, "import \"ui/sc|");
+    let it = find(&items, "ui/screens.kl");
+    let Some(lsp_types::CompletionTextEdit::Edit(edit)) = &it.text_edit else { panic!("a text edit") };
+    assert_eq!((edit.range.start.character, edit.range.end.character), (8, 13));
+    assert_eq!(edit.new_text, "ui/screens.kl");
+}
+
+#[test]
 fn class_body_offers_override_stubs_for_interface_methods() {
     let items = complete(
         "interface Game {\n    fn update(dt: float)\n    fn draw()\n}\nclass G : Game {\n    override fn draw() {}\n    |\n}\n",
