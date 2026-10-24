@@ -238,15 +238,26 @@ Type the prefix and press Tab:
 
 ### Installing
 
+Install the compiler (a release download, or from the repository):
+
 ```bash
 cargo install --path .
 ```
+
+Then the extension, from the VS Code Marketplace (search for **Kalinga Language** in the
+Extensions view):
+
+```bash
+code --install-extension PrasantKumarSahu.kalinga-lang
+```
+
+or package it yourself:
 
 ```bash
 cd editors/vscode
 npm install
 npm run package
-code --install-extension kalinga-lang-0.6.0.vsix
+code --install-extension kalinga-lang-0.6.2.vsix
 ```
 
 ### Settings
@@ -263,7 +274,7 @@ every file, such as **Material Icon Theme**, need to be told about it:
 
 1. Copy the extension's icon to a folder of your own under VS Code's extensions folder,
    for example (Windows) from
-   `%USERPROFILE%\.vscode\extensions\kalinga.kalinga-lang-<version>\icons\kalinga-dark.svg`
+   `%USERPROFILE%\.vscode\extensions\prasantkumarsahu.kalinga-lang-<version>\icons\kalinga-dark.svg`
    to `%USERPROFILE%\.vscode\extensions\icons\kalinga.svg` (`kalinga-light.svg` suits
    light themes).
 2. Add to your settings (`settings.json`):
@@ -318,6 +329,12 @@ Linux and macOS for every push (`.github/workflows/ci.yml`).
    the CHANGELOG section as its notes and a `SHA256SUMS` file. It refuses a tag that does
    not match `Cargo.toml`. Running the workflow by hand (Actions → Release → Run workflow),
    or a pull request that changes it, builds everything without publishing.
+4. The same workflow publishes the extension to the VS Code Marketplace (publisher
+   `PrasantKumarSahu`), unless that version is there already, so bump `version` in
+   `editors/vscode/package.json` when the extension changes. It needs the repository
+   secret `VSCE_PAT`: an Azure DevOps personal access token with the **Marketplace →
+   Manage** scope for **All accessible organizations**. Without it the release is still
+   published and the workflow warns that the Marketplace step was skipped.
 
 ---
 
