@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## 0.6.1
+
+Fixes only: no new syntax, nothing that changes what working code does.
 
 ### Fixes
 - `kalinga fmt` no longer refuses a file when it re-indents a line holding an interpolated
