@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.5.1
+
+Fixes only: no new syntax, nothing that changes what working code does.
+
+### Fixes
+- **`kalinga fix` only rewrites code older than the rule.** The 0.4 → 0.5 rule
+  (`print(...)` → `println(...)`) runs when the code is from 0.4: `kalinga fix --from 0.4`,
+  or a project whose `utkal.toml` says `kalinga = "0.4"` (or has no `kalinga` field).
+  Otherwise `print` calls are left alone and `kalinga fix` says how many; running `fix`
+  twice no longer changes anything. `utkal fix` reads the version before updating it.
+- **"did you mean ...?"** for misspelt variables, functions, types, fields, methods
+  (inherited and built-in ones too), static methods, enum variants, constants and library
+  functions.
+- A reserved type name such as `Box` now says why it is reserved.
+- **The language server no longer crashes on half-written code**: signature help and
+  completion failed when a non-ASCII character (such as an emoji) came before a name. A
+  request that still fails is answered with an error instead of stopping the server.
+  A new test breaks every example and library file thousands of ways and checks that the
+  compiler, the formatter and the language server never crash.
+
+### Editor (VS Code extension 0.6.1)
+- The extension is bundled into one file: a 13-file package (was 328) that loads faster.
+- How to get the `.kl` icon with icon themes such as Material Icon Theme (see the
+  extension's README or [Tooling](docs/24-tooling.md)).
+
 ## 0.5.0 — stable
 
 From this release on, code that compiles keeps compiling in 0.x: any unavoidable change

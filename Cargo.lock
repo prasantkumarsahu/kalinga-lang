@@ -177,7 +177,7 @@ checksum = "8f42a60cbdf9a97f5d2305f08a87dc4e09308d1276d28c869c684d7777685682"
 
 [[package]]
 name = "kalinga-codegen"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "kalinga-sema",
  "kalinga-syntax",
@@ -185,7 +185,7 @@ dependencies = [
 
 [[package]]
 name = "kalinga-driver"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "kalinga-codegen",
  "kalinga-fmt",
@@ -196,14 +196,14 @@ dependencies = [
 
 [[package]]
 name = "kalinga-fmt"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "kalinga-syntax",
 ]
 
 [[package]]
 name = "kalinga-lang"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "kalinga-driver",
  "kalinga-fmt",
@@ -216,7 +216,7 @@ dependencies = [
 
 [[package]]
 name = "kalinga-lsp"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "kalinga-driver",
  "kalinga-fmt",
@@ -231,7 +231,7 @@ dependencies = [
 
 [[package]]
 name = "kalinga-project"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "kalinga-syntax",
  "toml",
@@ -239,14 +239,14 @@ dependencies = [
 
 [[package]]
 name = "kalinga-sema"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "kalinga-syntax",
 ]
 
 [[package]]
 name = "kalinga-syntax"
-version = "0.5.0"
+version = "0.5.1"
 
 [[package]]
 name = "litemap"
