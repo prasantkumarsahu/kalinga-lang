@@ -2,12 +2,15 @@ name: Release
 
 # Pushing a tag `vX.Y.Z` builds `kalinga` and `utkal` for Windows, Linux and macOS and the
 # VS Code extension, and publishes them as a GitHub release whose notes are the tag's
-# CHANGELOG section. Running it by hand (Actions → Release → Run workflow) on any branch
-# builds everything as artifacts and publishes nothing.
+# CHANGELOG section. Running it by hand (Actions → Release → Run workflow) on any branch,
+# or a pull request that changes this file, builds everything as artifacts and publishes
+# nothing.
 
 on:
   push:
     tags: ["v*"]
+  pull_request:
+    paths: [".github/workflows/release.yml"]
   workflow_dispatch:
 
 env:

@@ -297,8 +297,8 @@ Linux and macOS for every push (`.github/workflows/ci.yml`).
 3. `.github/workflows/release.yml` builds `kalinga` and `utkal` for Windows, Linux and macOS
    (Intel and Apple silicon) and the `.vsix`, and publishes them as a GitHub release with
    the CHANGELOG section as its notes and a `SHA256SUMS` file. It refuses a tag that does
-   not match `Cargo.toml`. Running the workflow by hand (Actions → Release → Run workflow)
-   builds everything without publishing.
+   not match `Cargo.toml`. Running the workflow by hand (Actions → Release → Run workflow),
+   or a pull request that changes it, builds everything without publishing.
 
 ---
 
