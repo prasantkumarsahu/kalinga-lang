@@ -10,7 +10,7 @@
 | `kalinga build <file.kl> -o <name>` | Compile to the given output path. |
 | `kalinga emit <file.kl>` | Print the generated Rust code. |
 | `kalinga check <file.kl>` | Report errors only; does not invoke `rustc`. `fn main()` is optional here, so files that are only imported can be checked too. |
-| `kalinga -v` (also `-version`, `--version`) | Print the installed version, e.g. `kalinga 0.4.0`. |
+| `kalinga -v` (also `-version`, `--version`) | Print the installed version, e.g. `kalinga 0.5.0`. |
 | `kalinga check <name.kl> --stdin` | Check source read from stdin, reporting errors under `<name.kl>`. |
 | `kalinga fix <file.kl or folder>...` | Update code written for an earlier version of Kalinga, in place. |
 | `kalinga fmt [--check] <file.kl or folder>...` | Lay out code in the standard style, in place (see [Formatting](#formatting)). With `--check`, list the files that are not formatted and fail, changing nothing. |
@@ -279,6 +279,26 @@ This runs:
 `cargo test -- --ignored` also runs the tests that download crates or open a window. The
 same checks, plus `cargo fmt --check` and `cargo clippy -- -D warnings`, run on Windows,
 Linux and macOS for every push (`.github/workflows/ci.yml`).
+
+## Making a release
+
+1. Set the version in `Cargo.toml` (`[workspace.package] version`) and write its section in
+   `CHANGELOG.md` (`## X.Y.Z — name`).
+2. After that change is merged into `main`, tag it and push the tag:
+
+   ```bash
+   git tag -a vX.Y.Z -m "Kalinga X.Y.Z"
+   ```
+
+   ```bash
+   git push origin vX.Y.Z
+   ```
+
+3. `.github/workflows/release.yml` builds `kalinga` and `utkal` for Windows, Linux and macOS
+   (Intel and Apple silicon) and the `.vsix`, and publishes them as a GitHub release with
+   the CHANGELOG section as its notes and a `SHA256SUMS` file. It refuses a tag that does
+   not match `Cargo.toml`. Running the workflow by hand (Actions → Release → Run workflow),
+   or a pull request that changes it, builds everything without publishing.
 
 ---
 

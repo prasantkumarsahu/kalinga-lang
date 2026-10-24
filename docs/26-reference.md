@@ -316,4 +316,4 @@ tuples, exceptions (`try`/`catch`; use `Result`).
 
 ---
 
-Previous: [25. How It Works](25-how-it-works.md)
+Previous: [25. How It Works](25-how-it-works.md) · Next: [27. Stability](27-stability.md)

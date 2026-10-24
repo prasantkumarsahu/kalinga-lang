@@ -18,7 +18,7 @@
           "type": "string",
           "description": "This package's version, e.g. \"0.1.0\". Tag releases as `v0.1.0` so others can ask for versions."
         },
-        "kalinga": { "type": "string", "description": "The Kalinga version the package is written for, e.g. \"0.4\"." }
+        "kalinga": { "type": "string", "description": "The Kalinga version the package is written for, e.g. \"0.5\"." }
       },
       "additionalProperties": false
     },

@@ -23,8 +23,9 @@ Rust compiler as well.
 
 ## Compile errors
 
-The compiler stops at the first error and shows the file, line, column and the offending
-line:
+The compiler reports every problem it finds (up to 20 at a time), each with the file, line,
+column and the offending line. A mistake in one function does not hide those in another,
+and the parser carries on after a broken declaration:
 
 ```text
 shop.kl:12:21: error: expected `int`, found `str`
@@ -57,6 +58,10 @@ Common compile errors and what to do:
 | `` `Thread.spawn` cannot use `p` here `` | An object used inside a thread | Copy the values the thread needs, or use a `Channel` |
 | `` `await` can only be used inside an `async fn` `` | `await` in a normal function | Make the function `async`, or use `Async.run(...)` |
 | `` `Vec2` is defined in both `a` and `b` `` | Two imported packages have the name | `import "a" as a` and write `a.Vec2` |
+| `` `N` is a constant and cannot be changed `` | Assigning to a `const` | Use a `var`, or a `static var` member |
+| `an `if` used as a value needs an `else` branch` | `let x = if c { 1 }` | Add `else { ... }` |
+| `` `f` has no parameter `x` `` / `named arguments follow the parameter order` | A misspelt or reordered named argument | Use the parameter's name, in order |
+| `constants are written `const NAME: Type = value`` | 0.4's `static NAME: T = v` | `kalinga fix` rewrites it |
 
 ## Runtime errors
 

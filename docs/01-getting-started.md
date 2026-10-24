@@ -6,12 +6,19 @@ Kalinga compiles your program to Rust and then uses the Rust compiler to make a 
 executable, so you need a Rust toolchain:
 
 1. Install Rust from <https://rustup.rs>. This gives you `cargo` and `rustc`.
-2. From the root of the `kalinga-lang` repository, install the Kalinga compiler and the
-   `utkal` package manager:
+2. Install the Kalinga compiler and the `utkal` package manager. Either:
 
-   ```bash
-   cargo install --path .
-   ```
+   - **Download a release**: from the repository's
+     [Releases](https://github.com/prasantkumarsahu/kalinga-lang/releases) page, take the
+     archive for your system (`kalinga-0.5.0-x86_64-pc-windows-msvc.zip`,
+     `…-x86_64-unknown-linux-gnu.tar.gz`, `…-aarch64-apple-darwin.tar.gz` or
+     `…-x86_64-apple-darwin.tar.gz`), unpack it and put the folder with `kalinga` and `utkal`
+     on your PATH.
+   - **Or build them** from the root of the `kalinga-lang` repository:
+
+     ```bash
+     cargo install --path .
+     ```
 
 3. Check that it works:
 
@@ -19,7 +26,7 @@ executable, so you need a Rust toolchain:
    kalinga -v
    ```
 
-   It prints the installed version, for example `kalinga 0.4.0`. Run `kalinga` on its own
+   It prints the installed version, for example `kalinga 0.5.0`. Run `kalinga` on its own
    to see the list of commands.
 
 ## Your first program

@@ -35,7 +35,7 @@ they import it) and `tests/greet.kl`.
 [package]
 name = "space-game"
 version = "0.1.0"
-kalinga = "0.4"
+kalinga = "0.5"
 
 [dependencies]
 mathx = { git = "https://github.com/someone/mathx", version = "0.4" }
