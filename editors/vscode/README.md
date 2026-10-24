@@ -78,6 +78,25 @@ compiler itself, so what the editor shows is exactly what the compiler sees:
 
 Running a program needs `rustc` on PATH, because Kalinga compiles through Rust.
 
+## File icon
+
+`.kl` files get a 24-spoke wheel (after the Ashoka Chakra) with file icon themes that use a
+language's own icon, such as Seti, VS Code's default. Themes that draw their own icon for
+every file, such as **Material Icon Theme**, need to be told about it:
+
+1. Copy the extension's icon to a folder of your own under VS Code's extensions folder,
+   for example (Windows) from
+   `%USERPROFILE%\.vscode\extensions\kalinga.kalinga-lang-<version>\icons\kalinga-dark.svg`
+   to `%USERPROFILE%\.vscode\extensions\icons\kalinga.svg` (`kalinga-light.svg` suits
+   light themes).
+2. Add to your settings (`settings.json`):
+
+   ```json
+   "material-icon-theme.files.associations": { "*.kl": "../../icons/kalinga" }
+   ```
+
+   The path is relative to the theme's own folder, without `.svg`.
+
 ## Development
 
 The extension only starts the language server and adds commands; the language features are
