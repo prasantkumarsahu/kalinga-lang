@@ -66,6 +66,7 @@ impl Model {
             functions: HashMap::new(),
             extern_fns: HashMap::new(),
             fn_tparams: HashMap::new(),
+            fn_bounds: HashMap::new(),
             async_fns: HashSet::new(),
             enums: HashMap::new(),
             enum_order: vec![],
@@ -286,6 +287,7 @@ impl Model {
             let sig = signature(&f.params, &f.ret, &|t| resolve_type(t, &self.names, &f.tparams))?;
             self.functions.insert(f.name.clone(), sig);
             self.fn_tparams.insert(f.name.clone(), f.tparams.clone());
+            self.fn_bounds.insert(f.name.clone(), resolve_bounds(&f.bounds, &self.names)?);
             if f.is_async {
                 self.async_fns.insert(f.name.clone());
             }
@@ -528,6 +530,37 @@ fn type_names(prog: &Program) -> Result<TypeNames> {
     })
 }
 
+/// The bounds written on type parameters: interfaces, or `Show`, `Eq`, `Ord`.
+fn resolve_bounds(decls: &[BoundDecl], names: &TypeNames) -> Result<Bounds> {
+    let mut out = Bounds::new();
+    for d in decls {
+        let mut bounds = vec![];
+        for (name, pos) in &d.names {
+            let b = match name.as_str() {
+                "Show" => Bound::Show,
+                "Eq" => Bound::Eq,
+                "Ord" => Bound::Ord,
+                _ if names.ifaces.contains(name) => Bound::Interface(name.clone()),
+                _ => {
+                    let what = if names.contains(name) {
+                        format!("`{}` is not an interface; a bound is an interface, `Show`, `Eq` or `Ord`", name)
+                    } else {
+                        format!("unknown bound `{}`: a bound is an interface, `Show`, `Eq` or `Ord`", name)
+                    };
+                    let known = names.ifaces.iter().map(String::as_str).chain(["Show", "Eq", "Ord"]);
+                    return crate::suggest::unknown(what, *pos, name, known);
+                }
+            };
+            if bounds.contains(&b) {
+                return err(format!("`{}` is listed twice for `{}`", name, d.param), *pos);
+            }
+            bounds.push(b);
+        }
+        out.insert(d.param.clone(), bounds);
+    }
+    Ok(out)
+}
+
 fn struct_info(st: &StructDecl, names: &TypeNames) -> Result<StructInfo> {
     let resolve = |t: &TypeExpr| resolve_type(t, names, &st.tparams);
     let mut fields: Vec<(String, Type)> = Vec::new();
@@ -548,6 +581,7 @@ fn struct_info(st: &StructDecl, names: &TypeNames) -> Result<StructInfo> {
     Ok(StructInfo {
         decl: st.clone(),
         tparams: st.tparams.clone(),
+        bounds: resolve_bounds(&st.bounds, names)?,
         fields,
         private_fields: st.fields.iter().filter(|f| f.is_private).map(|f| f.name.clone()).collect(),
         methods,
@@ -654,6 +688,7 @@ fn class_info(c: &ClassDecl, names: &TypeNames) -> Result<ClassInfo> {
         init,
         children: vec![],
         tparams: c.tparams.clone(),
+        bounds: resolve_bounds(&c.bounds, names)?,
         static_values,
     })
 }

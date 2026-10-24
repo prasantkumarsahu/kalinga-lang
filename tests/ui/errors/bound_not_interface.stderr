@@ -1,0 +1,3 @@
+tests/ui/errors/bound_not_interface.kl:3:9: error: `Player` is not an interface; a bound is an interface, `Show`, `Eq` or `Ord`
+3 | fn f<T: Player>(x: T) {}
+  |         ^^^^^^

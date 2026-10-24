@@ -150,6 +150,7 @@ impl Gen<'_> {
                 format!("({}).map(|__v| {})", code, self.convert("__v".into(), a, b))
             }
             (f, Type::Optional(inner)) => format!("Some({})", self.convert(code, f, inner)),
+            (Type::Param(_), Type::Interface(i)) => format!("({}).__to_{}()", code, i),
             (Type::Class(_) | Type::Interface(_), Type::Class(_) | Type::Interface(_)) => {
                 format!("({} as {})", code, self.rty(to))
             }

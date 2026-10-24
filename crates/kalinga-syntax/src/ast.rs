@@ -23,11 +23,21 @@ pub struct Param {
     pub pos: Span,
 }
 
+/// The bounds of one type parameter: `T: Show + Shape`.
+#[derive(Debug, Clone)]
+pub struct BoundDecl {
+    pub param: String,
+    /// Interface names, or `Show`, `Eq`, `Ord`.
+    pub names: Vec<(String, Span)>,
+}
+
 #[derive(Debug, Clone)]
 pub struct FnDecl {
     pub name: String,
     /// Type parameters: `fn first<T>(...)`.
     pub tparams: Vec<String>,
+    /// Bounds on the type parameters that have them.
+    pub bounds: Vec<BoundDecl>,
     pub params: Vec<Param>,
     pub ret: TypeExpr,
     pub body: Vec<Stmt>,
@@ -77,6 +87,7 @@ pub struct ClassDecl {
     pub name: String,
     /// Type parameters: `class Stack<T>`.
     pub tparams: Vec<String>,
+    pub bounds: Vec<BoundDecl>,
     /// Names after `:` — at most one class, any number of interfaces.
     pub bases: Vec<(String, Span)>,
     pub fields: Vec<FieldDecl>,
@@ -123,6 +134,7 @@ pub struct StructDecl {
     pub name: String,
     /// Type parameters: `struct Grid<T>`.
     pub tparams: Vec<String>,
+    pub bounds: Vec<BoundDecl>,
     pub fields: Vec<FieldDecl>,
     pub methods: Vec<FnDecl>,
     pub ops: Vec<OpDecl>,

@@ -210,6 +210,7 @@ impl<'a> Resolver<'a> {
             for (b, p) in &mut c.bases {
                 *b = self.resolve(b, *p)?;
             }
+            self.bounds(&mut c.bounds)?;
             for fd in &mut c.fields {
                 self.ty(&mut fd.ty, &c.tparams)?;
                 if let Some(d) = &mut fd.default {
@@ -251,6 +252,7 @@ impl<'a> Resolver<'a> {
         }
         for s in &mut prog.structs {
             s.name = self.final_name(&unit_of(s.pos), &s.name);
+            self.bounds(&mut s.bounds)?;
             self.statics(&mut s.statics)?;
             for fd in &mut s.fields {
                 self.ty(&mut fd.ty, &s.tparams)?;
@@ -305,7 +307,16 @@ impl<'a> Resolver<'a> {
         Ok(())
     }
 
+    /// Interface names in bounds (`Show`, `Eq` and `Ord` are not declared, so they stay).
+    fn bounds(&self, bounds: &mut [BoundDecl]) -> Result<()> {
+        for (name, pos) in bounds.iter_mut().flat_map(|b| b.names.iter_mut()) {
+            *name = self.resolve(name, *pos)?;
+        }
+        Ok(())
+    }
+
     fn func(&self, f: &mut FnDecl, outer_tparams: &[String]) -> Result<()> {
+        self.bounds(&mut f.bounds)?;
         let tps: Vec<String> = outer_tparams.iter().chain(f.tparams.iter()).cloned().collect();
         let mut sc = Scope(vec![HashSet::new()]);
         for p in &mut f.params {

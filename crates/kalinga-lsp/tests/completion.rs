@@ -414,3 +414,9 @@ fn class_body_offers_override_stubs_for_interface_methods() {
     assert!(!has(&items, "override fn draw"), "already written");
     assert_eq!(stub.kind, Some(CompletionItemKind::METHOD));
 }
+
+#[test]
+fn bounded_type_parameters_offer_their_interface_methods() {
+    let src = "interface Shape {\n    fn area() -> float\n    fn name() -> str\n}\nfn total<T: Shape>(xs: [T]) -> float {\n    for x in xs {\n        x.|\n    }\n    return 0.0\n}\n";
+    assert_eq!(labels(&complete(src)), ["area", "name"]);
+}

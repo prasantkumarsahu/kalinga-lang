@@ -297,6 +297,10 @@ impl Gen<'_> {
                 Type::Array(elem) if **elem == Type::Float => {
                     format!("{{ {}{}.sort_by(|a, b| a.total_cmp(b)); }}", pre, p)
                 }
+                // A type parameter with an `Ord` bound is only `PartialOrd` in Rust.
+                Type::Array(elem) if matches!(**elem, Type::Param(_)) => {
+                    format!("{{ {}{}.sort_by(|a, b| a.partial_cmp(b).unwrap()); }}", pre, p)
+                }
                 _ => format!("{{ {}{}.sort(); }}", pre, p),
             },
             Mutation::SortBy => format!(

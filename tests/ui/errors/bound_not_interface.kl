@@ -1,0 +1,5 @@
+class Player {}
+
+fn f<T: Player>(x: T) {}
+
+fn main() {}

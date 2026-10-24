@@ -49,9 +49,20 @@ enum Role {
 /// The line's text with standard spacing.
 pub fn render(line: &[Item]) -> String {
     let mut roles = roles(line);
-    // `class Dog : Animal, Show` and `interface Pet : Named`
+    // `class Dog : Animal, Show` and `interface Pet : Named`, but not the `:` of a bound
+    // inside `class Box<T: Show>`.
     let header = matches!(line.first().and_then(Item::token), Some(Tok::Class | Tok::Abstract | Tok::Interface));
-    if header && let Some(colon) = line.iter().position(|i| i.token() == Some(&Tok::Colon)) {
+    let mut depth = 0;
+    let base_colon = line.iter().position(|i| {
+        match i.token() {
+            Some(Tok::Lt) => depth += 1,
+            Some(Tok::Gt) => depth -= 1,
+            Some(Tok::Colon) => return depth == 0,
+            _ => {}
+        }
+        false
+    });
+    if header && let Some(colon) = base_colon {
         roles[colon] = Role::Spaced;
     }
     let mut out = String::new();
@@ -150,7 +161,8 @@ fn matching_gt(line: &[Item], i: usize) -> Option<usize> {
                 }
             }
             Tok::Ident(_) | Tok::Comma | Tok::LBracket | Tok::RBracket | Tok::LBrace | Tok::RBrace | Tok::Colon => {}
-            Tok::Question | Tok::LParen | Tok::RParen | Tok::Arrow | Tok::Fn => {}
+            // `+` joins bounds: `<T: Show + Eq>`.
+            Tok::Question | Tok::LParen | Tok::RParen | Tok::Arrow | Tok::Fn | Tok::Plus => {}
             _ => return None,
         }
     }

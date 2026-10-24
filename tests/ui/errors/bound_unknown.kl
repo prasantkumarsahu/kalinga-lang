@@ -1,0 +1,9 @@
+interface Shape {
+    fn area() -> float
+}
+
+fn total<T: Shpe>(xs: [T]) -> int {
+    return len(xs)
+}
+
+fn main() {}

@@ -103,3 +103,11 @@ fn package_aliases_and_their_members() {
     assert!(at("Vec2(1.0").contains("A 2D vector."), "{}", at("Vec2(1.0"));
     assert!(at("v.x").contains("let v: mx.Vec2"), "{}", at("v.x"));
 }
+
+#[test]
+fn bounds_are_shown() {
+    let src = "interface Shape {\n    fn area() -> float\n}\nfn total<T: Shape + Show>(xs: [T]) -> int { return len(xs) }\nclass Crate<T: Ord> {}\nfn main() {\n    let n = 1\n}\n";
+    let shown = |word: &str| hover(src, word, 0).map(|h| h.0).unwrap_or_default();
+    assert!(shown("total").contains("fn total<T: Shape + Show>(xs: [T]) -> int"), "{}", shown("total"));
+    assert!(shown("Crate").contains("class Crate<T: Ord>"), "{}", shown("Crate"));
+}

@@ -4,7 +4,7 @@
 use kalinga_syntax::ast::*;
 use kalinga_syntax::error::{Result, Span, err};
 
-use super::{Checker, Ctx, texpr};
+use super::{Checker, Ctx, bound_hint, texpr};
 use crate::builtins;
 use crate::index::{PROBE, registry_receiver};
 use crate::suggest::unknown;
@@ -73,6 +73,7 @@ impl Checker<'_> {
                 let callee = Callee::Method { recv: Box::new(recv_t), name: name.to_string(), dispatch };
                 Ok(texpr(TExprKind::Call { callee, args }, sig.ret, pos))
             }
+            Type::Param(p) => self.param_method(cx, recv_t, &p, name, args, pos),
             other => unknown(format!("`{}` has no method `{}`", other, name), pos, name, builtin_methods(&other)),
         }
     }
@@ -335,9 +336,11 @@ impl Checker<'_> {
                 if !args.is_empty() {
                     return err("`sort` takes no arguments (use `sort_by(fn(a, b) => ...)` for a custom order)", pos);
                 }
-                if !matches!(*elem, Type::Int | Type::Str | Type::Bool | Type::Float) {
+                if !(matches!(*elem, Type::Int | Type::Str | Type::Bool | Type::Float) || self.ordered_param(&elem)) {
+                    let hint = bound_hint(&elem, "Ord");
+                    let what = if hint.is_empty() { "; use `sort_by`".to_string() } else { hint };
                     return err(
-                        format!("`sort` works on arrays of int, float, str or bool, not `{}`; use `sort_by`", elem),
+                        format!("`sort` works on arrays of int, float, str or bool, not `{}`{}", elem, what),
                         pos,
                     );
                 }
@@ -408,8 +411,11 @@ impl Checker<'_> {
             }
             (Type::Array(elem), "contains") => {
                 arity(1)?;
-                if !self.m.is_plain(elem) {
-                    return err("`contains` only works on arrays of simple values", pos);
+                if !self.comparable(elem) {
+                    return err(
+                        format!("`contains` only works on arrays of simple values{}", bound_hint(elem, "Eq")),
+                        pos,
+                    );
                 }
                 (BuiltinMethod::Contains, vec![self.expr_to(cx, &args[0], elem)?], Type::Bool)
             }
@@ -494,6 +500,43 @@ fn builtin_methods(t: &Type) -> impl Iterator<Item = &'static str> {
 }
 
 impl Checker<'_> {
+    /// `x.name(...)` on a value of type parameter `p`: a method of one of its bound
+    /// interfaces, called through that interface.
+    fn param_method(
+        &self,
+        cx: &mut Ctx,
+        recv_t: TExpr,
+        p: &str,
+        name: &str,
+        args: &[Expr],
+        pos: Span,
+    ) -> Result<TExpr> {
+        let ifaces = self.param_interfaces(p);
+        let found = ifaces.iter().find_map(|i| self.m.interface_method(i, name).map(|sig| (i.clone(), sig)));
+        let Some((iface, sig)) = found else {
+            if ifaces.is_empty() {
+                let mut with: Vec<&String> = self
+                    .m
+                    .interfaces
+                    .iter()
+                    .filter(|(_, info)| info.methods.iter().any(|(m, _)| m == name))
+                    .map(|(i, _)| i)
+                    .collect();
+                with.sort();
+                let example = with.first().map_or("SomeInterface", |i| i.as_str());
+                return err(format!("`{}` has no method `{}`; add a bound, e.g. `<{}: {}>`", p, name, p, example), pos);
+            }
+            let closure: Vec<String> = ifaces.iter().flat_map(|i| self.m.iface_closure(i)).collect();
+            let methods = closure.iter().flat_map(|x| self.m.interfaces[x].methods.iter().map(|(n, _)| n.as_str()));
+            return unknown(format!("`{}` has no method `{}`", p, name), pos, name, methods);
+        };
+        let args = self.args(cx, &sig, args, pos, name)?;
+        let dispatch = self.m.declaring_interface(&iface, name);
+        let recv = texpr(TExprKind::Convert(Box::new(recv_t)), Type::Interface(iface), pos);
+        let callee = Callee::Method { recv: Box::new(recv), name: name.to_string(), dispatch };
+        Ok(texpr(TExprKind::Call { callee, args }, sig.ret, pos))
+    }
+
     /// The methods of class `c`, its own and inherited ones.
     fn class_methods(&self, c: &str) -> Vec<String> {
         self.m.ancestors(c).iter().flat_map(|a| self.m.classes[a].methods.keys().cloned()).collect()

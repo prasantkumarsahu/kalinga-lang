@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use std::fmt::Write as _;
 
 use kalinga_sema::tast::TBody;
-use kalinga_sema::{Signature, Type, class_trait};
+use kalinga_sema::{Bound, Bounds, Signature, Type, class_trait};
 use kalinga_syntax::ast::Program;
 
 use crate::{Gen, HEADER, RUNTIME, clone_if, fn_id, rid};
@@ -53,7 +53,7 @@ impl Gen<'_> {
                 out,
                 "\nfn {}{}({}){} {{\n{}}}",
                 fn_id(&f.name),
-                generic_params(&f.tparams),
+                generic_params(&f.tparams, self.m.fn_bounds.get(&f.name)),
                 self.params_decl(&b.sig),
                 self.fn_ret(&b.sig.ret, b.is_async),
                 self.body(b, 1)
@@ -136,6 +136,40 @@ impl Gen<'_> {
             );
         }
         out.push_str("}\n");
+        self.has_trait(out, iname);
+    }
+
+    /// `trait __Has_I`: what a type parameter bound to interface `I` needs. Every type that
+    /// can be used as an `I` (its classes, `I` itself and the interfaces extending it)
+    /// turns itself into an `Rc<RefCell<dyn I>>`, through which `I`'s methods are called.
+    fn has_trait(&self, out: &mut String, iname: &str) {
+        let iface = Type::Interface(iname.to_string());
+        let dyn_i = self.rty(&iface);
+        let _ = writeln!(out, "trait __Has_{} {{\n    fn __to_{}(&self) -> {};\n}}", iname, iname, dyn_i);
+        let mut from: Vec<Type> = self
+            .m
+            .class_order
+            .iter()
+            .filter(|c| self.m.all_interfaces(c).contains(&iname.to_string()))
+            .filter(|c| self.m.classes[*c].tparams.is_empty())
+            .map(|c| Type::Class(c.clone()))
+            .collect();
+        for j in &self.m.interface_order {
+            if self.m.iface_closure(j).contains(&iname.to_string()) {
+                from.push(Type::Interface(j.clone()));
+            }
+        }
+        for t in &from {
+            let _ = writeln!(
+                out,
+                "impl __Has_{} for {} {{\n    fn __to_{}(&self) -> {} {{ {} }}\n}}",
+                iname,
+                self.rty(t),
+                iname,
+                dyn_i,
+                self.convert("self.clone()".into(), t, &iface)
+            );
+        }
     }
 
     fn enum_decl(&self, out: &mut String, name: &str) {
@@ -227,7 +261,7 @@ impl Gen<'_> {
             let _ = writeln!(out, "    {}: {},", rid(f), self.rty(t));
         }
         out.push_str("}\n");
-        let _ = writeln!(out, "impl{} {} {{", generic_params(&info.tparams), self_ty);
+        let _ = writeln!(out, "impl{} {} {{", generic_params(&info.tparams, Some(&info.bounds)), self_ty);
         for meth in &info.decl.methods {
             let (m, Some(b)) =
                 (&info.methods[&meth.name], self.t.struct_methods.get(&(name.to_string(), meth.name.clone())))
@@ -383,7 +417,7 @@ impl Gen<'_> {
         }
         out.push_str("}\n");
         if generic {
-            let _ = writeln!(out, "impl{} {} {{", generic_params(&info.tparams), self_ty);
+            let _ = writeln!(out, "impl{} {} {{", generic_params(&info.tparams, Some(&info.bounds)), self_ty);
         } else {
             self.class_trait_decl(out, cname);
             let _ = writeln!(out, "impl {} {{", cname);
@@ -575,11 +609,24 @@ fn rust_module_name(path: &str) -> String {
         .collect()
 }
 
-/// `<T: Clone + 'static, U: ...>` for a Rust generic item (empty when not generic).
-fn generic_params(tparams: &[String]) -> String {
+/// `<T: Clone + 'static, U: ...>` for a Rust generic item (empty when not generic), with
+/// the Rust traits for each bound: `Show` is `__KlShow`, `Eq` is `PartialEq`, `Ord` is
+/// `PartialOrd`, an interface `I` is `__Has_I`.
+fn generic_params(tparams: &[String], bounds: Option<&Bounds>) -> String {
     if tparams.is_empty() {
-        String::new()
-    } else {
-        format!("<{}>", tparams.iter().map(|t| format!("{}: Clone + 'static", t)).collect::<Vec<_>>().join(", "))
+        return String::new();
     }
+    let param = |t: &String| {
+        let mut b = format!("{}: Clone + 'static", t);
+        for bound in bounds.and_then(|bs| bs.get(t)).into_iter().flatten() {
+            b += &match bound {
+                Bound::Show => " + __KlShow".to_string(),
+                Bound::Eq => " + PartialEq".to_string(),
+                Bound::Ord => " + PartialOrd".to_string(),
+                Bound::Interface(i) => format!(" + __Has_{}", i),
+            };
+        }
+        b
+    };
+    format!("<{}>", tparams.iter().map(param).collect::<Vec<_>>().join(", "))
 }

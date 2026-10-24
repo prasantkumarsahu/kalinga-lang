@@ -4,7 +4,7 @@
 use kalinga_syntax::ast::*;
 use kalinga_syntax::error::{Result, Span, err};
 
-use super::{Checker, Ctx, texpr};
+use super::{Checker, Ctx, bound_hint, texpr};
 use crate::index::PROBE;
 use crate::model::class_trait;
 use crate::suggest::unknown;
@@ -61,8 +61,9 @@ impl Checker<'_> {
                         InterpPart::Lit(s) => TInterp::Lit(s.clone()),
                         InterpPart::Expr(x) => {
                             let t = self.expr(cx, x, None)?;
-                            if !self.m.is_plain(&t.ty) {
-                                return err(format!("cannot put a `{}` value into a string", t.ty), x.pos);
+                            if !self.showable(&t.ty) {
+                                let hint = bound_hint(&t.ty, "Show");
+                                return err(format!("cannot put a `{}` value into a string{}", t.ty, hint), x.pos);
                             }
                             TInterp::Expr(Box::new(t))
                         }
@@ -296,14 +297,16 @@ impl Checker<'_> {
                 if lt != rt {
                     return err(format!("cannot compare `{}` with `{}`", lt, rt), pos);
                 }
-                if !self.m.is_plain(lt) {
-                    return err(format!("`{}` values cannot be compared with `{}`", lt, op.rust()), pos);
+                if !self.comparable(lt) {
+                    let hint = bound_hint(lt, "Eq");
+                    return err(format!("`{}` values cannot be compared with `{}`{}", lt, op.rust(), hint), pos);
                 }
                 Ok(Type::Bool)
             }
             Lt | Le | Gt | Ge => {
-                if lt != rt || !matches!(lt, Type::Int | Type::Float | Type::Str) {
-                    return err(format!("cannot compare `{}` with `{}` using `{}`", lt, rt, op.rust()), pos);
+                if lt != rt || !(matches!(lt, Type::Int | Type::Float | Type::Str) || self.ordered_param(lt)) {
+                    let hint = if lt == rt { bound_hint(lt, "Ord") } else { String::new() };
+                    return err(format!("cannot compare `{}` with `{}` using `{}`{}", lt, rt, op.rust(), hint), pos);
                 }
                 Ok(Type::Bool)
             }

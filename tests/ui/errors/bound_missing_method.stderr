@@ -1,0 +1,3 @@
+tests/ui/errors/bound_missing_method.kl:8:17: error: `T` has no method `area`; add a bound, e.g. `<T: Shape>`
+8 |         sum += x.area()
+  |                 ^

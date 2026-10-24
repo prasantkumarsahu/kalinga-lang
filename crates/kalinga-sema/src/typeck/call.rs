@@ -7,8 +7,8 @@ use std::collections::HashMap;
 use kalinga_syntax::ast::*;
 use kalinga_syntax::error::{Result, Span, err};
 
-use super::{Checker, Ctx, texpr};
-use crate::model::{BUILTINS, StructInfo, at_pos};
+use super::{Checker, Ctx, bound_hint, texpr};
+use crate::model::{BUILTINS, Bounds, StructInfo, at_pos};
 use crate::suggest::unknown;
 use crate::tast::*;
 use crate::types::{Signature, Type, has_params, subst, unify};
@@ -45,16 +45,18 @@ impl Checker<'_> {
         }
         if generic_class && !shadowed {
             let tparams = self.m.classes[name].tparams.clone();
+            let bounds = self.m.classes[name].bounds.clone();
             let init = self.m.find_init(name).map(|(_, s)| s.params).unwrap_or_default();
             let sig = Signature { params: init, ret: self.class_type(name) };
-            let inf = self.infer_call(cx, &tparams, targs, &sig, args, expected, pos, name)?;
+            let inf = self.infer_call(cx, (&tparams, &bounds), targs, &sig, args, expected, pos, name)?;
             let callee = Callee::New { class: name.to_string(), targs: inf.targs };
             return Ok(texpr(TExprKind::Call { callee, args: inf.args }, inf.ret, pos));
         }
         if generic_fn && !shadowed {
             let tparams = self.m.fn_tparams[name].clone();
+            let bounds = self.m.fn_bounds.get(name).cloned().unwrap_or_default();
             let sig = self.m.functions[name].clone();
-            let inf = self.infer_call(cx, &tparams, targs, &sig, args, expected, pos, name)?;
+            let inf = self.infer_call(cx, (&tparams, &bounds), targs, &sig, args, expected, pos, name)?;
             let ret = if self.m.async_fns.contains(name) { Type::Async(Box::new(inf.ret)) } else { inf.ret };
             let callee = Callee::Function { name: name.to_string(), targs: inf.targs };
             return Ok(texpr(TExprKind::Call { callee, args: inf.args }, ret, pos));
@@ -221,7 +223,7 @@ impl Checker<'_> {
             (vec![], given, Type::Struct(name.to_string(), vec![]))
         } else {
             let sig = Signature { params: info.fields[..args.len()].to_vec(), ret: self.struct_self_type(name) };
-            let inf = self.infer_call(cx, &info.tparams, targs, &sig, args, expected, pos, name)?;
+            let inf = self.infer_call(cx, (&info.tparams, &info.bounds), targs, &sig, args, expected, pos, name)?;
             (inf.targs, inf.args, inf.ret)
         };
         // Fields left out take their declared defaults.
@@ -397,7 +399,7 @@ impl Checker<'_> {
     fn infer_call(
         &self,
         cx: &mut Ctx,
-        tparams: &[String],
+        (tparams, bounds): (&[String], &Bounds),
         targs: &[TypeExpr],
         sig: &Signature,
         args: &[Expr],
@@ -456,7 +458,14 @@ impl Checker<'_> {
             let Some(t) = t else { continue };
             out.push(self.convert(t, &subst(&sig.params[i].1, &map))?);
         }
-        let targs = tparams.iter().map(|t| map[t].clone()).collect();
+        let targs: Vec<Type> = tparams.iter().map(|t| map[t].clone()).collect();
+        for (tp, t) in tparams.iter().zip(&targs) {
+            for b in bounds.get(tp).into_iter().flatten() {
+                if !self.satisfies(t, b) {
+                    return err(format!("`{}` does not satisfy `{}: {}` for `{}`", t, tp, b, what), pos);
+                }
+            }
+        }
         Ok(Inferred { targs, args: out, ret: subst(&sig.ret, &map) })
     }
 
@@ -473,11 +482,10 @@ impl Checker<'_> {
                 let mut parts = vec![];
                 for a in args {
                     let t = self.expr(cx, a, None)?;
-                    if !self.m.is_plain(&t.ty) {
-                        return err(
-                            format!("cannot print a `{}` value (print its fields or a method result instead)", t.ty),
-                            a.pos,
-                        );
+                    if !self.showable(&t.ty) {
+                        let hint = bound_hint(&t.ty, "Show");
+                        let help = if hint.is_empty() { " (print its fields or a method result instead)" } else { "" };
+                        return err(format!("cannot print a `{}` value{}{}", t.ty, help, hint), a.pos);
                     }
                     parts.push(t);
                 }
@@ -496,8 +504,8 @@ impl Checker<'_> {
             }
             "str" => {
                 let v = one(cx)?;
-                if !self.m.is_plain(&v.ty) {
-                    return err(format!("cannot convert `{}` to str", v.ty), pos);
+                if !self.showable(&v.ty) {
+                    return err(format!("cannot convert `{}` to str{}", v.ty, bound_hint(&v.ty, "Show")), pos);
                 }
                 intrinsic(Builtin::ToStr, vec![v], Type::Str)
             }
@@ -554,9 +562,13 @@ impl Checker<'_> {
             ("assert_eq", [a, b]) => {
                 let left = self.expr(cx, a, None)?;
                 let right = self.expr_to(cx, b, &left.ty)?;
-                if !self.m.is_plain(&left.ty) {
+                if !self.showable(&left.ty) || !self.comparable(&left.ty) {
                     return err(
-                        format!("`assert_eq` needs values that can be compared and printed, not `{}`", left.ty),
+                        format!(
+                            "`assert_eq` needs values that can be compared and printed, not `{}`{}",
+                            left.ty,
+                            bound_hint(&left.ty, "Show + Eq")
+                        ),
                         a.pos,
                     );
                 }
@@ -609,10 +621,11 @@ impl Checker<'_> {
             return err(format!("method `{}` is private to `{}`", name, strukt), pos);
         }
         let tparams = self.m.structs[strukt].tparams.clone();
+        let bounds = self.m.structs[strukt].bounds.clone();
         let (targs, args, ret) = if tparams.is_empty() {
             (vec![], self.args(cx, &m.sig, args, pos, name)?, m.sig.ret)
         } else {
-            let inf = self.infer_call(cx, &tparams, &[], &m.sig, args, None, pos, name)?;
+            let inf = self.infer_call(cx, (&tparams, &bounds), &[], &m.sig, args, None, pos, name)?;
             (inf.targs, inf.args, inf.ret)
         };
         let ret = if m.is_async { Type::Async(Box::new(ret)) } else { ret };

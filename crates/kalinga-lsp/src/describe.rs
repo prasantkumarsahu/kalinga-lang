@@ -2,7 +2,7 @@
 
 use kalinga_sema::builtins::{self, CONSTANTS, FUNCTIONS};
 use kalinga_sema::index::Symbol;
-use kalinga_sema::{Model, Signature, Type};
+use kalinga_sema::{Bounds, Model, Signature, Type};
 
 use crate::snapshot::Snapshot;
 
@@ -57,14 +57,21 @@ fn function(m: &Model, name: &str) -> Option<String> {
         return Some(format!("extern fn {}{}", name, params_and_ret(sig)));
     }
     let sig = m.functions.get(name)?;
-    let tps =
-        m.fn_tparams.get(name).filter(|t| !t.is_empty()).map(|t| format!("<{}>", t.join(", "))).unwrap_or_default();
+    let tps = m.fn_tparams.get(name).map(|t| type_params(t, m.fn_bounds.get(name))).unwrap_or_default();
     let kw = if m.async_fns.contains(name) { "async fn" } else { "fn" };
     Some(format!("{} {}{}{}", kw, name, tps, params_and_ret(sig)))
 }
 
-fn type_params(tps: &[String]) -> String {
-    if tps.is_empty() { String::new() } else { format!("<{}>", tps.join(", ")) }
+/// `<T: Show + Eq, U>`, or nothing when not generic.
+fn type_params(tps: &[String], bounds: Option<&Bounds>) -> String {
+    if tps.is_empty() {
+        return String::new();
+    }
+    let param = |t: &String| match bounds.and_then(|b| b.get(t)) {
+        Some(bs) => format!("{}: {}", t, bs.iter().map(|b| b.to_string()).collect::<Vec<_>>().join(" + ")),
+        None => t.clone(),
+    };
+    format!("<{}>", tps.iter().map(param).collect::<Vec<_>>().join(", "))
 }
 
 fn type_decl(m: &Model, name: &str) -> Option<String> {
@@ -72,7 +79,7 @@ fn type_decl(m: &Model, name: &str) -> Option<String> {
         let kw = if c.decl.is_abstract { "abstract class" } else { "class" };
         let bases: Vec<&str> = c.decl.bases.iter().map(|(b, _)| b.as_str()).collect();
         let header = if bases.is_empty() { String::new() } else { format!(" : {}", bases.join(", ")) };
-        let mut code = format!("{} {}{}{}", kw, name, type_params(&c.tparams), header);
+        let mut code = format!("{} {}{}{}", kw, name, type_params(&c.tparams, Some(&c.bounds)), header);
         if let Some((_, init)) = m.find_init(name) {
             code.push_str(&format!("\n    init{}", params_and_ret(&init)));
         }
@@ -80,7 +87,7 @@ fn type_decl(m: &Model, name: &str) -> Option<String> {
     }
     if let Some(s) = m.structs.get(name) {
         let fields: Vec<String> = s.fields.iter().map(|(n, t)| format!("{}: {}", n, t)).collect();
-        return Some(format!("struct {}{}({})", name, type_params(&s.tparams), fields.join(", ")));
+        return Some(format!("struct {}{}({})", name, type_params(&s.tparams, Some(&s.bounds)), fields.join(", ")));
     }
     if let Some(i) = m.interfaces.get(name) {
         let methods: Vec<String> =

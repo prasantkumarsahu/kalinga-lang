@@ -9,6 +9,33 @@ use kalinga_syntax::error::{Result, Span, err};
 
 use crate::types::{Signature, Type, is_map_key, subst};
 
+/// A bound on a type parameter: what every type argument for it must allow.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Bound {
+    /// Printable: `println`, `str`, `"{x}"`.
+    Show,
+    /// Comparable with `==`.
+    Eq,
+    /// Ordered: `<`, `sort` (and `==`).
+    Ord,
+    /// Implements the interface.
+    Interface(String),
+}
+
+impl std::fmt::Display for Bound {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            Bound::Show => write!(f, "Show"),
+            Bound::Eq => write!(f, "Eq"),
+            Bound::Ord => write!(f, "Ord"),
+            Bound::Interface(i) => write!(f, "{}", i),
+        }
+    }
+}
+
+/// The bounds of each type parameter that has some.
+pub type Bounds = HashMap<String, Vec<Bound>>;
+
 #[derive(Debug, Clone)]
 pub struct ClassInfo {
     pub decl: ClassDecl,
@@ -28,6 +55,7 @@ pub struct ClassInfo {
     pub children: Vec<String>,
     /// Type parameters of a generic class (empty otherwise).
     pub tparams: Vec<String>,
+    pub bounds: Bounds,
     /// `const` and `static var` members, in declaration order.
     pub static_values: Vec<(String, StaticInfo)>,
 }
@@ -89,6 +117,7 @@ pub struct StructOp {
 pub struct StructInfo {
     pub decl: StructDecl,
     pub tparams: Vec<String>,
+    pub bounds: Bounds,
     pub fields: Vec<(String, Type)>,
     pub private_fields: HashSet<String>,
     pub methods: HashMap<String, StructMethod>,
@@ -142,6 +171,7 @@ pub struct Model {
     pub extern_fns: HashMap<String, (Signature, String)>,
     /// Type parameters of generic functions.
     pub fn_tparams: HashMap<String, Vec<String>>,
+    pub fn_bounds: HashMap<String, Bounds>,
     /// Top-level `async fn`s.
     pub async_fns: HashSet<String>,
     pub enums: HashMap<String, EnumInfo>,
@@ -359,13 +389,20 @@ impl Model {
 
     /// Values that can be printed and compared with `==`.
     pub fn is_plain(&self, t: &Type) -> bool {
+        self.is_plain_with(t, &|_| false)
+    }
+
+    /// `is_plain`, with `param(T)` saying whether the type parameter `T` counts as plain.
+    pub fn is_plain_with(&self, t: &Type, param: &dyn Fn(&str) -> bool) -> bool {
+        let plain = |t: &Type| self.is_plain_with(t, param);
         match t {
             Type::Int | Type::Float | Type::Bool | Type::Str => true,
-            Type::Array(i) | Type::Optional(i) => self.is_plain(i),
-            Type::Map(k, v) => self.is_plain(k) && self.is_plain(v),
+            Type::Param(p) => param(p),
+            Type::Array(i) | Type::Optional(i) => plain(i),
+            Type::Map(k, v) => plain(k) && plain(v),
             Type::Enum(e) => self.plain_enums.contains(e),
-            Type::Struct(st, args) => self.plain_structs.contains(st) && args.iter().all(|a| self.is_plain(a)),
-            Type::Result(t, e) => (**t == Type::Void || self.is_plain(t)) && self.is_plain(e),
+            Type::Struct(st, args) => self.plain_structs.contains(st) && args.iter().all(plain),
+            Type::Result(t, e) => (**t == Type::Void || plain(t)) && plain(e),
             _ => false,
         }
     }
@@ -389,15 +426,7 @@ impl Model {
 
     /// `is_plain`, but type parameters count as plain (used for generic struct definitions).
     pub(crate) fn is_plain_params_ok(&self, t: &Type) -> bool {
-        match t {
-            Type::Param(_) => true,
-            Type::Array(i) | Type::Optional(i) => self.is_plain_params_ok(i),
-            Type::Map(k, v) => self.is_plain_params_ok(k) && self.is_plain_params_ok(v),
-            Type::Struct(st, args) => {
-                self.plain_structs.contains(st) && args.iter().all(|a| self.is_plain_params_ok(a))
-            }
-            other => self.is_plain(other),
-        }
+        self.is_plain_with(t, &|_| true)
     }
 
     /// The `const` and `static var` members of the class or struct `owner`.

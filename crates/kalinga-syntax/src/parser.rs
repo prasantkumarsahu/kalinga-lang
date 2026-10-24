@@ -321,7 +321,7 @@ impl Parser {
     fn function(&mut self, mods: Mods) -> Result<FnDecl> {
         let pos = self.expect(Tok::Fn, "`fn`")?;
         let (name, _) = self.ident("function name")?;
-        let tparams = self.tparams()?;
+        let (tparams, bounds) = self.tparams()?;
         let params = self.params()?;
         let ret = self.ret_type()?;
         let body = if mods.is_abstract {
@@ -336,6 +336,7 @@ impl Parser {
         Ok(FnDecl {
             name,
             tparams,
+            bounds,
             params,
             ret,
             body,
@@ -349,19 +350,31 @@ impl Parser {
         })
     }
 
-    /// `<T, U>` after a function or class name.
-    fn tparams(&mut self) -> Result<Vec<String>> {
-        let mut out = Vec::new();
+    /// `<T, U: Show + Eq>` after a function, class or struct name.
+    fn tparams(&mut self) -> Result<(Vec<String>, Vec<BoundDecl>)> {
+        let mut names = Vec::new();
+        let mut bounds = Vec::new();
         if self.eat(&Tok::Lt) {
             loop {
-                out.push(self.ident("a type parameter name")?.0);
+                let param = self.ident("a type parameter name")?.0;
+                if self.eat(&Tok::Colon) {
+                    let mut b = BoundDecl { param: param.clone(), names: vec![] };
+                    loop {
+                        b.names.push(self.ident("an interface, `Show`, `Eq` or `Ord`")?);
+                        if !self.eat(&Tok::Plus) {
+                            break;
+                        }
+                    }
+                    bounds.push(b);
+                }
+                names.push(param);
                 if !self.eat(&Tok::Comma) {
                     break;
                 }
             }
             self.expect(Tok::Gt, "`>` to close the type parameters")?;
         }
-        Ok(out)
+        Ok((names, bounds))
     }
 
     /// `<int, str>` type arguments.
@@ -402,7 +415,7 @@ impl Parser {
     fn class(&mut self, is_abstract: bool) -> Result<ClassDecl> {
         let pos = self.expect(Tok::Class, "`class`")?;
         let (name, _) = self.ident("class name")?;
-        let tparams = self.tparams()?;
+        let (tparams, bounds) = self.tparams()?;
         let mut bases = Vec::new();
         if self.eat(&Tok::Colon) {
             loop {
@@ -419,6 +432,7 @@ impl Parser {
         let mut class = ClassDecl {
             name,
             tparams,
+            bounds,
             bases,
             fields: vec![],
             init: None,
@@ -545,12 +559,13 @@ impl Parser {
     fn struct_decl(&mut self) -> Result<StructDecl> {
         let pos = self.expect(Tok::Struct, "`struct`")?;
         let (name, _) = self.ident("struct name")?;
-        let tparams = self.tparams()?;
+        let (tparams, bounds) = self.tparams()?;
         if self.check(&Tok::Colon) {
             return err("structs cannot extend classes or implement interfaces (use a class for that)", self.pos());
         }
         self.expect(Tok::LBrace, "`{` to start struct body")?;
-        let mut s = StructDecl { name, tparams, fields: vec![], methods: vec![], ops: vec![], statics: vec![], pos };
+        let mut s =
+            StructDecl { name, tparams, bounds, fields: vec![], methods: vec![], ops: vec![], statics: vec![], pos };
         self.skip_newlines();
         while !self.check(&Tok::RBrace) {
             let mpos = self.pos();

@@ -182,7 +182,17 @@ impl Checker<'_> {
                 Probe::TypeMembers(n.clone())
             }
             ExprKind::SelfRef => Probe::Members { ty: self.self_value(cx, recv.pos)?.ty, on_self: true },
-            _ => Probe::Members { ty: self.expr(cx, recv, None)?.ty, on_self: false },
+            _ => {
+                let ty = self.expr(cx, recv, None)?.ty;
+                // A type parameter offers the methods of its (first) bound interface.
+                let ty = match &ty {
+                    Type::Param(p) => {
+                        self.param_interfaces(p).first().map_or(ty.clone(), |i| Type::Interface(i.clone()))
+                    }
+                    _ => ty,
+                };
+                Probe::Members { ty, on_self: false }
+            }
         };
         self.index.borrow_mut().probe = Some(probe);
         err("completion probe", pos)

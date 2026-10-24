@@ -168,6 +168,7 @@ enum NAME {
 }
 
 fn NAME<T, ...>(PARAM, ...) [-> TYPE] { ... }       generic function
+fn NAME<T: Show + Eq>(...) { ... }                  bounds: interfaces, Show, Eq, Ord
 ```
 
 Inside `init` and methods: `self.field`, `self.method(...)`, `super(...)` (first statement
@@ -256,7 +257,8 @@ struct      = "struct" IDENT [ tparams ] "{" { { modifier } IDENT ":" type [ "="
             | [ "mut" ] { modifier } "fn" IDENT params [ "->" type ] block
             | "op" ( "+" | "-" | "*" | "/" | "%" ) params "->" type block } "}" ;
 function    = [ "async" ] "fn" IDENT [ tparams ] params [ "->" type ] block ;
-tparams     = "<" IDENT { "," IDENT } ">" ;
+tparams     = "<" tparam { "," tparam } ">" ;
+tparam      = IDENT [ ":" IDENT { "+" IDENT } ] ;      (* bounds: interfaces, Show, Eq, Ord *)
 params      = "(" [ param { "," param } [ "," ] ] ")" ;
 param       = IDENT ":" type ;
 class       = [ "abstract" ] "class" IDENT [ tparams ] [ ":" IDENT { "," IDENT } ] "{" { member } "}" ;
@@ -308,11 +310,11 @@ value_block = "{" { statement } expr "}" ;
 
 ## Not yet supported
 
-Bounds on type parameters (`T: Show`), generic interfaces and enums, inheritance with
-generic classes, operators on classes, closures that change captured variables, mutable
-global variables (use a `static var` member), `if let` as a value, `async` instance
-methods, `await` inside lambdas, sharing objects between threads, a package registry,
-tuples, exceptions (`try`/`catch`; use `Result`).
+Generic interfaces and enums, inheritance with generic classes, operators on classes,
+closures that change captured variables, mutable global variables (use a `static var`
+member), `if let` as a value, `async` instance methods, `await` inside lambdas, sharing
+objects between threads, a package registry, tuples, exceptions (`try`/`catch`; use
+`Result`).
 
 ---
 
