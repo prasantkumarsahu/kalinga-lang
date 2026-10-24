@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Editor
+- On Open VSX the extension is `kalinga-lang.kalinga-lang`, in the `kalinga-lang`
+  namespace ([page](https://open-vsx.org/extension/kalinga-lang/kalinga-lang)); 0.5.3's release could not publish it there.
+
 ## 0.5.3
 
 Fixes only: no new syntax, nothing that changes what working code does.
@@ -16,7 +22,7 @@ Fixes only: no new syntax, nothing that changes what working code does.
   instead of whatever `ubuntu-latest` is.
 
 ### Editor
-- The extension is also on [Open VSX](https://open-vsx.org/extension/PrasantKumarSahu/kalinga-lang),
+- The extension is also on [Open VSX](https://open-vsx.org/extension/kalinga-lang/kalinga-lang),
   for VSCodium, Cursor and other editors that use it.
 
 ## 0.5.2

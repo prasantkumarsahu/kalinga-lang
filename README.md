@@ -95,7 +95,7 @@ packages). Download `kalinga` and `utkal` for Windows, Linux or macOS from
 [Releases](https://github.com/prasantkumarsahu/kalinga-lang/releases), or build and install
 both commands. The VS Code extension is on the Marketplace as
 [Kalinga Language](https://marketplace.visualstudio.com/items?itemName=PrasantKumarSahu.kalinga-lang)
-and on [Open VSX](https://open-vsx.org/extension/PrasantKumarSahu/kalinga-lang) for VSCodium, Cursor and other editors (and a
+and on [Open VSX](https://open-vsx.org/extension/kalinga-lang/kalinga-lang) for VSCodium, Cursor and other editors (and a
 `.vsix` with each release):
 
 ```bash

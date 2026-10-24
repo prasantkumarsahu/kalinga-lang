@@ -111,6 +111,19 @@ jobs:
           name: vsix
           path: editors/vscode/*.vsix
           if-no-files-found: error
+      # Open VSX publishes into the namespace named by `publisher`, and ours there is
+      # `kalinga-lang`: the same extension, packaged under that publisher.
+      - name: The Open VSX package
+        run: |
+          mkdir -p ../../openvsx
+          npm pkg set publisher=kalinga-lang
+          npx vsce package --out ../../openvsx/
+          git checkout -- package.json
+      - uses: actions/upload-artifact@v7
+        with:
+          name: openvsx
+          path: openvsx/*.vsix
+          if-no-files-found: error
 
   publish:
     name: Publish the release
@@ -121,10 +134,21 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v7
+      # The archives and the Marketplace .vsix are the release's files; the Open VSX
+      # .vsix (same name, other publisher) is kept apart.
       - uses: actions/download-artifact@v8
         with:
+          pattern: kalinga-*
           path: dist
           merge-multiple: true
+      - uses: actions/download-artifact@v8
+        with:
+          name: vsix
+          path: dist
+      - uses: actions/download-artifact@v8
+        with:
+          name: openvsx
+          path: openvsx
       - name: Release notes from the CHANGELOG
         run: |
           version="${GITHUB_REF_NAME#v}"
@@ -164,4 +188,4 @@ jobs:
             exit 0
           fi
           npm install -g ovsx@1.3.0
-          ovsx publish dist/kalinga-lang-*.vsix -p "$OVSX_PAT" --skip-duplicate
+          ovsx publish openvsx/kalinga-lang-*.vsix -p "$OVSX_PAT" --skip-duplicate
