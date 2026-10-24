@@ -10,7 +10,7 @@ executable, so you need a Rust toolchain:
 
    - **Download a release**: from the repository's
      [Releases](https://github.com/prasantkumarsahu/kalinga-lang/releases) page, take the
-     archive for your system (`kalinga-0.5.2-x86_64-pc-windows-msvc.zip`,
+     archive for your system (`kalinga-0.5.3-x86_64-pc-windows-msvc.zip`,
      `…-x86_64-unknown-linux-gnu.tar.gz`, `…-aarch64-apple-darwin.tar.gz` or
      `…-x86_64-apple-darwin.tar.gz`), unpack it and put the folder with `kalinga` and `utkal`
      on your PATH.
@@ -26,7 +26,7 @@ executable, so you need a Rust toolchain:
    kalinga -v
    ```
 
-   It prints the installed version, for example `kalinga 0.5.2`. Run `kalinga` on its own
+   It prints the installed version, for example `kalinga 0.5.3`. Run `kalinga` on its own
    to see the list of commands.
 
 ## Your first program

@@ -60,6 +60,9 @@ compiler itself, so what the editor shows is exactly what the compiler sees:
      code --install-extension PrasantKumarSahu.kalinga-lang
      ```
 
+     In VSCodium, Cursor and other editors that use [Open VSX](https://open-vsx.org/extension/PrasantKumarSahu/kalinga-lang),
+     search their Extensions view the same way.
+
    - **Download the `.vsix`** from
      [Releases](https://github.com/prasantkumarsahu/kalinga-lang/releases) and run
      `code --install-extension kalinga-lang-<version>.vsix`.

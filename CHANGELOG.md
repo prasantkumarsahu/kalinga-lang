@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.5.3
+
+Fixes only: no new syntax, nothing that changes what working code does.
+
+### Fixes
+- **Hints for names from other languages**: "did you mean ...?" also suggests the
+  snake_case form of a camelCase name (`s.startsWith(...)` → `starts_with`) and
+  Kalinga's name for common ones (`length` and `size` → `len`, `toUpperCase` → `upper`,
+  `indexOf` → `find`, ...), but only names the type actually has.
+- **Every download is tested before it is published**: the release workflow runs
+  `kalinga --version`, `utkal --version` and a small program with each of the four builds
+  (the Intel macOS one under Rosetta).
+- The release and CI workflows use actions that run on Node.js 24, and Ubuntu 24.04
+  instead of whatever `ubuntu-latest` is.
+
+### Editor
+- The extension is also on [Open VSX](https://open-vsx.org/extension/PrasantKumarSahu/kalinga-lang),
+  for VSCodium, Cursor and other editors that use it.
+
 ## 0.5.2
 
 The VS Code extension on the Marketplace; the compiler and the language are unchanged.
