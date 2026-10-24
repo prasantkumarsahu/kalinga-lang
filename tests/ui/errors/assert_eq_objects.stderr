@@ -1,0 +1,3 @@
+tests/ui/errors/assert_eq_objects.kl:7:15: error: `assert_eq` needs values that can be compared and printed, not `Crate`
+7 |     assert_eq(Crate(), Crate())
+  |               ^^^^^

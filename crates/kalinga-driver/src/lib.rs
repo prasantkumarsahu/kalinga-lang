@@ -5,18 +5,21 @@
 
 mod error;
 pub mod fix;
+pub mod fmt;
 mod stdlib;
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use kalinga_sema::namespaces;
+use kalinga_sema::index::Index;
+use kalinga_sema::{Model, namespaces};
 use kalinga_syntax::ast::{CrateDep, Import, Program};
 use kalinga_syntax::error::Diagnostic;
 use kalinga_syntax::{lexer, parser};
 
 pub use error::{CompileErrors, DriverError, Result, SourceMap};
+pub use fix::kl_files;
 
 /// The utkal project a file belongs to (if any) and its packages.
 #[derive(Default)]
@@ -61,9 +64,13 @@ impl From<DriverError> for Failure {
 }
 
 /// The files of one compilation, as they are loaded.
-struct Loader {
+struct Loader<'a> {
     pkgs: Packages,
     map: SourceMap,
+    /// Canonical path of each file in `map` (by id), when it has one.
+    paths: Vec<Option<PathBuf>>,
+    /// Text of files open in an editor, by canonical path; read instead of the disk.
+    open: &'a HashMap<PathBuf, String>,
     units: namespaces::Units,
     program: Program,
     /// Canonical paths of files already queued.
@@ -77,16 +84,8 @@ struct Loader {
 /// Parses `root` and, transitively, every file it imports, into one program.
 /// Each file is loaded once, so import cycles are harmless.
 fn load(root_name: &str, root_source: &str) -> Result<(Program, SourceMap)> {
-    let root_path = PathBuf::from(root_name);
-    let mut l = Loader {
-        pkgs: packages_for(root_name)?,
-        map: SourceMap::default(),
-        units: namespaces::Units::default(),
-        program: Program::default(),
-        seen: HashSet::from([std::fs::canonicalize(&root_path).unwrap_or_else(|_| root_path.clone())]),
-        file_units: HashMap::new(),
-        queue: vec![(root_path, root_name.to_string(), root_source.to_string(), String::new())],
-    };
+    let no_open_files = HashMap::new();
+    let mut l = Loader::new(root_name, root_source, &no_open_files)?;
     match l.load_all() {
         Ok(()) => Ok((l.program, l.map)),
         Err(Failure::Program(ds)) => Err(DriverError::compile_all(l.map, ds)),
@@ -94,7 +93,88 @@ fn load(root_name: &str, root_source: &str) -> Result<(Program, SourceMap)> {
     }
 }
 
-impl Loader {
+/// Everything an editor needs to know about a file and the files it imports.
+pub struct Analysis {
+    /// The files read, by id (`Span::file`); 0 is the analysed file.
+    pub sources: SourceMap,
+    /// Canonical path of each file (by id), when it has one.
+    pub paths: Vec<Option<PathBuf>>,
+    /// The package (unit) of each file and what each unit imports.
+    pub units: namespaces::Units,
+    /// The program, when every file parsed.
+    pub program: Option<Program>,
+    /// The declarations, when they follow the rules.
+    pub model: Option<Model>,
+    /// What names refer to, and what the completion probe saw.
+    pub index: Index,
+    /// Every problem found, in all files.
+    pub diagnostics: Vec<Diagnostic>,
+}
+
+/// Analyses `file` with the text `source` (and its imports, reading files open in the
+/// editor from `open`, by canonical path). Like `kalinga check`, `fn main()` is optional.
+pub fn analyze(file: &str, source: &str, open: &HashMap<PathBuf, String>) -> Analysis {
+    let mut out = Analysis {
+        sources: SourceMap::default(),
+        paths: vec![],
+        units: namespaces::Units::default(),
+        program: None,
+        model: None,
+        index: Index::default(),
+        diagnostics: vec![],
+    };
+    let mut l = match Loader::new(file, source, open) {
+        Ok(l) => l,
+        Err(e) => {
+            out.sources.files.push((file.to_string(), source.to_string()));
+            out.diagnostics.push(Diagnostic::error(e.to_string(), Default::default()));
+            return out;
+        }
+    };
+    let loaded = l.load_all();
+    (out.sources, out.paths, out.units) = (l.map, l.paths, l.units);
+    match loaded {
+        Ok(()) => {}
+        Err(Failure::Program(ds)) => {
+            out.diagnostics = ds;
+            return out;
+        }
+        Err(Failure::Other(e)) => {
+            out.diagnostics.push(Diagnostic::error(e.to_string(), Default::default()));
+            return out;
+        }
+    }
+    let program = l.program;
+    // Broken rules about classes still leave the declarations complete, so bodies are
+    // checked too and every problem is shown.
+    let (model, rules) = Model::build_all(&program, false);
+    out.diagnostics = rules;
+    if let Some(model) = model {
+        let (typed, index) = kalinga_sema::typeck::analyze(&program, &model);
+        out.diagnostics.extend(typed.err().unwrap_or_default());
+        out.index = index;
+        out.model = Some(model);
+    }
+    out.program = Some(program);
+    out
+}
+
+impl<'a> Loader<'a> {
+    fn new(root_name: &str, root_source: &str, open: &'a HashMap<PathBuf, String>) -> Result<Self> {
+        let root_path = PathBuf::from(root_name);
+        Ok(Loader {
+            pkgs: packages_for(root_name)?,
+            map: SourceMap::default(),
+            paths: vec![],
+            open,
+            units: namespaces::Units::default(),
+            program: Program::default(),
+            seen: HashSet::from([canonical(&root_path)]),
+            file_units: HashMap::new(),
+            queue: vec![(root_path, root_name.to_string(), root_source.to_string(), String::new())],
+        })
+    }
+
     fn load_all(&mut self) -> std::result::Result<(), Failure> {
         for c in &self.pkgs.rust_deps {
             kalinga_project::merge_crate(&mut self.program.crates, c).map_err(DriverError::from)?;
@@ -116,6 +196,7 @@ impl Loader {
     ) -> std::result::Result<(), Failure> {
         let id = self.map.files.len() as u32;
         self.map.files.push((name, source));
+        self.paths.push(std::fs::canonicalize(path).ok());
         self.units.file_unit.push(unit.clone());
         self.units.file_aliases.push(Default::default());
         let tokens = lexer::lex(&self.map.files[id as usize].1, id)?;
@@ -144,6 +225,7 @@ impl Loader {
         p.enums.extend(parsed.enums);
         p.structs.extend(parsed.structs);
         p.consts.extend(parsed.consts);
+        p.tests.extend(parsed.tests);
         Ok(())
     }
 
@@ -221,8 +303,11 @@ impl Loader {
             self.units.imports.entry(unit.to_string()).or_default().insert(target_unit.clone());
         }
         if self.seen.insert(canonical.clone()) {
-            let text = std::fs::read_to_string(&canonical)
-                .map_err(|err| fail(format!("cannot read `{}`: {}", import.path, err)))?;
+            let text = match self.open.get(&canonical) {
+                Some(text) => text.clone(),
+                None => std::fs::read_to_string(&canonical)
+                    .map_err(|err| fail(format!("cannot read `{}`: {}", import.path, err)))?,
+            };
             self.file_units.insert(canonical, target_unit.clone());
             self.queue.push((target.clone(), target.display().to_string(), text, target_unit));
         }
@@ -230,10 +315,31 @@ impl Loader {
     }
 }
 
+/// The standard modules, as imported after `std/`.
+pub fn std_modules() -> Vec<&'static str> {
+    stdlib::modules()
+}
+
+/// `path` made absolute and canonical when it exists, as is otherwise.
+fn canonical(path: &Path) -> PathBuf {
+    std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
+}
+
+/// What a compilation is for.
+#[derive(Clone, Copy, PartialEq)]
+enum Purpose {
+    /// A program, which needs `fn main()`.
+    Program,
+    /// Only finding errors; `fn main()` is optional.
+    Check,
+    /// A program running the file's `test fn`s.
+    Tests,
+}
+
 /// Compiles Kalinga source (plus its imports) to Rust source.
 /// `file` is the name used for the root file and to resolve its imports.
 pub fn to_rust(file: &str, source: &str) -> Result<String> {
-    compile(file, source, true).map(|(rust, _)| rust)
+    compile(file, source, Purpose::Program).map(|(rust, _)| rust)
 }
 
 /// What the Rust build needs besides the generated source.
@@ -249,12 +355,12 @@ struct Native {
 /// Reports errors without requiring `fn main()`, so files meant to be imported can be
 /// checked on their own (this is what editors run).
 pub fn check(file: &str, source: &str) -> Result<()> {
-    compile(file, source, false).map(|_| ())
+    compile(file, source, Purpose::Check).map(|_| ())
 }
 
-fn compile(file: &str, source: &str, require_main: bool) -> Result<(String, Native)> {
+fn compile(file: &str, source: &str, purpose: Purpose) -> Result<(String, Native)> {
     let (program, map) = load(file, source)?;
-    let model = match kalinga_sema::Model::build(&program, require_main) {
+    let model = match kalinga_sema::Model::build(&program, purpose == Purpose::Program) {
         Ok(m) => m,
         Err(d) => return Err(DriverError::compile(map, d)),
     };
@@ -262,7 +368,9 @@ fn compile(file: &str, source: &str, require_main: bool) -> Result<(String, Nati
         Ok(t) => t,
         Err(ds) => return Err(DriverError::compile_all(map, ds)),
     };
-    let rust = kalinga_codegen::generate(&program, &model, &typed);
+    let files: Vec<String> = map.files.iter().map(|(name, _)| name.clone()).collect();
+    let target = kalinga_codegen::Target { tests: purpose == Purpose::Tests, files: &files };
+    let rust = kalinga_codegen::generate(&program, &model, &typed, &target);
     let native = Native {
         crates: program.crates.clone(),
         uses_rust: !program.rust_files.is_empty() || !program.extern_fns.is_empty() || !program.crates.is_empty(),
@@ -294,10 +402,14 @@ fn build_name(input: &Path) -> String {
 
 /// Compiles `input` to a native executable at `output` (or a temp location).
 pub fn build(input: &Path, output: Option<PathBuf>) -> Result<PathBuf> {
-    let source = std::fs::read_to_string(input).map_err(DriverError::io("read", input))?;
-    let (rust, native) = compile(&input.display().to_string(), &source, true)?;
+    build_for(input, output, Purpose::Program)
+}
 
-    let name = build_name(input);
+fn build_for(input: &Path, output: Option<PathBuf>, purpose: Purpose) -> Result<PathBuf> {
+    let source = std::fs::read_to_string(input).map_err(DriverError::io("read", input))?;
+    let (rust, native) = compile(&input.display().to_string(), &source, purpose)?;
+
+    let name = if purpose == Purpose::Tests { format!("{}_tests", build_name(input)) } else { build_name(input) };
     let work = std::env::temp_dir().join("kalinga-build");
     std::fs::create_dir_all(&work).map_err(DriverError::io("create", &work))?;
     let exe = output.unwrap_or_else(|| work.join(format!("{}{}", name, std::env::consts::EXE_SUFFIX)));
@@ -423,4 +535,27 @@ pub fn run(input: &Path) -> Result<i32> {
     let exe = build(input, None)?;
     let status = Command::new(&exe).status().map_err(|source| DriverError::Run { exe: exe.clone(), source })?;
     Ok(status.code().unwrap_or(1))
+}
+
+/// Builds and runs the `test fn`s of `input` (not those of the files it imports),
+/// returning the exit code: 0 when every test passed.
+pub fn test(input: &Path) -> Result<i32> {
+    let exe = build_tests(input)?;
+    let status = Command::new(&exe).status().map_err(|source| DriverError::Run { exe: exe.clone(), source })?;
+    Ok(status.code().unwrap_or(1))
+}
+
+/// Compiles a program that runs the `test fn`s of `input` and reports which fail.
+pub fn build_tests(input: &Path) -> Result<PathBuf> {
+    build_for(input, None, Purpose::Tests)
+}
+
+/// Does `source` declare a `test fn`?
+pub fn has_tests(source: &str) -> bool {
+    lexer::lex(source, 0).is_ok_and(|ts| {
+        ts.windows(2).any(|w| {
+            matches!(&w[0].tok, kalinga_syntax::token::Tok::Ident(n) if n == "test")
+                && w[1].tok == kalinga_syntax::token::Tok::Fn
+        })
+    })
 }

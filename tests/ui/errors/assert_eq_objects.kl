@@ -1,0 +1,8 @@
+// ui: test
+class Crate {
+    size: int = 1
+}
+
+test fn objects_cannot_be_compared() {
+    assert_eq(Crate(), Crate())
+}

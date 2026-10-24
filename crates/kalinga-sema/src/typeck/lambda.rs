@@ -116,7 +116,7 @@ impl Checker<'_> {
         pos: Span,
     ) -> Result<(TLambdaBody, Type)> {
         for ((name, _, ppos), t) in params.iter().zip(ptypes) {
-            cx.declare(name, t.clone(), false, *ppos)?;
+            self.declare(cx, name, t.clone(), false, *ppos)?;
         }
         match body {
             LambdaBody::Expr(e) => {

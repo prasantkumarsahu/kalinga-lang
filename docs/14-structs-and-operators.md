@@ -14,8 +14,8 @@ struct Vec2 {
 }
 
 fn main() {
-    let a = Vec2(3.0, 4.0)      // the fields, in order
-    var b = a                   // a copy
+    let a = Vec2(3.0, 4.0) // the fields, in order
+    var b = a              // a copy
     b.x = 10.0
     println(a, b, a == Vec2(3.0, 4.0))
 }
@@ -129,11 +129,11 @@ struct Vec2 {
         return Vec2(self.x * k, self.y * k)
     }
 
-    op *(o: Vec2) -> float {        // a second `*`: dot product
+    op *(o: Vec2) -> float { // a second `*`: dot product
         return self.x * o.x + self.y * o.y
     }
 
-    op -() -> Vec2 {                // unary minus
+    op -() -> Vec2 { // unary minus
         return Vec2(-self.x, -self.y)
     }
 }
@@ -142,7 +142,7 @@ fn main() {
     var pos = Vec2(0.0, 10.0)
     let vel = Vec2(2.0, -1.0)
     let dt = 0.5
-    pos += vel * dt                 // compound assignment uses the operator too
+    pos += vel * dt // compound assignment uses the operator too
     println(pos, -pos, pos * Vec2(1.0, 0.0))
 }
 ```

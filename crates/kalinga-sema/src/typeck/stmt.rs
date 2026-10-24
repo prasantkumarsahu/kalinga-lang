@@ -39,7 +39,7 @@ impl Checker<'_> {
             StmtKind::IfLet { name, value, then, otherwise } => {
                 let (value_t, inner) = self.optional_value(cx, value, "if let")?;
                 let then = cx.scoped(|cx| {
-                    cx.declare(name, inner, false, s.pos)?;
+                    self.declare(cx, name, inner, false, s.pos)?;
                     self.block(cx, then)
                 })?;
                 let otherwise = otherwise.as_ref().map(|o| self.block(cx, o)).transpose()?;
@@ -108,7 +108,7 @@ impl Checker<'_> {
             }
             _ => {}
         }
-        cx.declare(name, value_t.ty.clone(), mutable, pos)?;
+        self.declare(cx, name, value_t.ty.clone(), mutable, pos)?;
         Ok(TStmt::Let { name: name.to_string(), mutable, ty: value_t.ty.clone(), value: value_t })
     }
 
@@ -176,7 +176,7 @@ impl Checker<'_> {
     fn loop_body(&self, cx: &mut Ctx, vars: &[(&str, Type)], body: &[Stmt], pos: Span) -> Result<Vec<TStmt>> {
         cx.scoped(|cx| {
             for (name, ty) in vars {
-                cx.declare(name, ty.clone(), false, pos)?;
+                self.declare(cx, name, ty.clone(), false, pos)?;
             }
             self.in_loop(cx, |cx| self.block(cx, body))
         })
@@ -283,6 +283,7 @@ impl Checker<'_> {
                     return err(format!("variant `{}` is already handled by an earlier arm", v), arm.pos);
                 }
                 cover.variants.push(v.clone());
+                self.note_variant(arm.pos, ename, v);
                 if binds.len() != fields.len() {
                     return err(
                         format!("`{}` has {} value(s), but the pattern binds {}", v, fields.len(), binds.len()),
@@ -294,7 +295,7 @@ impl Checker<'_> {
                     if b == "_" {
                         names.push(None);
                     } else {
-                        cx.declare(b, t.clone(), false, arm.pos)?;
+                        self.declare(cx, b, t.clone(), false, arm.pos)?;
                         names.push(Some(b.clone()));
                     }
                 }

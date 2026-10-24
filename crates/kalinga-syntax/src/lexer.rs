@@ -8,16 +8,25 @@ pub fn lex(source: &str, file: u32) -> Result<Vec<Token>> {
 
 /// Lexes `source` as if it started at `start` (used for `{...}` inside strings).
 pub fn lex_at(source: &str, start: Span) -> Result<Vec<Token>> {
-    Lexer {
-        chars: source.chars().collect(),
-        i: 0,
-        line: start.line,
-        col: start.col,
-        file: start.file,
-        brackets: Vec::new(),
-        out: Vec::new(),
-    }
-    .run()
+    Lexer::new(source, start, false).run()
+}
+
+/// A piece of source text, for tools that keep the layout of the code (the formatter).
+#[derive(Debug, Clone, PartialEq)]
+pub enum Piece {
+    /// A token and its exact text.
+    Token(Tok, String),
+    /// A `//` or `/* */` comment, as written.
+    Comment(String),
+    /// A line break (every one, including blank lines and those inside brackets).
+    Newline,
+}
+
+/// The pieces of a whole file, in order: every token, comment and line break.
+pub fn layout(source: &str) -> Result<Vec<Piece>> {
+    let mut lexer = Lexer::new(source, Span::at(1, 1, 0), true);
+    lexer.scan()?;
+    Ok(lexer.pieces)
 }
 
 struct Lexer {
@@ -30,9 +39,33 @@ struct Lexer {
     /// but count again inside a `{` (e.g. a lambda body passed as an argument).
     brackets: Vec<char>,
     out: Vec<Token>,
+    /// Layout mode: every piece of the source is also kept in `pieces`.
+    keep_layout: bool,
+    pieces: Vec<Piece>,
+    /// Where the current token or comment starts (an index into `chars`).
+    start: usize,
 }
 
 impl Lexer {
+    fn new(source: &str, start: Span, keep_layout: bool) -> Lexer {
+        Lexer {
+            chars: source.chars().collect(),
+            i: 0,
+            line: start.line,
+            col: start.col,
+            file: start.file,
+            brackets: Vec::new(),
+            out: Vec::new(),
+            keep_layout,
+            pieces: Vec::new(),
+            start: 0,
+        }
+    }
+
+    /// The source text from the current token's start to here.
+    fn text_so_far(&self) -> String {
+        self.chars[self.start..self.i].iter().collect()
+    }
     fn peek(&self) -> Option<char> {
         self.chars.get(self.i).copied()
     }
@@ -74,6 +107,10 @@ impl Lexer {
         if pos.line == self.line {
             pos.len = self.col - pos.col;
         }
+        if self.keep_layout && tok != Tok::Newline && tok != Tok::Eof {
+            let text = self.text_so_far();
+            self.pieces.push(Piece::Token(tok.clone(), text));
+        }
         if tok == Tok::Newline {
             // Collapse blank lines and drop newlines that cannot end a statement.
             if matches!(self.brackets.last(), Some('(') | Some('[')) {
@@ -89,14 +126,23 @@ impl Lexer {
     }
 
     fn run(mut self) -> Result<Vec<Token>> {
+        self.scan()?;
+        Ok(self.out)
+    }
+
+    fn scan(&mut self) -> Result<()> {
         while let Some(c) = self.peek() {
             let pos = self.pos();
+            self.start = self.i;
             match c {
                 ' ' | '\t' | '\r' => {
                     self.bump();
                 }
                 '\n' => {
                     self.bump();
+                    if self.keep_layout {
+                        self.pieces.push(Piece::Newline);
+                    }
                     // A line starting with `.` continues the previous one (method chains).
                     if !self.next_line_starts_with_dot() {
                         self.push(Tok::Newline, pos);
@@ -109,6 +155,7 @@ impl Lexer {
                         }
                         self.bump();
                     }
+                    self.comment();
                 }
                 '/' if self.peek2() == Some('*') => {
                     self.bump();
@@ -123,6 +170,7 @@ impl Lexer {
                             _ => {}
                         }
                     }
+                    self.comment();
                 }
                 '"' => self.string(pos)?,
                 c if c.is_ascii_digit() => self.number(pos)?,
@@ -133,7 +181,15 @@ impl Lexer {
         let pos = self.pos();
         self.push(Tok::Newline, pos);
         self.out.push(Token { tok: Tok::Eof, pos });
-        Ok(self.out)
+        Ok(())
+    }
+
+    /// In layout mode, keeps the comment just read.
+    fn comment(&mut self) {
+        if self.keep_layout {
+            let text = self.text_so_far();
+            self.pieces.push(Piece::Comment(text.trim_end().to_string()));
+        }
     }
 
     /// Raw source of a `{...}` interpolation, after the opening `{`.

@@ -28,6 +28,11 @@ pub fn dir() -> Result<PathBuf> {
     Ok(dir)
 }
 
+/// The bundled modules' names (`"math2d"`, ...).
+pub fn modules() -> Vec<&'static str> {
+    FILES.iter().filter_map(|(n, _)| n.strip_suffix(".kl")).collect()
+}
+
 /// Is there a bundled module with this name (`"math2d"`)?
 pub fn has(module: &str) -> bool {
     FILES.iter().any(|(n, _)| n.strip_suffix(".kl") == Some(module))

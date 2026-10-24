@@ -1,12 +1,18 @@
 {
   "name": "kalinga-lang",
   "displayName": "Kalinga Language",
-  "description": "Syntax highlighting, code completion, signature help, snippets, live error checking and run commands for the Kalinga language (.kl), plus utkal.toml hints",
-  "version": "0.5.0",
+  "description": "Kalinga language support (.kl) from the Kalinga language server: errors as you type, completion, hover, signature help, go to definition, find references, rename, outline and quick fixes; plus syntax highlighting, snippets, run commands and utkal.toml hints",
+  "version": "0.6.0",
   "publisher": "kalinga",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/prasantkumarsahu/kalinga-lang",
+    "directory": "editors/vscode"
+  },
+  "icon": "icons/kalinga.png",
   "engines": {
-    "vscode": "^1.75.0"
+    "vscode": "^1.82.0"
   },
   "categories": [
     "Programming Languages",
@@ -15,7 +21,20 @@
   ],
   "main": "./extension.js",
   "scripts": {
-    "test": "node --test"
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "package": "vsce package"
+  },
+  "dependencies": {
+    "vscode-languageclient": "9.0.1"
+  },
+  "devDependencies": {
+    "@eslint/js": "9.39.1",
+    "@vscode/vsce": "3.6.2",
+    "eslint": "9.39.1",
+    "globals": "16.5.0",
+    "prettier": "3.6.2"
   },
   "contributes": {
     "languages": [
@@ -28,7 +47,11 @@
         "extensions": [
           ".kl"
         ],
-        "configuration": "./language-configuration.json"
+        "configuration": "./language-configuration.json",
+        "icon": {
+          "light": "./icons/kalinga-light.svg",
+          "dark": "./icons/kalinga-dark.svg"
+        }
       }
     ],
     "grammars": [
@@ -52,6 +75,11 @@
         "icon": "$(play)"
       },
       {
+        "command": "kalinga.test",
+        "title": "Run Tests in File",
+        "category": "Kalinga"
+      },
+      {
         "command": "kalinga.emit",
         "title": "Show Generated Rust",
         "category": "Kalinga"
@@ -59,6 +87,11 @@
       {
         "command": "kalinga.build",
         "title": "Build Executable",
+        "category": "Kalinga"
+      },
+      {
+        "command": "kalinga.restartServer",
+        "title": "Restart Language Server",
         "category": "Kalinga"
       }
     ],
@@ -81,6 +114,10 @@
         {
           "command": "kalinga.build",
           "when": "editorLangId == kalinga"
+        },
+        {
+          "command": "kalinga.test",
+          "when": "editorLangId == kalinga"
         }
       ]
     },
@@ -98,12 +135,7 @@
         "kalinga.compilerPath": {
           "type": "string",
           "default": "kalinga",
-          "description": "Path to the `kalinga` compiler executable (or just `kalinga` if it is on PATH)."
-        },
-        "kalinga.checkOnType": {
-          "type": "boolean",
-          "default": true,
-          "description": "Check for errors while typing. When off, files are checked on open and save."
+          "description": "Path to the `kalinga` compiler executable (or just `kalinga` if it is on PATH). The extension runs `kalinga lsp` for its language features."
         }
       }
     },

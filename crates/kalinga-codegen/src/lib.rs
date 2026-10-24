@@ -17,14 +17,32 @@ use kalinga_sema::tast::TypedProgram;
 use kalinga_sema::{Model, Signature, Type, class_trait};
 use kalinga_syntax::ast::Program;
 
+/// What to generate.
+pub struct Target<'a> {
+    /// A program that runs the analysed file's `test fn`s instead of `main`.
+    pub tests: bool,
+    /// The source files' names (by `Span::file`), for the places messages point at.
+    pub files: &'a [String],
+}
+
 /// The Rust source of a checked program.
-pub fn generate(prog: &Program, model: &Model, typed: &TypedProgram) -> String {
-    Gen { m: model, t: typed }.program(prog)
+pub fn generate(prog: &Program, model: &Model, typed: &TypedProgram, target: &Target) -> String {
+    Gen { m: model, t: typed, tests: target.tests, files: target.files }.program(prog)
 }
 
 struct Gen<'a> {
     m: &'a Model,
     t: &'a TypedProgram,
+    tests: bool,
+    files: &'a [String],
+}
+
+impl Gen<'_> {
+    /// `file:line` of a position, for messages.
+    fn place_of(&self, pos: kalinga_syntax::error::Span) -> String {
+        let file = self.files.get(pos.file as usize).map_or("?", String::as_str);
+        format!("{}:{}", file, pos.line)
+    }
 }
 
 const RUST_KEYWORDS: &[&str] = &[

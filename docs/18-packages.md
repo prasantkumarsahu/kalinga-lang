@@ -171,26 +171,27 @@ commit, shared by all projects.
 | `utkal build` | downloads what is missing, compiles `src/main.kl` to `target/<name>` (`.exe` on Windows) |
 | `utkal run [args...]` | builds, then runs with the arguments |
 | `utkal check` | reports errors in `src/main.kl` / `src/lib.kl` |
-| `utkal test` | builds and runs every `tests/*.kl`; a test passes when it exits with code 0 |
+| `utkal test` | runs the `test fn`s in `src/` and `tests/` (see [Testing](24-tooling.md#testing)), and every other `tests/*.kl` program, which passes when it exits with code 0 |
 | `utkal update` | refreshes `utkal.lock` |
 
-A test fails by returning an `Err` from `main` (or by a runtime error):
+`utkal new --lib` starts `tests/greet.kl` with a test:
 
 ```kalinga
 import "../src/lib.kl"
 
-fn main() -> Result<void, str> {
-    if greet("utkal") != "Hello, utkal!" {
-        return Err("greet is wrong")
-    }
-    return Ok()
+test fn greets_by_name() {
+    assert_eq(greet("utkal"), "Hello, utkal!")
 }
 ```
 
 ```text
-test greet.kl ... ok
+tests/greet.kl
+running 1 test
+test greets_by_name ... ok
 
-1 passed, 0 failed
+test result: ok. 1 passed; 0 failed
+
+1 file(s) passed, 0 failed
 ```
 
 `kalinga run`, `kalinga check` and the VS Code extension also find the nearest

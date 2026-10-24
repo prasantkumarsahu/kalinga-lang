@@ -73,7 +73,8 @@ fn new_build_run_and_test() {
     ok(&utkal(&ws, &["new", "greeter", "--lib"]));
     let lib = ws.join("greeter");
     let out = ok(&utkal(&lib, &["test"]));
-    assert!(out.contains("test greet.kl ... ok"), "{}", out);
+    assert!(out.contains("test greets_by_name ... ok"), "{}", out);
+    // A `tests/*.kl` program without `test fn`s passes when it exits with 0.
     write(&lib.join("tests/broken.kl"), "fn main() -> Result<void, str> {\n    return Err(\"nope\")\n}\n");
     let out = utkal(&lib, &["test"]);
     assert!(String::from_utf8_lossy(&out.stdout).contains("test broken.kl ... FAILED"));

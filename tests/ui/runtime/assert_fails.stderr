@@ -1,0 +1,1 @@
+runtime error: assertion failed at tests/ui/runtime/assert_fails.kl:4: n is too small

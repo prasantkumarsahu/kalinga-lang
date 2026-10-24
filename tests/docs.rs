@@ -1,8 +1,11 @@
 //! Keeps the documentation honest. In `docs/*.md`:
-//! - every complete program (a ```` ```kalinga ```` block with `fn main()`) must compile, and
-//!   when a ```` ```text ```` block follows it, running it must print exactly that;
+//! - every complete program (a ```` ```kalinga ```` block with `fn main()`, or with
+//!   `test fn`s) must compile, and when a ```` ```text ```` block follows it, running it
+//!   (with `kalinga test` for tests) must print exactly that;
 //! - every ```` ```kalinga error ```` block must be rejected, with the first line of the
-//!   following ```` ```text ```` block as the first line of the error.
+//!   following ```` ```text ```` block as the first line of the error;
+//! - every other ```` ```kalinga ```` block is in the standard layout (`kalinga fmt`),
+//!   except those showing `;`, which `fmt` would split.
 //!
 //! Programs that read input get `Asha` and `20` on stdin, and each runs in its own
 //! folder. Blocks that need other files (`import` of a file or package, `use rust`,
@@ -119,7 +122,8 @@ fn verify(b: &Block, id: usize) -> Option<String> {
     let dir = std::env::temp_dir().join("kalinga-doc-tests").join(id.to_string());
     std::fs::create_dir_all(&dir).unwrap();
     std::fs::write(dir.join("main.kl"), &b.code).unwrap();
-    let (_, got) = kalinga(&["run", "main.kl"], "Asha\n20\n", &dir);
+    let command = if b.code.contains("test fn") { "test" } else { "run" };
+    let (_, got) = kalinga(&[command, "main.kl"], "Asha\n20\n", &dir);
     (got.trim() != expected.trim()).then(|| format!("{}: output differs\n--- docs\n{}--- got\n{}", at, expected, got))
 }
 
@@ -127,7 +131,7 @@ fn verify(b: &Block, id: usize) -> Option<String> {
 fn doc_examples_match_their_output() {
     let blocks: Vec<Block> = doc_blocks()
         .into_iter()
-        .filter(|b| b.expect_error || b.code.contains("fn main()"))
+        .filter(|b| b.expect_error || b.code.contains("fn main()") || b.code.contains("test fn"))
         .filter(|b| !["import \"", "use rust \"", "use crate \""].iter().any(|n| b.code.contains(n)))
         .collect();
     assert!(blocks.len() > 100, "only found {} doc examples", blocks.len());
@@ -148,6 +152,17 @@ fn doc_examples_match_their_output() {
     let mut failures = failures.into_inner().unwrap();
     failures.sort();
     assert!(failures.is_empty(), "{} doc example(s) are wrong:\n\n{}", failures.len(), failures.join("\n\n"));
+}
+
+#[test]
+fn doc_examples_are_formatted() {
+    let unformatted: Vec<String> = doc_blocks()
+        .iter()
+        .filter(|b| !b.expect_error && !b.code.contains(';'))
+        .filter(|b| kalinga_fmt::format(&b.code).is_ok_and(|f| f != b.code))
+        .map(|b| format!("{}:{}", b.file, b.line))
+        .collect();
+    assert!(unformatted.is_empty(), "examples not in the `kalinga fmt` layout: {}", unformatted.join(", "));
 }
 
 /// The `| ... |` rows of the table that follows `heading` in `text`.

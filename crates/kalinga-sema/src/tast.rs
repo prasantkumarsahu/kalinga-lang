@@ -202,6 +202,10 @@ pub enum Builtin {
     Chr,
     /// `args()`: the program's command-line arguments.
     Args,
+    /// `assert(condition)` or `assert(condition, message)`.
+    Assert,
+    /// `assert_eq(a, b)`.
+    AssertEq,
     /// `Math.sqrt` and the other one-argument float functions; the Rust method name.
     MathUnary(String),
     /// `Math.pow`, `Math.atan2`, `Math.hypot`; the Rust method name.
@@ -478,9 +482,20 @@ pub struct TBody {
     pub is_async: bool,
 }
 
+/// A checked `test fn`.
+#[derive(Debug, Clone)]
+pub struct TTest {
+    pub name: String,
+    pub body: TBody,
+    /// Where it is declared (its file decides whether `kalinga test` runs it).
+    pub pos: Span,
+}
+
 /// Everything type checking produces for code generation.
 #[derive(Debug, Default)]
 pub struct TypedProgram {
+    /// The `test fn`s of every file, in order.
+    pub tests: Vec<TTest>,
     /// Top-level functions, by name.
     pub functions: HashMap<String, TBody>,
     /// (class, method) → body; abstract methods have none.

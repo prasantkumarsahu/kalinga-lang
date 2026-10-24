@@ -8,6 +8,7 @@ const USAGE: &str = "Kalinga — a simple, safe, fast object-oriented language t
 usage:
   kalinga run   <file.kl>              compile and run
   kalinga build <file.kl> [-o <exe>]   compile to a native executable
+  kalinga test  <file.kl>              run the file's `test fn`s and report which fail
   kalinga emit  <file.kl>              print the generated Rust code
   kalinga check <file.kl> [--stdin]    report errors only; `fn main()` is optional, so files
                                        meant to be imported can be checked (--stdin reads the
@@ -15,6 +16,9 @@ usage:
   kalinga fix   <file.kl or folder>...  update code written for an earlier Kalinga version
                                        (0.4 → 0.5: `print(...)` becomes `println(...)`,
                                        `static NAME: T = v` becomes `const NAME: T = v`)
+  kalinga fmt   [--check] <file.kl or folder>...  lay out code in the standard style
+                                       (--check lists the files it would change, and fails)
+  kalinga lsp                          run the language server (editors start it)
   kalinga -v | --version               print the installed version";
 
 /// Errors from the compiler and the command's own messages, shown as text.
@@ -22,6 +26,26 @@ type CliResult<T> = Result<T, Box<dyn std::error::Error>>;
 
 fn read(file: &Path) -> CliResult<String> {
     std::fs::read_to_string(file).map_err(|e| format!("cannot read {}: {}", file.display(), e).into())
+}
+
+/// `kalinga fmt [--check]`: formats each file (or every `.kl` file in each folder) in
+/// place, or with `--check` only lists the files that are not formatted.
+fn fmt(args: &[String]) -> CliResult<i32> {
+    let check = args.iter().any(|a| a == "--check");
+    let mut code = 0;
+    for p in args.iter().filter(|a| *a != "--check") {
+        let report = driver::fmt::fmt_path(Path::new(p), check)?;
+        for file in &report.changed {
+            println!("{} {}", if check { "not formatted:" } else { "formatted" }, file.display());
+        }
+        for e in &report.failed {
+            eprintln!("cannot format a file that is not valid Kalinga:\n{}", e);
+        }
+        if !report.failed.is_empty() || (check && !report.changed.is_empty()) {
+            code = 1;
+        }
+    }
+    Ok(code)
 }
 
 /// `kalinga fix`: updates each file (or every `.kl` file in each folder) in place.
@@ -44,6 +68,13 @@ fn main() {
         println!("kalinga {}", env!("CARGO_PKG_VERSION"));
         return;
     }
+    if args.first().map(String::as_str) == Some("lsp") {
+        if let Err(e) = kalinga_lsp::run() {
+            eprintln!("kalinga lsp: {}", e);
+            exit(1);
+        }
+        return;
+    }
     let (cmd, file) = match (args.first(), args.get(1)) {
         (Some(c), Some(f)) => (c.as_str(), PathBuf::from(f)),
         _ => {
@@ -54,6 +85,7 @@ fn main() {
 
     let result: CliResult<i32> = match cmd {
         "run" => driver::run(&file).map_err(Into::into),
+        "test" => driver::test(&file).map_err(Into::into),
         "build" => {
             let out = match args.get(2).map(String::as_str) {
                 Some("-o") => match args.get(3) {
@@ -80,6 +112,7 @@ fn main() {
             0
         }),
         "fix" => fix(&args[1..]),
+        "fmt" => fmt(&args[1..]),
         "check" => {
             let source = if args.get(2).map(String::as_str) == Some("--stdin") {
                 let mut s = String::new();

@@ -23,15 +23,28 @@ impl SourceMap {
         (name, text)
     }
 
-    /// The message with its source line, using package names (`mathx.Vec2`) rather than
-    /// internal ones.
+    /// How many files there are.
+    pub fn len(&self) -> usize {
+        self.files.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.files.is_empty()
+    }
+
+    /// `text` with package names (`mathx.Vec2`) in place of internal ones (`Vec2__mathx`).
+    pub fn show(&self, text: &str) -> String {
+        let mut out = text.to_string();
+        for (mangled, shown) in &self.display {
+            out = out.replace(mangled.as_str(), shown);
+        }
+        out
+    }
+
+    /// The message with its source line, using package names rather than internal ones.
     pub fn render(&self, d: &Diagnostic) -> String {
         let (name, text) = self.file(d.span.file);
-        let mut msg = d.render(name, text);
-        for (mangled, shown) in &self.display {
-            msg = msg.replace(mangled.as_str(), shown);
-        }
-        msg
+        self.show(&d.render(name, text))
     }
 }
 

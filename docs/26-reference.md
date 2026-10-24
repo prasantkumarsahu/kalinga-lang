@@ -36,7 +36,7 @@ true  false  none  self  super  as  is
 
 Contextual words (only special in one place): `mut` before `fn` and `op` before an
 operator inside a struct; `rust` and `crate` after `use` and `rust` after `extern fn ... =`;
-`type` after `extern`; `features` after a crate version.
+`type` after `extern`; `features` after a crate version; `test` before `fn` at the top level.
 
 Built-in type names: `int`, `float`, `bool`, `str`, `void`.
 
@@ -186,6 +186,8 @@ of `init`, required when the base has an `init`), `super.method(...)`.
 | `input([prompt: str]) -> str` | one line from stdin, without the line ending |
 | `chr(code: int) -> str` | the character with that code point: `chr(65)` is `"A"` |
 | `args() -> [str]` | the command-line arguments, without the program's own name |
+| `assert(condition: bool[, message: str])` | stops the program (or fails the test) with the file and line when `condition` is false |
+| `assert_eq(value: T, expected: T)` | stops the program (or fails the test) when they differ, showing both; `T` must be printable and comparable |
 
 `Math`, `Random` and `Time` functions are listed in [Standard Library](15-standard-library.md).
 
@@ -243,7 +245,8 @@ Library functions: `Math.*`, `Random.*` and `Time.*` (chapter 15), `Time.wait(s)
 ## Grammar (EBNF)
 
 ```text
-program     = { import | use | extern | function | class | struct | interface | enum | const } ;
+program     = { import | use | extern | function | test | class | struct | interface | enum | const } ;
+test        = "test" "fn" IDENT "(" ")" block ;
 const       = "const" IDENT ":" type "=" expr ;
 import      = "import" STRING [ "as" IDENT ] ;
 use         = "use" ( "rust" STRING | "crate" STRING "=" STRING [ "features" "[" STRING { "," STRING } "]" ] ) ;
