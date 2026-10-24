@@ -280,6 +280,26 @@ This runs:
 same checks, plus `cargo fmt --check` and `cargo clippy -- -D warnings`, run on Windows,
 Linux and macOS for every push (`.github/workflows/ci.yml`).
 
+## Making a release
+
+1. Set the version in `Cargo.toml` (`[workspace.package] version`) and write its section in
+   `CHANGELOG.md` (`## X.Y.Z — name`).
+2. After that change is merged into `main`, tag it and push the tag:
+
+   ```bash
+   git tag -a vX.Y.Z -m "Kalinga X.Y.Z"
+   ```
+
+   ```bash
+   git push origin vX.Y.Z
+   ```
+
+3. `.github/workflows/release.yml` builds `kalinga` and `utkal` for Windows, Linux and macOS
+   (Intel and Apple silicon) and the `.vsix`, and publishes them as a GitHub release with
+   the CHANGELOG section as its notes and a `SHA256SUMS` file. It refuses a tag that does
+   not match `Cargo.toml`. Running the workflow by hand (Actions → Release → Run workflow)
+   builds everything without publishing.
+
 ---
 
 Previous: [23. Safety and Errors](23-safety-and-errors.md) · Next: [25. How It Works](25-how-it-works.md)
