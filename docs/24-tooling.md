@@ -314,7 +314,7 @@ Linux and macOS for every push (`.github/workflows/ci.yml`).
 ## Making a release
 
 1. Set the version in `Cargo.toml` (`[workspace.package] version`) and write its section in
-   `CHANGELOG.md` (`## X.Y.Z — name`).
+   `CHANGELOG.md` (`## X.Y.Z`).
 2. After that change is merged into `main`, tag it and push the tag:
 
    ```bash
@@ -352,6 +352,9 @@ Linux and macOS for every push (`.github/workflows/ci.yml`).
 
    Without the secret, the Open VSX step is skipped with a warning, like the Marketplace
    one.
+6. If a publish step fails (an expired token, for example), fix the cause and use **Re-run
+   failed jobs** on the workflow run: the existing release gets its files and notes
+   replaced, and extension versions already published are skipped.
 
 ---
 
