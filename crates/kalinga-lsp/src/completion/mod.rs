@@ -23,8 +23,25 @@ pub fn complete(world: &mut World, p: CompletionParams) -> Option<CompletionResp
     let text = world.text(&uri)?.to_string();
     let offset = text::offset(&text, p.text_document_position.position);
     let word_start = text[..offset].trim_end_matches(|c: char| c.is_alphanumeric() || c == '_').len();
+    let trigger = p.context.and_then(|c| c.trigger_character);
+    if trigger.as_deref().is_some_and(|t| !wanted_here(t, &text, offset)) {
+        return Some(CompletionResponse::Array(vec![]));
+    }
     let items = items_at(world, &uri, &text, word_start, offset);
     Some(CompletionResponse::Array(items))
+}
+
+/// Whether the character `trigger` just typed asks for a list here: `"` and `/` inside
+/// `import "...`, `{` opening a string's `{...}`. Elsewhere they are ordinary typing
+/// (`{` opening a block), so the editor shows nothing.
+fn wanted_here(trigger: &str, text: &str, offset: usize) -> bool {
+    let line_start = text[..offset].rfind('\n').map_or(0, |i| i + 1);
+    let line = &text[line_start..offset];
+    match trigger {
+        "\"" | "/" => matches!(context(text, offset, offset), Context::ImportPath),
+        "{" => context::code_part(line).is_some_and(|code| code.len() < line.len()),
+        _ => true,
+    }
 }
 
 /// The items for the cursor at `offset`, with the identifier being typed starting at

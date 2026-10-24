@@ -52,6 +52,25 @@ pub fn complete_in(dir: &std::path::Path, src: &str) -> Vec<CompletionItem> {
     }
 }
 
+/// Completion items at `|` when the editor asked because `trigger` was typed.
+pub fn complete_triggered(src: &str, trigger: &str) -> Vec<CompletionItem> {
+    let (text, pos) = marked(src);
+    let (mut world, uri) = open(&std::env::temp_dir(), &text);
+    let params = CompletionParams {
+        text_document_position: at(&uri, pos),
+        work_done_progress_params: WorkDoneProgressParams::default(),
+        partial_result_params: PartialResultParams::default(),
+        context: Some(CompletionContext {
+            trigger_kind: CompletionTriggerKind::TRIGGER_CHARACTER,
+            trigger_character: Some(trigger.to_string()),
+        }),
+    };
+    match kalinga_lsp::completion::complete(&mut world, params) {
+        Some(CompletionResponse::Array(items)) => items,
+        _ => vec![],
+    }
+}
+
 pub fn complete(src: &str) -> Vec<CompletionItem> {
     complete_in(&std::env::temp_dir(), src)
 }
