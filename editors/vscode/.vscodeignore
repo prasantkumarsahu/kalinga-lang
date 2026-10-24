@@ -1,7 +1,9 @@
 .vscode/**
 *.vsix
 test/**
+node_modules/**
+extension.js
 eslint.config.mjs
 .prettierrc.json
 .prettierignore
-node_modules/.bin/**
+package-lock.json

@@ -2,7 +2,7 @@
   "name": "kalinga-lang",
   "displayName": "Kalinga Language",
   "description": "Kalinga language support (.kl) from the Kalinga language server: errors as you type, completion, hover, signature help, go to definition, find references, rename, outline and quick fixes; plus syntax highlighting, snippets, run commands and utkal.toml hints",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "publisher": "kalinga",
   "license": "MIT",
   "repository": {
@@ -19,8 +19,10 @@
     "Snippets",
     "Linters"
   ],
-  "main": "./extension.js",
+  "main": "./dist/extension.js",
   "scripts": {
+    "bundle": "esbuild extension.js --bundle --outfile=dist/extension.js --platform=node --format=cjs --external:vscode --minify",
+    "vscode:prepublish": "npm run bundle",
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
@@ -32,6 +34,7 @@
   "devDependencies": {
     "@eslint/js": "9.39.1",
     "@vscode/vsce": "3.6.2",
+    "esbuild": "0.28.1",
     "eslint": "9.39.1",
     "globals": "16.5.0",
     "prettier": "3.6.2"
