@@ -66,6 +66,7 @@ Read these in order the first time. Each chapter builds on the previous one.
 | [Tooling](24-tooling.md) | `kalinga` and `utkal` commands, the VS Code extension |
 | [How It Works](25-how-it-works.md) | How Kalinga code becomes Rust, and why it is fast |
 | [Language Reference](26-reference.md) | Keywords, types, operator precedence, built-ins, grammar |
+| [Stability](27-stability.md) | What stays the same from 0.5 on, and how changes are handled |
 
 ## Conventions in these docs
 

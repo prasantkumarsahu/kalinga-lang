@@ -11,28 +11,36 @@ You do not need it to write Kalinga programs, but it explains the performance mo
  hello.kl
     │
     ▼
- Lexer        kalinga-syntax   characters → tokens; decides which newlines end statements
+ Lexer          kalinga-syntax   characters → tokens; decides which newlines end statements
     │
     ▼
- Parser       kalinga-syntax   tokens → syntax tree; `import`ed files are loaded and
-                               merged by kalinga-driver
+ Parser         kalinga-syntax   tokens → syntax tree; carries on after a broken declaration.
+    │                            `import`ed files are loaded and merged by kalinga-driver
+    ▼
+ Declarations   kalinga-sema     package names; classes, interfaces, structs, enums and
+    │                            their rules (inheritance, overrides, interfaces)
+    ▼
+ Type checker   kalinga-sema     every body → a typed tree, where each expression has its
+    │                            type and each call what it calls; all errors are collected
+    ▼
+ Codegen        kalinga-codegen  prints the typed tree as Rust, with the runtime
     │
     ▼
- Checker      kalinga-sema     package names, classes, interfaces, inheritance, overrides
-    │
-    ▼
- Codegen      kalinga-codegen  type-checks every function body and writes Rust source
-    │
-    ▼
- rustc -O     kalinga-driver   Rust → native executable (with overflow checks on)
+ rustc -O       kalinga-driver   Rust → native executable (with overflow checks on)
 ```
 
-`kalinga check` stops after codegen without writing any file; `kalinga emit` prints the
-Rust code; `kalinga build` and `run` go all the way.
+`kalinga check` stops after type checking without writing any file; `kalinga emit` prints
+the Rust code; `kalinga build` and `run` go all the way, and `kalinga test` builds a
+program that runs the file's `test fn`s.
 
-Every Kalinga error is reported by the first three stages, in Kalinga terms. If `rustc`
-ever rejects the generated code, that is a bug in the Kalinga compiler, and it is
-reported as an *internal compiler error*.
+Every Kalinga error is reported by the stages before codegen, in Kalinga terms, and code
+generation itself cannot fail. If `rustc` ever rejects the generated code, that is a bug
+in the Kalinga compiler, and it is reported as an *internal compiler error*.
+
+The same stages serve editors: `kalinga lsp` runs them on the text being edited and keeps
+what the type checker found out about every name (what it refers to, its type), which
+hover, completion, go to definition and rename look up. `kalinga fmt` only needs the
+lexer.
 
 ## Mapping types
 
@@ -222,14 +230,17 @@ The costs to be aware of:
 
 The compiler is a Cargo workspace. Each crate depends only on the ones above it:
 
-| Crate / file | Role |
+| Crate | Role |
 |---|---|
-| `crates/kalinga-syntax` | `token.rs`, `lexer.rs` (tokens, newline handling), `ast.rs`, `parser.rs` (syntax tree, recursive-descent parser), `error.rs` (positions, the source-line-with-caret display) |
-| `crates/kalinga-sema` | `namespaces.rs` (package namespaces: renaming clashing names, `import ... as`), `checker.rs` (type model, class hierarchy, override and interface rules) |
-| `crates/kalinga-codegen` | Body type checking, Rust generation, runtime prelude |
+| `crates/kalinga-syntax` | `token.rs`, `lexer.rs` (tokens, newline handling, and a layout mode that keeps comments for the formatter), `ast.rs`, `parser.rs` (recursive descent, error recovery), `visit.rs` (walking a whole program), `error.rs` (spans and diagnostics) |
+| `crates/kalinga-sema` | `namespaces.rs` (package namespaces: renaming clashing names, `import ... as`), `declare.rs` / `model.rs` (the declaration model and its rules), `typeck/` (type checking into the typed tree, `tast.rs`), `builtins.rs` (the one registry of built-in functions and methods, which the checker, the editor and the docs tests use), `index.rs` (what names refer to, for editors) |
+| `crates/kalinga-codegen` | Rust generation from the typed tree (`items.rs`, `stmt.rs`, `expr.rs`), and the runtime in `runtime/*.rs`: printing, collections, threads, async, channels, `main` and the test runner |
+| `crates/kalinga-fmt` | `kalinga fmt` |
 | `crates/kalinga-project` | `utkal.toml`, `utkal.lock`, fetching git and path packages, versions |
-| `crates/kalinga-driver` | Loads files and packages, writes the `.rs` file, runs `rustc` or `cargo` and the program; `stdlib.rs` and `std/` hold the bundled modules (`math2d`, `game` and its Rust glue) |
+| `crates/kalinga-driver` | Loads files and packages, runs the stages, writes the `.rs` file, runs `rustc` or `cargo` and the program; `analyze` for editors (reading files open in the editor), `fix.rs` and `fmt.rs` for those commands; `stdlib.rs` and `std/` hold the bundled modules (`math2d`, `fs`, `game` and their Rust glue) |
+| `crates/kalinga-lsp` | The language server: documents, diagnostics, completion (a probe name put where you are typing, which the type checker reports on), hover, signature help, navigation, rename, quick fixes, formatting |
 | `src/main.rs`, `src/bin/utkal.rs` | The `kalinga` and `utkal` command lines |
+| `editors/vscode` | The VS Code extension, a client of `kalinga lsp` |
 
 ---
 

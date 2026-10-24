@@ -203,6 +203,8 @@ Classes and structs can have their own constants, and variables shared by the wh
 Notes:
 
 - A float literal needs digits on both sides of the dot: `2.0`, not `2.`.
+- Where a `float` is expected, a whole-number literal is that float: `let speed: float = 3`
+  and `Vec2(600, 300)` work. This is only for literals; a variable needs `float(n)`.
 - Underscores in numbers are ignored: `1_000` is `1000`.
 - String escapes: `\n` newline, `\t` tab, `\r`, `\0`, `\\` backslash, `\"` quote.
 - `{expression}` inside a string inserts a value: `"total: {n + 1}"`. Write `{{` and `}}`
@@ -210,7 +212,8 @@ Notes:
 
 ### No implicit conversions
 
-Kalinga never converts between types on its own. Use `int()`, `float()` and `str()`:
+Apart from whole-number literals used as floats, Kalinga never converts between types on
+its own. Use `int()`, `float()` and `str()`:
 
 ```kalinga
 fn main() {

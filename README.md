@@ -91,7 +91,9 @@ internals and a language reference. See [CHANGELOG.md](CHANGELOG.md) for what is
 ## Usage
 
 Requires a Rust toolchain (`rustc` on PATH; `cargo` for crates and games; `git` for git
-packages). Install both commands, `kalinga` and `utkal`:
+packages). Download `kalinga` and `utkal` for Windows, Linux or macOS from
+[Releases](https://github.com/prasantkumarsahu/kalinga-lang/releases) (with the VS Code
+extension as a `.vsix`), or build and install both commands:
 
 ```bash
 cargo install --path .
