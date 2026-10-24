@@ -1,0 +1,12 @@
+tests/ui/errors/did_you_mean_other_language.kl:2:13: error: `str` has no method `length`
+2 |     return s.length()
+  |             ^
+  = help: did you mean `len`?
+tests/ui/errors/did_you_mean_other_language.kl:6:13: error: `str` has no method `startsWith`
+6 |     return s.startsWith("k")
+  |             ^
+  = help: did you mean `starts_with`?
+tests/ui/errors/did_you_mean_other_language.kl:10:14: error: `[int]` has no method `size`
+10 |     return xs.size()
+   |              ^
+   = help: did you mean `len`?

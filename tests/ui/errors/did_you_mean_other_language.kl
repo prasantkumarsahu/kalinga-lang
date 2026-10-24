@@ -1,0 +1,13 @@
+fn length_of(s: str) -> int {
+    return s.length()
+}
+
+fn starts(s: str) -> bool {
+    return s.startsWith("k")
+}
+
+fn size_of(xs: [int]) -> int {
+    return xs.size()
+}
+
+fn main() {}

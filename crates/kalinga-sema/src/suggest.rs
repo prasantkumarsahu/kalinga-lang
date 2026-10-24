@@ -2,24 +2,63 @@
 
 use kalinga_syntax::error::{Diagnostic, Result, Span};
 
-/// The candidate closest to `name` when it is close enough to be a typo: at most a third
-/// of the characters differ, ignoring case (so a name of one or two letters only matches
-/// in another case). Ties go to the first.
+/// Names other languages use, and what Kalinga calls the same thing.
+const OTHER_LANGUAGES: &[(&str, &str)] = &[
+    ("length", "len"),
+    ("size", "len"),
+    ("count", "len"),
+    ("toUpperCase", "upper"),
+    ("toLowerCase", "lower"),
+    ("strip", "trim"),
+    ("includes", "contains"),
+    ("indexOf", "find"),
+    ("puts", "println"),
+];
+
+/// The candidate `name` most likely meant, or `None`:
+/// - one close enough to be a typo: at most a third of the characters differ, ignoring
+///   case (so a name of one or two letters only matches in another case); ties go to the
+///   first;
+/// - else the same name in snake_case (`startsWith` → `starts_with`);
+/// - else what Kalinga calls a name from another language (`length` → `len`).
+///
+/// Only candidates are ever suggested.
 pub fn closest<'a>(name: &str, candidates: impl IntoIterator<Item = &'a str>) -> Option<&'a str> {
+    // Packages' clashing names are renamed `Name__unit`; compare what is written.
+    let written: Vec<&str> = candidates
+        .into_iter()
+        .map(|c| c.split("__").next().unwrap_or(c))
+        .filter(|w| *w != name && !w.is_empty())
+        .collect();
     let limit = name.chars().count() / 3;
     let mut best: Option<(usize, &str)> = None;
-    for c in candidates {
-        // Packages' clashing names are renamed `Name__unit`; compare what is written.
-        let written = c.split("__").next().unwrap_or(c);
-        if written == name || written.is_empty() {
-            continue;
-        }
-        let d = distance(&name.to_lowercase(), &written.to_lowercase());
+    for &w in &written {
+        let d = distance(&name.to_lowercase(), &w.to_lowercase());
         if d <= limit && best.is_none_or(|(bd, _)| d < bd) {
-            best = Some((d, written));
+            best = Some((d, w));
         }
     }
-    best.map(|(_, c)| c)
+    if let Some((_, w)) = best {
+        return Some(w);
+    }
+    let snake = snake_case(name);
+    if let Some(&w) = written.iter().find(|w| w.to_lowercase() == snake) {
+        return Some(w);
+    }
+    let (_, kalinga) = OTHER_LANGUAGES.iter().find(|(other, _)| *other == name)?;
+    written.into_iter().find(|w| w == kalinga)
+}
+
+/// `startsWith` → `starts_with`.
+fn snake_case(name: &str) -> String {
+    let mut out = String::new();
+    for (i, c) in name.chars().enumerate() {
+        if c.is_uppercase() && i > 0 {
+            out.push('_');
+        }
+        out.extend(c.to_lowercase());
+    }
+    out
 }
 
 /// An error `message` about the unknown `name`, saying "did you mean `x`?" when one of
@@ -77,5 +116,18 @@ mod tests {
         assert_eq!(closest("zebra", ["apple", "speak"]), None);
         assert_eq!(closest("draw", ["draw"]), None, "the same name is no suggestion");
         assert_eq!(closest("Vec", ["Vec2__mathx"]), Some("Vec2"));
+    }
+
+    #[test]
+    fn names_from_other_languages() {
+        assert_eq!(closest("startsWith", ["len", "starts_with"]), Some("starts_with"));
+        assert_eq!(closest("parseInt", ["parse_int", "parse_float"]), Some("parse_int"));
+        assert_eq!(closest("isDone", ["join", "is_done"]), Some("is_done"));
+        assert_eq!(closest("length", ["len", "upper"]), Some("len"));
+        assert_eq!(closest("size", ["len"]), Some("len"));
+        assert_eq!(closest("toUpperCase", ["upper", "lower"]), Some("upper"));
+        assert_eq!(closest("indexOf", ["find"]), Some("find"));
+        assert_eq!(closest("size", ["width", "height"]), None, "only a name the type has");
+        assert_eq!(closest("lenght", ["length", "len"]), Some("length"), "a typo wins");
     }
 }
