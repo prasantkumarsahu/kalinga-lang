@@ -104,6 +104,7 @@ impl Gen<'_> {
             Type::Struct(n, args) => format!("{}<{}>", n, self.rtys(args)),
             Type::Func(ps, r) if **r == Type::Void => format!("Rc<dyn Fn({})>", self.rtys(ps)),
             Type::Func(ps, r) => format!("Rc<dyn Fn({}) -> {}>", self.rtys(ps), self.rty(r)),
+            Type::Tuple(parts) => format!("({})", self.rtys(parts)),
             Type::Unknown => "_".into(),
             Type::Param(n) => n.clone(),
             Type::Generic(n, args) => format!("Rc<RefCell<{}<{}>>>", n, self.rtys(args)),
@@ -166,6 +167,12 @@ impl Gen<'_> {
                 code,
                 self.convert("__v".into(), a, b)
             ),
+            (Type::Tuple(a), Type::Tuple(b)) => {
+                let names: Vec<String> = (0..a.len()).map(|i| format!("__p{}", i)).collect();
+                let parts: Vec<String> =
+                    names.iter().zip(a.iter().zip(b)).map(|(n, (x, y))| self.convert(n.clone(), x, y)).collect();
+                format!("{{ let ({}) = {}; ({}) }}", names.join(", "), code, parts.join(", "))
+            }
             (Type::Array(a), Type::Array(b)) => {
                 format!("({}).into_iter().map(|__v| {}).collect::<Vec<_>>()", code, self.convert("__v".into(), a, b))
             }

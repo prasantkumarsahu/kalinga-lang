@@ -396,6 +396,63 @@ impl Parser {
         Ok((bases, args))
     }
 
+    /// After `let` / `var`: `(a, b) = value`.
+    fn let_tuple(&mut self, mutable: bool, pos: Span) -> Result<Stmt> {
+        let names = self.tuple_names()?;
+        self.expect(Tok::Assign, "`=` (variables must be initialized)")?;
+        let value = self.expr()?;
+        self.end_of_statement()?;
+        Ok(Stmt { kind: StmtKind::LetTuple { names, mutable, value }, pos })
+    }
+
+    /// After `for`: `(a, b) in xs { ... }`, a loop over each element taken apart (as
+    /// `let (a, b) = element` at the start of the body).
+    fn for_tuple(&mut self, pos: Span) -> Result<Stmt> {
+        let names = self.tuple_names()?;
+        self.expect(Tok::In, "`in`")?;
+        let iter = ForIter::Each(self.expr()?);
+        let mut body = self.block()?;
+        self.skip_newlines();
+        let var = format!("__tuple{}_{}", pos.line, pos.col);
+        let value = Expr { kind: ExprKind::Ident(var.clone()), pos };
+        body.insert(0, Stmt { kind: StmtKind::LetTuple { names, mutable: false, value }, pos });
+        Ok(Stmt { kind: StmtKind::For { index: None, var, iter, body }, pos })
+    }
+
+    /// After `(`: `(expr)` for grouping, or `(a, b)`, a tuple.
+    fn parenthesized(&mut self, pos: Span) -> Result<Expr> {
+        let e = self.expr()?;
+        if !self.check(&Tok::Comma) {
+            self.expect(Tok::RParen, "`)`")?;
+            return Ok(e);
+        }
+        let mut parts = vec![e];
+        while self.eat(&Tok::Comma) {
+            self.skip_newlines();
+            if self.check(&Tok::RParen) {
+                break;
+            }
+            parts.push(self.expr()?);
+        }
+        self.skip_newlines();
+        self.expect(Tok::RParen, "`)`")?;
+        Ok(Expr { kind: ExprKind::Tuple(parts), pos })
+    }
+
+    /// `(a, b)` names that take a tuple apart.
+    fn tuple_names(&mut self) -> Result<Vec<(String, Span)>> {
+        self.expect(Tok::LParen, "`(`")?;
+        let mut names = vec![self.ident("variable name")?];
+        while self.eat(&Tok::Comma) {
+            names.push(self.ident("variable name")?);
+        }
+        self.expect(Tok::RParen, "`)`")?;
+        if names.len() < 2 {
+            return err("taking a tuple apart needs two or more names: `let (a, b) = ...`", names[0].1);
+        }
+        Ok(names)
+    }
+
     /// `<int, str>` type arguments.
     fn targs(&mut self) -> Result<Vec<TypeExpr>> {
         self.expect(Tok::Lt, "`<`")?;
@@ -767,6 +824,21 @@ impl Parser {
                 // whole function type, which is rarely wanted, so parentheses are not supported.
                 return Ok(TypeExpr::Func(params, Box::new(ret)));
             }
+            // `(int, str)`: a tuple of two or more parts.
+            Tok::LParen => {
+                let mut parts = vec![self.ty()?];
+                while self.eat(&Tok::Comma) {
+                    if self.check(&Tok::RParen) {
+                        break;
+                    }
+                    parts.push(self.ty()?);
+                }
+                self.expect(Tok::RParen, "`)`")?;
+                if parts.len() < 2 {
+                    return err("a tuple type has two or more parts: `(int, str)`", pos);
+                }
+                TypeExpr::Tuple(parts)
+            }
             Tok::LBrace => {
                 let key = self.ty()?;
                 self.expect(Tok::Colon, "`:` between the key and value types of a map")?;
@@ -810,6 +882,9 @@ impl Parser {
         let kind = match self.peek() {
             Tok::Let | Tok::Var => {
                 let mutable = self.advance().tok == Tok::Var;
+                if self.check(&Tok::LParen) {
+                    return self.let_tuple(mutable, pos);
+                }
                 let (name, _) = self.ident("variable name")?;
                 let ty = if self.eat(&Tok::Colon) { Some(self.ty()?) } else { None };
                 self.expect(Tok::Assign, "`=` (variables must be initialized)")?;
@@ -835,6 +910,9 @@ impl Parser {
             }
             Tok::For => {
                 self.advance();
+                if self.check(&Tok::LParen) {
+                    return self.for_tuple(pos);
+                }
                 let (first_name, _) = self.ident("loop variable name")?;
                 let (index, var) = if self.eat(&Tok::Comma) {
                     (Some(first_name), self.ident("a second loop variable name")?.0)
@@ -930,9 +1008,13 @@ impl Parser {
     /// `if` used as a value, after `if`: both branches are value blocks, and `else` is
     /// required.
     fn if_expr(&mut self, pos: Span) -> Result<ExprKind> {
-        if self.check(&Tok::Let) {
-            return err("`if let` cannot be used as a value (yet); use a `match`, or a `var` set in each branch", pos);
-        }
+        let binding = if self.eat(&Tok::Let) {
+            let (name, _) = self.ident("variable name")?;
+            self.expect(Tok::Assign, "`=` after the name in `if let`")?;
+            Some(name)
+        } else {
+            None
+        };
         let cond = self.expr()?;
         let then = self.value_block("if")?;
         self.skip_newlines();
@@ -946,7 +1028,7 @@ impl Parser {
         } else {
             self.value_block("if")?
         };
-        Ok(ExprKind::If { cond: Box::new(cond), then, otherwise })
+        Ok(ExprKind::If { binding, cond: Box::new(cond), then, otherwise })
     }
 
     /// `match` used as a value, after `match`: each arm is `Pattern => value` or
@@ -1102,6 +1184,25 @@ impl Parser {
         loop {
             let pos = self.pos();
             if self.eat(&Tok::Dot) {
+                match self.peek().clone() {
+                    Tok::Int(n) => {
+                        self.advance();
+                        e = Expr { kind: ExprKind::Field(Box::new(e), n.to_string()), pos };
+                        continue;
+                    }
+                    Tok::Float(f) => {
+                        // Written as `1.0` (the token's length says how many digits follow
+                        // the dot), so `t.1.0` is part 0 of part 1.
+                        let len = self.advance().pos.len;
+                        let whole = (f.trunc() as i64).to_string();
+                        let text = format!("{:.*}", len.saturating_sub(whole.len() + 1), f);
+                        for part in text.split('.') {
+                            e = Expr { kind: ExprKind::Field(Box::new(e), part.to_string()), pos };
+                        }
+                        continue;
+                    }
+                    _ => {}
+                }
                 let (name, _) = self.ident("field or method name after `.`")?;
                 if self.check(&Tok::LParen) {
                     let args = self.args()?;
@@ -1218,11 +1319,7 @@ impl Parser {
                     ExprKind::SuperCall(name, self.args()?)
                 }
             }
-            Tok::LParen => {
-                let e = self.expr()?;
-                self.expect(Tok::RParen, "`)`")?;
-                return Ok(e);
-            }
+            Tok::LParen => return self.parenthesized(pos),
             Tok::LBracket => {
                 let mut items = Vec::new();
                 while !self.check(&Tok::RBracket) {

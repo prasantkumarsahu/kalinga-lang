@@ -40,7 +40,9 @@ impl Checker<'_> {
             ExprKind::SelfRef => self.self_value(cx, pos),
             ExprKind::Downcast { value, class, test_only } => self.downcast(cx, value, class, *test_only, pos),
             ExprKind::Lambda { params, ret, body } => self.lambda(cx, params, ret.as_ref(), body, expected, pos),
-            ExprKind::If { cond, then, otherwise } => self.if_expr(cx, cond, then, otherwise, expected, pos),
+            ExprKind::If { binding, cond, then, otherwise } => {
+                self.if_expr(cx, binding.as_deref(), cond, then, otherwise, expected, pos)
+            }
             ExprKind::Named(name, _) => err(
                 format!(
                     "`{}: ...` names a parameter, which only works when calling a function, method or constructor that declares it",
@@ -53,6 +55,7 @@ impl Checker<'_> {
             ExprKind::Try(inner) => self.try_expr(cx, inner, pos),
             ExprKind::Ident(name) => self.ident(cx, name, pos),
             ExprKind::Array(items) => self.array(cx, items, expected, pos),
+            ExprKind::Tuple(items) => self.tuple(cx, items, expected, pos),
             ExprKind::Map(entries) => self.map_literal(cx, entries, expected, pos),
             ExprKind::Interp(parts) => {
                 let mut out = vec![];
@@ -153,6 +156,32 @@ impl Checker<'_> {
         let names = locals.iter().map(|(n, _)| n.as_str());
         let globals = self.m.functions.keys().chain(self.m.consts.keys()).map(String::as_str);
         unknown(format!("unknown variable `{}`", name), pos, name, names.chain(globals))
+    }
+
+    /// `(a, b)`: each part checked against the expected tuple's part, when there is one.
+    fn tuple(&self, cx: &mut Ctx, items: &[Expr], expected: Option<&Type>, pos: Span) -> Result<TExpr> {
+        if items.len() > 6 {
+            return err("a tuple has at most 6 parts; use a struct for more", pos);
+        }
+        let expected_parts = match expected {
+            Some(Type::Tuple(ps)) if ps.len() == items.len() => Some(ps),
+            _ => None,
+        };
+        let mut parts = vec![];
+        for (i, it) in items.iter().enumerate() {
+            let t = match expected_parts {
+                Some(ps) => self.expr_to(cx, it, &ps[i])?,
+                None => self.expr(cx, it, None)?,
+            };
+            match t.ty {
+                Type::Void => return err("a tuple part cannot be a function call that returns nothing", it.pos),
+                Type::NoneLit => return err("cannot tell the type of `none` here; give the tuple a type", it.pos),
+                _ => {}
+            }
+            parts.push(t);
+        }
+        let ty = Type::Tuple(parts.iter().map(|p| p.ty.clone()).collect());
+        Ok(texpr(TExprKind::Tuple(parts), ty, pos))
     }
 
     fn array(&self, cx: &mut Ctx, items: &[Expr], expected: Option<&Type>, pos: Span) -> Result<TExpr> {
@@ -439,6 +468,13 @@ impl Checker<'_> {
             return self.self_field(cx, recv, f, pos);
         }
         let recv_t = self.expr(cx, recv, None)?;
+        if let Type::Tuple(parts) = &recv_t.ty {
+            let Some((index, ty)) = f.parse::<usize>().ok().and_then(|i| parts.get(i).map(|t| (i, t.clone()))) else {
+                let n = parts.len();
+                return err(format!("`{}` has no part `.{}`; its parts are `.0` to `.{}`", recv_t.ty, f, n - 1), pos);
+            };
+            return Ok(texpr(TExprKind::TupleField { recv: Box::new(recv_t), index }, ty, pos));
+        }
         let ty = match &recv_t.ty {
             Type::Struct(st, sargs) => self.struct_field_type(cx, st, sargs, f, pos)?,
             Type::Generic(c, targs) => subst(&self.field_type(cx, c, f, pos)?, &self.m.bindings(c, targs)),

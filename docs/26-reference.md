@@ -104,6 +104,7 @@ Assignment operators (statements only): `=` `+=` `-=` `*=` `/=` `%=` (`+=` works
 ```text
 let NAME [: TYPE] = EXPR
 var NAME [: TYPE] = EXPR
+let (NAME, NAME, ...) = TUPLE_EXPR                   or `var`: one variable per part
 TARGET = EXPR                  TARGET is a var, self.field, obj.field or a[i]
 TARGET op= EXPR
 if EXPR { ... } [else if EXPR { ... }] [else { ... }]
@@ -116,6 +117,7 @@ for NAME in EXPR..EXPR { ... }                       EXPR..=EXPR includes the en
 for NAME in ARRAY_OR_STR_OR_MAP { ... }              a map gives its keys
 for INDEX, NAME in ARRAY_OR_STR { ... }              position from 0, then element
 for KEY, VALUE in MAP { ... }
+for (NAME, NAME, ...) in ARRAY_OF_TUPLES { ... }     each element taken apart
 return [EXPR]
 break
 continue
@@ -273,7 +275,8 @@ enum        = "enum" IDENT [ tparams ] "{" variant { [ "," ] variant } "}" ;
 variant     = IDENT [ params ] ;
 type        = base [ "?" ] ;
 base        = "int" | "float" | "bool" | "str" | "void" | [ IDENT "." ] IDENT [ "<" type { "," type } ">" ]
-            | "[" type "]" | "{" type ":" type "}" | "fn" "(" [ type { "," type } ] ")" [ "->" type ] ;
+            | "[" type "]" | "{" type ":" type "}" | "fn" "(" [ type { "," type } ] ")" [ "->" type ]
+            | "(" type "," type { "," type } ")" ;                      (* tuple *)
 
 block       = "{" { statement } "}" ;
 statement   = ( "let" | "var" ) IDENT [ ":" type ] "=" expr
@@ -295,14 +298,14 @@ additive    = term { ( "+" | "-" ) term } ;
 term        = unary { ( "*" | "/" | "%" ) unary } ;
 unary       = ( "-" | "!" | "await" ) unary | cast ;
 cast        = postfix { ( "as" | "is" ) IDENT } ;
-postfix     = primary { "." IDENT [ args ] | "[" expr "]" | "[" [ expr ] ( ".." | "..=" ) [ expr ] "]" | "?" } ;
+postfix     = primary { "." ( IDENT [ args ] | INT ) | "[" expr "]" | "[" [ expr ] ( ".." | "..=" ) [ expr ] "]" | "?" } ;
 primary     = INT | FLOAT | STRING | "true" | "false" | "none" | "self"
             | IDENT [ "<" type { "," type } ">" ] [ args ]
             | "super" ( args | "." IDENT args )
             | "fn" "(" [ IDENT [ ":" type ] { "," IDENT [ ":" type ] } ] ")" [ "->" type ] ( "=>" expr | block )
-            | "if" expr value_block "else" ( value_block | (* if expression *) )
+            | "if" [ "let" IDENT "=" ] expr value_block "else" ( value_block | (* if expression *) )
             | "match" expr "{" { pattern "=>" ( value_block | expr ) [ "," ] } "}"
-            | "(" expr ")" | "[" [ expr { "," expr } [ "," ] ] "]"
+            | "(" expr ")" | "(" expr "," expr { "," expr } ")" | "[" [ expr { "," expr } [ "," ] ] "]"
             | "{" [ expr ":" expr { "," expr ":" expr } [ "," ] ] "}" ;
 args        = "(" [ arg { "," arg } [ "," ] ] ")" ;
 arg         = [ IDENT ":" ] expr ;                   (* named arguments come last, in parameter order *)
@@ -313,8 +316,8 @@ value_block = "{" { statement } expr "}" ;
 
 Inheritance with generic classes (and generic classes implementing interfaces), type
 parameters on interface methods, operators on classes, mutable global variables (use a
-`static var` member), `if let` as a value, `async` instance methods, `await` inside
-lambdas, sharing objects between threads, a package registry, tuples, exceptions
+`static var` member), `async` instance methods, `await` inside lambdas, sharing objects
+between threads, a package registry, tuples in `match` patterns, exceptions
 (`try`/`catch`; use `Result`).
 
 ---

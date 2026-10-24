@@ -1,0 +1,62 @@
+fn min_max(xs: [int]) -> (int, int) {
+    var lo = xs[0]
+    var hi = xs[0]
+    for x in xs {
+        if x < lo {
+            lo = x
+        }
+        if x > hi {
+            hi = x
+        }
+    }
+    return (lo, hi)
+}
+
+fn swap<A, B>(p: (A, B)) -> (B, A) {
+    return (p.1, p.0)
+}
+
+fn lookup(name: str) -> (bool, int?) {
+    if name == "Asha" {
+        return (true, 30)
+    }
+    return (false, none)
+}
+
+fn main() {
+    let (lo, hi) = min_max([4, 9, 1, 7])
+    println(lo, hi)
+    let r = min_max([3])
+    println(r, r.0, r.1)
+
+    let t = ("pi", 3.14, true)
+    println(t.0, t.1, t.2)
+    println(swap((1, "one")))
+
+    var (a, b) = (1, 2)
+    a += 10
+    b = a * 2
+    println(a, b)
+
+    let pairs: [(str, int)] = [("a", 1), ("b", 2)]
+    for (name, n) in pairs {
+        println(name, n)
+    }
+    var scores: {str: (int, int)} = {}
+    scores["Asha"] = (3, 4)
+    println(scores)
+
+    println((1, "x") == (1, "x"), (1, "x") == (2, "x"))
+    println(lookup("Asha"), lookup("Ravi"))
+    let nested = ((1, 2), (3, 4))
+    println(nested.1.0, nested.0.1)
+
+    // A tuple part that a lambda changes is shared like any `var`.
+    var (count, label) = (0, "clicks")
+    let click = fn() {
+        count += 1
+    }
+    click()
+    click()
+    println(label, count)
+}

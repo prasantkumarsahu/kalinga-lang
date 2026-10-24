@@ -41,6 +41,13 @@ pub enum TExprKind {
     /// base class or interface, or converted element by element.
     Convert(Box<TExpr>),
     Array(Vec<TExpr>),
+    /// `(a, b)`
+    Tuple(Vec<TExpr>),
+    /// `t.0`: a part of a tuple.
+    TupleField {
+        recv: Box<TExpr>,
+        index: usize,
+    },
     Map(Vec<(TExpr, TExpr)>),
     Interp(Vec<TInterp>),
     Neg(Box<TExpr>),
@@ -94,6 +101,8 @@ pub enum TExprKind {
     MathConst(String),
     /// `if` used as a value.
     If {
+        /// `if let NAME = cond`: `cond` is optional, and `then` sees its value as `NAME`.
+        binding: Option<String>,
         cond: Box<TExpr>,
         then: TValueBlock,
         otherwise: TValueBlock,
@@ -357,6 +366,12 @@ impl TPlace {
 
 #[derive(Debug, Clone)]
 pub enum TStmt {
+    /// `let (a, b) = value`; each name with whether it is shared with lambdas.
+    LetTuple {
+        names: Vec<(String, bool)>,
+        mutable: bool,
+        value: TExpr,
+    },
     Let {
         name: String,
         mutable: bool,

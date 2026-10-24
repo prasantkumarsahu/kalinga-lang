@@ -60,6 +60,22 @@ no pink
 ```
 
 Inside the first block, `i` is a plain `int`. It only exists inside that block.
+
+`if let` also works as a value, with an `else` (like [`if`](03-control-flow.md)):
+
+```kalinga
+fn main() {
+    let ages: {str: int} = {"Asha": 30}
+    let a = if let n = ages.get("Asha") { n + 1 } else { 0 }
+    let r = if let n = ages.get("Ravi") { n + 1 } else { 0 }
+    println(a, r)
+}
+```
+
+```text
+31 0
+```
+
 `while let` works the same way and repeats until the value is `none` (see
 [Control flow](03-control-flow.md#while-let)).
 

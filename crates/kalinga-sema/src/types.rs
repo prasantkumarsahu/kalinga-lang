@@ -34,6 +34,8 @@ pub enum Type {
     Async(Box<Type>),
     /// `fn(A, B) -> R`
     Func(Vec<Type>, Box<Type>),
+    /// `(int, str)`: two to six parts.
+    Tuple(Vec<Type>),
     /// Placeholder for "not known yet" in expected-type hints (lambda results).
     Unknown,
     /// A type parameter (`T`) inside generic code.
@@ -85,6 +87,10 @@ impl fmt::Display for Type {
                 let a: Vec<String> = args.iter().map(|t| t.to_string()).collect();
                 write!(f, "{}<{}>", n, a.join(", "))
             }
+            Type::Tuple(parts) => {
+                let ps: Vec<String> = parts.iter().map(|p| p.to_string()).collect();
+                write!(f, "({})", ps.join(", "))
+            }
             Type::Func(ps, r) => {
                 let ps: Vec<String> = ps.iter().map(|p| p.to_string()).collect();
                 if **r == Type::Void {
@@ -128,6 +134,7 @@ pub fn subst(t: &Type, map: &HashMap<String, Type>) -> Type {
         Type::Optional(i) => Type::Optional(Box::new(subst(i, map))),
         Type::Map(k, v) => Type::Map(Box::new(subst(k, map)), Box::new(subst(v, map))),
         Type::Func(ps, r) => Type::Func(ps.iter().map(|p| subst(p, map)).collect(), Box::new(subst(r, map))),
+        Type::Tuple(parts) => Type::Tuple(parts.iter().map(|p| subst(p, map)).collect()),
         Type::Generic(n, args) => Type::Generic(n.clone(), args.iter().map(|a| subst(a, map)).collect()),
         Type::Struct(n, args) => Type::Struct(n.clone(), args.iter().map(|a| subst(a, map)).collect()),
         Type::Enum(n, args) => Type::Enum(n.clone(), args.iter().map(|a| subst(a, map)).collect()),
@@ -171,6 +178,11 @@ pub fn unify(pattern: &Type, actual: &Type, map: &mut HashMap<String, Type>) {
             unify(pt, at, map);
             unify(pe, ae, map);
         }
+        (Type::Tuple(ps), Type::Tuple(as_)) if ps.len() == as_.len() => {
+            for (p, a) in ps.iter().zip(as_) {
+                unify(p, a, map);
+            }
+        }
         (Type::Generic(pn, pa), Type::Generic(an, aa))
         | (Type::Struct(pn, pa), Type::Struct(an, aa))
         | (Type::Enum(pn, pa), Type::Enum(an, aa))
@@ -191,6 +203,7 @@ pub fn has_params(t: &Type) -> bool {
         Type::Array(i) | Type::Optional(i) => has_params(i),
         Type::Map(k, v) => has_params(k) || has_params(v),
         Type::Func(ps, r) => ps.iter().any(has_params) || has_params(r),
+        Type::Tuple(parts) => parts.iter().any(has_params),
         Type::Generic(_, args) | Type::Struct(_, args) | Type::Enum(_, args) | Type::Interface(_, args) => {
             args.iter().any(has_params)
         }

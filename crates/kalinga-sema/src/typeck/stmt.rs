@@ -30,6 +30,7 @@ impl Checker<'_> {
     fn stmt(&self, cx: &mut Ctx, s: &Stmt) -> Result<TStmt> {
         match &s.kind {
             StmtKind::Let { name, mutable, ty, value } => self.let_stmt(cx, name, *mutable, ty.as_ref(), value, s.pos),
+            StmtKind::LetTuple { names, mutable, value } => self.let_tuple(cx, names, *mutable, value),
             StmtKind::Assign { target, op, value } => self.assign(cx, target, *op, value),
             StmtKind::If { cond, then, otherwise } => {
                 let cond = self.cond(cx, cond)?;
@@ -122,7 +123,28 @@ impl Checker<'_> {
     }
 
     /// The value of `if let` / `while let`, which must be optional, and the type inside.
-    fn optional_value(&self, cx: &mut Ctx, value: &Expr, what: &str) -> Result<(TExpr, Type)> {
+    /// `let (a, b) = value`: one variable per part.
+    fn let_tuple(&self, cx: &mut Ctx, names: &[(String, Span)], mutable: bool, value: &Expr) -> Result<TStmt> {
+        let value_t = self.expr(cx, value, None)?;
+        let Type::Tuple(parts) = value_t.ty.clone() else {
+            return err(format!("`let (...)` takes a tuple apart, but this is a `{}`", value_t.ty), value.pos);
+        };
+        if parts.len() != names.len() {
+            return err(
+                format!("`{}` has {} parts, but {} names are given", value_t.ty, parts.len(), names.len()),
+                value.pos,
+            );
+        }
+        let mut out = vec![];
+        for ((name, pos), t) in names.iter().zip(parts) {
+            let shared = mutable && self.shared.borrow().contains(pos);
+            self.declare(cx, name, t, mutable, *pos)?;
+            out.push((name.clone(), shared));
+        }
+        Ok(TStmt::LetTuple { names: out, mutable, value: value_t })
+    }
+
+    pub(super) fn optional_value(&self, cx: &mut Ctx, value: &Expr, what: &str) -> Result<(TExpr, Type)> {
         let value_t = self.expr(cx, value, None)?;
         match &value_t.ty {
             Type::Optional(i) => {

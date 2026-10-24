@@ -25,8 +25,20 @@ impl Gen<'_> {
         format!("{{\n{}{}}}", self.block_inner(stmts, depth + 1), indent(depth))
     }
 
+    /// `let (a, b) = value`; parts that a lambda changes then move into shared cells.
+    fn let_tuple(&self, names: &[(String, bool)], mutable: bool, value: &TExpr) -> String {
+        let kw = if mutable { "mut " } else { "" };
+        let binds: Vec<String> = names.iter().map(|(n, _)| format!("{}{}", kw, rid(n))).collect();
+        let mut out = format!("let ({}) = {};", binds.join(", "), self.expr(value));
+        for (n, _) in names.iter().filter(|(_, shared)| *shared) {
+            out += &format!(" let {} = Rc::new(RefCell::new({}));", rid(n), rid(n));
+        }
+        out
+    }
+
     fn stmt(&self, s: &TStmt, depth: usize) -> String {
         match s {
+            TStmt::LetTuple { names, mutable, value } => self.let_tuple(names, *mutable, value),
             // A `var` a lambda changes lives in a shared cell.
             TStmt::Let { name, shared: true, ty, value, .. } => {
                 format!(

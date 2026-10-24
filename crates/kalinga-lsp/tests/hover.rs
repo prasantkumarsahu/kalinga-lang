@@ -111,3 +111,12 @@ fn bounds_are_shown() {
     assert!(shown("total").contains("fn total<T: Shape + Show>(xs: [T]) -> int"), "{}", shown("total"));
     assert!(shown("Crate").contains("class Crate<T: Ord>"), "{}", shown("Crate"));
 }
+
+#[test]
+fn tuples_and_their_parts() {
+    let src = "fn pair() -> (int, str) { return (1, \"a\") }\nfn main() {\n    let p = pair()\n    let (n, s) = p\n    println(n, s, p.0)\n}\n";
+    let shown = |word: &str, nth: usize| hover(src, word, nth).map(|h| h.0).unwrap_or_default();
+    assert!(shown("p = pair", 0).contains("let p: (int, str)"), "{}", shown("p = pair", 0));
+    assert!(shown("s) = p", 0).contains("let s: str"), "{}", shown("s) = p", 0));
+    assert!(shown("pair()", 0).contains("fn pair() -> (int, str)"), "{}", shown("pair()", 0));
+}

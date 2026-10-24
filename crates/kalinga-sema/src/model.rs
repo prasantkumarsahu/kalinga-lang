@@ -474,6 +474,7 @@ impl Model {
             Type::Enum(e, args) => self.plain_enums.contains(e) && args.iter().all(plain),
             Type::Struct(st, args) => self.plain_structs.contains(st) && args.iter().all(plain),
             Type::Result(t, e) => (**t == Type::Void || plain(t)) && plain(e),
+            Type::Tuple(parts) => parts.iter().all(plain),
             _ => false,
         }
     }
@@ -486,6 +487,7 @@ impl Model {
             Type::Channel(_) | Type::Shared(_) => true,
             Type::Array(i) | Type::Optional(i) => self.is_sendable(i),
             Type::Map(k, v) | Type::Result(k, v) => self.is_sendable(k) && self.is_sendable(v),
+            Type::Tuple(parts) => parts.iter().all(|p| self.is_sendable(p)),
             Type::Struct(st, args) => {
                 let map = self.struct_bindings(st, args);
                 self.structs[st].fields.iter().all(|(_, ft)| self.is_sendable(&subst(ft, &map)))
@@ -580,6 +582,9 @@ impl Model {
             (Type::Interface(a, aa), Type::Interface(b, ba)) => self.iface_args(a, aa, b).as_deref() == Some(ba),
             (Type::Array(a), Type::Array(b)) => self.assignable(a, b),
             (Type::Map(ka, va), Type::Map(kb, vb)) => ka == kb && self.assignable(va, vb),
+            (Type::Tuple(a), Type::Tuple(b)) => {
+                a.len() == b.len() && a.iter().zip(b).all(|(x, y)| self.assignable(x, y))
+            }
             _ => false,
         }
     }
@@ -610,6 +615,20 @@ pub(crate) fn resolve_type(t: &TypeExpr, names: &TypeNames, tparams: &[String]) 
                 return err("array of void is not allowed", Span::default());
             }
             Type::Array(Box::new(i))
+        }
+        TypeExpr::Tuple(parts) => {
+            if parts.len() > 6 {
+                return err("a tuple has at most 6 parts; use a struct for more", Span::default());
+            }
+            let mut out = vec![];
+            for p in parts {
+                let t = resolve_type(p, names, tparams)?;
+                if t == Type::Void {
+                    return err("a tuple part cannot be `void`", Span::default());
+                }
+                out.push(t);
+            }
+            Type::Tuple(out)
         }
         TypeExpr::Map(k, v) => {
             let kt = resolve_type(k, names, tparams)?;
