@@ -220,7 +220,7 @@ impl Checker<'_> {
         let value_t = self.expr(cx, value, None)?;
         let ty = value_t.ty.clone();
         let enum_info = match &ty {
-            Type::Enum(e) => Some((e.clone(), self.m.enums[e].clone())),
+            Type::Enum(e, args) => Some((e.clone(), self.m.enum_variants(e, args))),
             Type::Result(t, e) => Some(("Result".to_string(), result_variants(t, e))),
             Type::Int | Type::Str | Type::Bool => None,
             other => {

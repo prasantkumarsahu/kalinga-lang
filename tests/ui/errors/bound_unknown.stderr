@@ -1,0 +1,4 @@
+tests/ui/errors/bound_unknown.kl:5:13: error: unknown bound `Shpe`: a bound is an interface, `Show`, `Eq` or `Ord`
+5 | fn total<T: Shpe>(xs: [T]) -> int {
+  |             ^^^^
+  = help: did you mean `Shape`?

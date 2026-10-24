@@ -159,15 +159,16 @@ use crate "NAME" = "VERSION" [features ["FEATURE", ...]]
 extern type NAME
 extern fn NAME(PARAM, ...) [-> TYPE] [= "rust::path" | = rust { RUST CODE }]
 
-interface NAME [: INTERFACE, ...] {
+interface NAME[<T, ...>] [: INTERFACE[<TYPE, ...>], ...] {
     fn NAME(PARAM, ...) [-> TYPE]
 }
 
-enum NAME {
+enum NAME[<T, ...>] {
     VARIANT [(PARAM, ...)]                           one per line or comma-separated
 }
 
 fn NAME<T, ...>(PARAM, ...) [-> TYPE] { ... }       generic function
+fn NAME<T: Show + Eq>(...) { ... }                  bounds: interfaces, Show, Eq, Ord
 ```
 
 Inside `init` and methods: `self.field`, `self.method(...)`, `super(...)` (first statement
@@ -256,17 +257,19 @@ struct      = "struct" IDENT [ tparams ] "{" { { modifier } IDENT ":" type [ "="
             | [ "mut" ] { modifier } "fn" IDENT params [ "->" type ] block
             | "op" ( "+" | "-" | "*" | "/" | "%" ) params "->" type block } "}" ;
 function    = [ "async" ] "fn" IDENT [ tparams ] params [ "->" type ] block ;
-tparams     = "<" IDENT { "," IDENT } ">" ;
+tparams     = "<" tparam { "," tparam } ">" ;
+tparam      = IDENT [ ":" base_ref { "+" base_ref } ] ;      (* bounds: interfaces, Show, Eq, Ord *)
 params      = "(" [ param { "," param } [ "," ] ] ")" ;
 param       = IDENT ":" type ;
-class       = [ "abstract" ] "class" IDENT [ tparams ] [ ":" IDENT { "," IDENT } ] "{" { member } "}" ;
+class       = [ "abstract" ] "class" IDENT [ tparams ] [ ":" base_ref { "," base_ref } ] "{" { member } "}" ;
+base_ref    = IDENT [ "<" type { "," type } ">" ] ;
 member      = { modifier } IDENT ":" type [ "=" expr ]
             | "init" params block
             | const | "static" "var" IDENT ":" type "=" expr
             | { modifier } "fn" IDENT params [ "->" type ] ( block | (* abstract *) ) ;
 modifier    = "private" | "static" | "abstract" | "override" | "async" ;
-interface   = "interface" IDENT [ ":" IDENT { "," IDENT } ] "{" { "fn" IDENT params [ "->" type ] } "}" ;
-enum        = "enum" IDENT "{" variant { [ "," ] variant } "}" ;
+interface   = "interface" IDENT [ tparams ] [ ":" base_ref { "," base_ref } ] "{" { "fn" IDENT params [ "->" type ] } "}" ;
+enum        = "enum" IDENT [ tparams ] "{" variant { [ "," ] variant } "}" ;
 variant     = IDENT [ params ] ;
 type        = base [ "?" ] ;
 base        = "int" | "float" | "bool" | "str" | "void" | [ IDENT "." ] IDENT [ "<" type { "," type } ">" ]
@@ -308,11 +311,11 @@ value_block = "{" { statement } expr "}" ;
 
 ## Not yet supported
 
-Bounds on type parameters (`T: Show`), generic interfaces and enums, inheritance with
-generic classes, operators on classes, closures that change captured variables, mutable
-global variables (use a `static var` member), `if let` as a value, `async` instance
-methods, `await` inside lambdas, sharing objects between threads, a package registry,
-tuples, exceptions (`try`/`catch`; use `Result`).
+Inheritance with generic classes (and generic classes implementing interfaces), type
+parameters on interface methods, operators on classes, closures that change captured
+variables, mutable global variables (use a `static var` member), `if let` as a value,
+`async` instance methods, `await` inside lambdas, sharing objects between threads, a
+package registry, tuples, exceptions (`try`/`catch`; use `Result`).
 
 ---
 

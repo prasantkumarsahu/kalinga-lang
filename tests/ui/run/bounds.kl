@@ -1,0 +1,185 @@
+interface Shape {
+    fn area() -> float
+    fn name() -> str
+}
+
+interface Solid : Shape {
+    fn volume() -> float
+}
+
+class Square : Shape {
+    side: float
+
+    init(side: float) {
+        self.side = side
+    }
+
+    override fn area() -> float {
+        return self.side * self.side
+    }
+
+    override fn name() -> str {
+        return "square"
+    }
+}
+
+class Cube : Solid {
+    side: float
+
+    init(side: float) {
+        self.side = side
+    }
+
+    override fn area() -> float {
+        return 6.0 * self.side * self.side
+    }
+
+    override fn name() -> str {
+        return "cube"
+    }
+
+    override fn volume() -> float {
+        return self.side * self.side * self.side
+    }
+}
+
+struct Point {
+    x: int
+    y: int
+}
+
+// Show: printable
+fn show_all<T: Show>(xs: [T]) {
+    for x in xs {
+        println("- {x}")
+    }
+}
+
+// Eq: comparable with ==
+fn count_of<T: Eq>(xs: [T], target: T) -> int {
+    var n = 0
+    for x in xs {
+        if x == target {
+            n += 1
+        }
+    }
+    return n
+}
+
+// Ord: ordered with < and sort
+fn largest<T: Ord>(xs: [T]) -> T? {
+    var best: T? = none
+    for x in xs {
+        if let b = best {
+            if b < x {
+                best = x
+            }
+        } else {
+            best = x
+        }
+    }
+    return best
+}
+
+fn sorted<T: Ord>(xs: [T]) -> [T] {
+    var out = xs
+    out.sort()
+    return out
+}
+
+// An interface bound: its methods can be called, and a T is a Shape
+fn total_area<T: Shape>(shapes: [T]) -> float {
+    var sum = 0.0
+    for s in shapes {
+        sum += s.area()
+    }
+    return sum
+}
+
+fn describe(s: Shape) -> str {
+    return "{s.name()} with area {s.area()}"
+}
+
+fn describe_all<T: Shape>(shapes: [T]) {
+    for s in shapes {
+        println(describe(s))
+    }
+}
+
+// Two bounds
+fn report<T: Show + Eq>(a: T, b: T) {
+    println("{a} == {b}: {a == b}")
+}
+
+// A bounded generic calling another
+fn biggest_of_all<T: Ord + Show>(a: [T], b: [T]) {
+    var both = a
+    for x in b {
+        both.push(x)
+    }
+    let all = sorted(both)
+    println("sorted: {all}")
+    if let m = largest(all) {
+        println("largest: {m}")
+    }
+}
+
+class Labelled<T: Show> {
+    value: T
+
+    init(value: T) {
+        self.value = value
+    }
+
+    fn label() -> str {
+        return "<{self.value}>"
+    }
+}
+
+struct Pair<A: Show, B: Ord> {
+    first: A
+    second: B
+
+    fn bigger(other: B) -> bool {
+        return self.second > other
+    }
+
+    fn describe() -> str {
+        return "first is {self.first}"
+    }
+}
+
+class Holder<T: Shape> {
+    item: T
+
+    init(item: T) {
+        self.item = item
+    }
+
+    fn report() -> str {
+        return "{self.item.name()}: {self.item.area()}"
+    }
+}
+
+fn main() {
+    show_all([1, 2, 3])
+    show_all([Point(1, 2), Point(3, 4)])
+    println(count_of(["a", "b", "a"], "a"))
+    println(count_of([Point(1, 2), Point(1, 2)], Point(1, 2)))
+    println(largest([3, 9, 4]))
+    println(largest(["pear", "apple"]))
+    println(sorted([2.5, -1.0, 0.5]))
+    println(total_area([Square(2.0), Square(3.0)]))
+    let shapes: [Shape] = [Square(1.0), Cube(1.0)]
+    println(total_area(shapes))
+    let solids: [Solid] = [Cube(2.0)]
+    describe_all(solids)
+    report(3, 3)
+    report("x", "y")
+    biggest_of_all([5, 1], [7, 2])
+    println(Labelled(42).label())
+    println(Labelled("hi").label())
+    let p = Pair("left", 10)
+    println(p.describe(), p.bigger(3))
+    println(Holder(Square(3.0)).report())
+}

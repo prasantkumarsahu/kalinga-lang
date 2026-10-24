@@ -1,0 +1,8 @@
+enum Maybe<T> {
+    Nothing
+    Just(value: T)
+}
+
+fn f(m: Maybe) {}
+
+fn main() {}

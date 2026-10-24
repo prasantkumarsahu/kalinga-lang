@@ -1,0 +1,3 @@
+tests/ui/errors/generic_enum_infer.kl:7:18: error: cannot tell what `T` is for `Maybe.Nothing`; give the variable a type, e.g. `let x: Maybe<int> = Maybe.Nothing`
+7 |     let m = Maybe.Nothing
+  |                  ^

@@ -1,0 +1,92 @@
+interface Store<T> {
+    fn get() -> T
+    fn put(x: T)
+}
+
+// A generic interface extending another, passing its type parameter on
+interface Cache<T> : Store<T> {
+    fn clear()
+}
+
+interface Named {
+    fn name() -> str
+}
+
+class IntStore : Store<int>, Named {
+    value: int = 0
+
+    override fn get() -> int {
+        return self.value
+    }
+
+    override fn put(x: int) {
+        self.value = x
+    }
+
+    override fn name() -> str {
+        return "ints"
+    }
+}
+
+class TextCache : Cache<str> {
+    text: str = ""
+
+    override fn get() -> str {
+        return self.text
+    }
+
+    override fn put(x: str) {
+        self.text = self.text + x
+    }
+
+    override fn clear() {
+        self.text = ""
+    }
+}
+
+// A generic function using a generic interface type
+fn fill<T>(s: Store<T>, items: [T]) {
+    for x in items {
+        s.put(x)
+    }
+}
+
+// A bound with type arguments
+fn bump<S: Store<int>>(s: S) {
+    s.put(s.get() + 1)
+}
+
+// A bound that is itself generic
+fn show_get<T: Show, S: Store<T>>(s: S) {
+    println("got {s.get()}")
+}
+
+// T bound to a sub-interface, used where the super-interface is expected
+fn first_then_clear<C: Cache<str>>(c: C) -> str {
+    let s: Store<str> = c
+    let v = s.get()
+    c.clear()
+    return v
+}
+
+fn main() {
+    let ints = IntStore()
+    fill(ints, [1, 2, 3])
+    println(ints.get())
+    bump(ints)
+    println(ints.get(), ints.name())
+
+    let stores: [Store<int>] = [IntStore(), ints]
+    for s in stores {
+        s.put(s.get() * 10)
+        println(s.get())
+    }
+
+    let cache = TextCache()
+    fill(cache, ["a", "b"])
+    show_get(cache)
+    let as_store: Store<str> = cache
+    as_store.put("c")
+    println(first_then_clear(cache))
+    println("[{cache.get()}]")
+}

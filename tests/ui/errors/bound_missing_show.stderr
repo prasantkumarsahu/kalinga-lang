@@ -1,0 +1,3 @@
+tests/ui/errors/bound_missing_show.kl:2:13: error: cannot print a `T` value; add a bound: `<T: Show>`
+2 |     println(x)
+  |             ^

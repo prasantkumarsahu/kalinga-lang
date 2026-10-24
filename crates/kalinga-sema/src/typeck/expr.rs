@@ -4,7 +4,7 @@
 use kalinga_syntax::ast::*;
 use kalinga_syntax::error::{Result, Span, err};
 
-use super::{Checker, Ctx, texpr};
+use super::{Checker, Ctx, bound_hint, texpr};
 use crate::index::PROBE;
 use crate::model::class_trait;
 use crate::suggest::unknown;
@@ -61,8 +61,9 @@ impl Checker<'_> {
                         InterpPart::Lit(s) => TInterp::Lit(s.clone()),
                         InterpPart::Expr(x) => {
                             let t = self.expr(cx, x, None)?;
-                            if !self.m.is_plain(&t.ty) {
-                                return err(format!("cannot put a `{}` value into a string", t.ty), x.pos);
+                            if !self.showable(&t.ty) {
+                                let hint = bound_hint(&t.ty, "Show");
+                                return err(format!("cannot put a `{}` value into a string{}", t.ty, hint), x.pos);
                             }
                             TInterp::Expr(Box::new(t))
                         }
@@ -73,8 +74,15 @@ impl Checker<'_> {
             ExprKind::Unary(op, inner) => self.unary(cx, *op, inner, expected, pos),
             ExprKind::Binary(op, l, r) => self.binary(cx, *op, l, r, pos),
             ExprKind::Call(name, targs, args) => self.call(cx, name, targs, args, expected, pos),
-            ExprKind::MethodCall(recv, name, args) => self.method_call(cx, recv, name, args, pos),
-            ExprKind::Field(recv, f) => self.field(cx, recv, f, pos),
+            // `Tree.Node(...)` and `Tree.Leaf` see the expected type, for generic enums.
+            ExprKind::MethodCall(recv, name, args) => match self.type_receiver(cx, recv) {
+                Some(t) if name != PROBE => self.variant_value(cx, &t, name, Some(args), expected, pos),
+                _ => self.method_call(cx, recv, name, args, pos),
+            },
+            ExprKind::Field(recv, f) => match self.type_receiver(cx, recv) {
+                Some(t) if f != PROBE => self.variant_value(cx, &t, f, None, expected, pos),
+                _ => self.field(cx, recv, f, pos),
+            },
             ExprKind::Index(base, idx) => {
                 let base = self.expr(cx, base, None)?;
                 let (index, ty) = match base.ty.clone() {
@@ -296,14 +304,16 @@ impl Checker<'_> {
                 if lt != rt {
                     return err(format!("cannot compare `{}` with `{}`", lt, rt), pos);
                 }
-                if !self.m.is_plain(lt) {
-                    return err(format!("`{}` values cannot be compared with `{}`", lt, op.rust()), pos);
+                if !self.comparable(lt) {
+                    let hint = bound_hint(lt, "Eq");
+                    return err(format!("`{}` values cannot be compared with `{}`{}", lt, op.rust(), hint), pos);
                 }
                 Ok(Type::Bool)
             }
             Lt | Le | Gt | Ge => {
-                if lt != rt || !matches!(lt, Type::Int | Type::Float | Type::Str) {
-                    return err(format!("cannot compare `{}` with `{}` using `{}`", lt, rt, op.rust()), pos);
+                if lt != rt || !(matches!(lt, Type::Int | Type::Float | Type::Str) || self.ordered_param(lt)) {
+                    let hint = if lt == rt { bound_hint(lt, "Ord") } else { String::new() };
+                    return err(format!("cannot compare `{}` with `{}` using `{}`{}", lt, rt, op.rust(), hint), pos);
                 }
                 Ok(Type::Bool)
             }
@@ -383,11 +393,11 @@ impl Checker<'_> {
                 let root = self.m.ancestors(c).last().cloned().unwrap_or_else(|| c.clone());
                 Cast::Hook(class_trait(&root))
             }
-            Type::Interface(i) if self.m.all_interfaces(target).contains(i) => {
+            Type::Interface(i, _) if self.m.all_interfaces(target).contains(i) => {
                 self.cast_targets.borrow_mut().insert(target.to_string());
                 Cast::Hook(i.clone())
             }
-            Type::Class(_) | Type::Interface(_) => {
+            Type::Class(_) | Type::Interface(..) => {
                 return err(format!("a `{}` can never be a `{}`, so this check would always fail", v.ty, target), pos);
             }
             other => return err(format!("`as`/`is` work on objects, not on `{}`", other), pos),
@@ -410,7 +420,7 @@ impl Checker<'_> {
             return self.probe_members(cx, recv, pos);
         }
         if let Some(t) = self.type_receiver(cx, recv) {
-            return self.variant_value(cx, &t, f, None, pos);
+            return self.variant_value(cx, &t, f, None, None, pos);
         }
         if let Some(n) = self.static_owner(cx, recv) {
             let Some(s) = self.m.static_value(n, f) else {
@@ -434,7 +444,7 @@ impl Checker<'_> {
             Type::Array(_) | Type::Str | Type::Map(..) if f == "len" => {
                 return err("`len` is a method: use `.len()`", pos);
             }
-            Type::Interface(i) => {
+            Type::Interface(i, _) => {
                 return err(format!("interface `{}` has no fields; only methods can be used", i), pos);
             }
             other => return err(format!("`{}` has no field `{}`", other, f), pos),

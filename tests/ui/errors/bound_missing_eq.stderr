@@ -1,0 +1,3 @@
+tests/ui/errors/bound_missing_eq.kl:2:14: error: `T` values cannot be compared with `==`; add a bound: `<T: Eq>`
+2 |     return a == b
+  |              ^^

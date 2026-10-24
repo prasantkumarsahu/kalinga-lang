@@ -1,0 +1,11 @@
+interface Store<T> {
+    fn get() -> T
+}
+
+class Wrong : Store {
+    override fn get() -> int {
+        return 1
+    }
+}
+
+fn main() {}

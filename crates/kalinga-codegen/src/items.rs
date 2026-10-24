@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use std::fmt::Write as _;
 
 use kalinga_sema::tast::TBody;
-use kalinga_sema::{Signature, Type, class_trait};
+use kalinga_sema::{Bound, Bounds, Signature, Type, class_trait, subst_sig};
 use kalinga_syntax::ast::Program;
 
 use crate::{Gen, HEADER, RUNTIME, clone_if, fn_id, rid};
@@ -53,7 +53,7 @@ impl Gen<'_> {
                 out,
                 "\nfn {}{}({}){} {{\n{}}}",
                 fn_id(&f.name),
-                generic_params(&f.tparams),
+                self.generic_params(&f.tparams, self.m.fn_bounds.get(&f.name)),
                 self.params_decl(&b.sig),
                 self.fn_ret(&b.sig.ret, b.is_async),
                 self.body(b, 1)
@@ -112,11 +112,38 @@ impl Gen<'_> {
         }
     }
 
+    /// `<T: Clone + 'static, U: ...>` for a Rust generic item (empty when not generic), with
+    /// the Rust traits for each bound: `Show` is `__KlShow`, `Eq` is `PartialEq`, `Ord` is
+    /// `PartialOrd`, an interface `I` is `__Has_I`.
+    fn generic_params(&self, tparams: &[String], bounds: Option<&Bounds>) -> String {
+        if tparams.is_empty() {
+            return String::new();
+        }
+        let param = |t: &String| {
+            let mut b = format!("{}: Clone + 'static", t);
+            for bound in bounds.and_then(|bs| bs.get(t)).into_iter().flatten() {
+                b += &match bound {
+                    Bound::Show => " + __KlShow".to_string(),
+                    Bound::Eq => " + PartialEq".to_string(),
+                    Bound::Ord => " + PartialOrd".to_string(),
+                    Bound::Interface(i, args) => format!(" + __Has_{}", self.iface_path(i, args)),
+                };
+            }
+            b
+        };
+        format!("<{}>", tparams.iter().map(param).collect::<Vec<_>>().join(", "))
+    }
+
     fn interface_decl(&self, out: &mut String, iname: &str) {
         let info = &self.m.interfaces[iname];
         let _ = writeln!(out, "\n// interface {}", iname);
-        let bound = if info.supers.is_empty() { String::new() } else { format!(": {}", info.supers.join(" + ")) };
-        let _ = writeln!(out, "trait {}{} {{", iname, bound);
+        let supers: Vec<String> = info
+            .supers
+            .iter()
+            .map(|s| self.iface_path(s, info.super_args.get(s).map_or(&[], |a| a.as_slice())))
+            .collect();
+        let bound = if supers.is_empty() { String::new() } else { format!(": {}", supers.join(" + ")) };
+        let _ = writeln!(out, "trait {}{}{} {{", iname, self.generic_params(&info.tparams, None), bound);
         for (mname, sig) in &info.methods {
             let _ = writeln!(
                 out,
@@ -136,14 +163,62 @@ impl Gen<'_> {
             );
         }
         out.push_str("}\n");
+        self.has_trait(out, iname);
+    }
+
+    /// `trait __Has_I`: what a type parameter bound to interface `I` needs. Every type that
+    /// can be used as an `I` (its classes, `I` itself and the interfaces extending it)
+    /// turns itself into an `Rc<RefCell<dyn I>>`, through which `I`'s methods are called.
+    fn has_trait(&self, out: &mut String, iname: &str) {
+        let info = &self.m.interfaces[iname];
+        let own: Vec<Type> = info.tparams.iter().map(|t| Type::Param(t.clone())).collect();
+        let _ = writeln!(
+            out,
+            "trait __Has_{}{} {{\n    fn __to_{}(&self) -> {};\n}}",
+            iname,
+            self.generic_params(&info.tparams, None),
+            iname,
+            self.rty(&Type::Interface(iname.to_string(), own))
+        );
+        // (impl's type parameters, the type, the interface's type arguments)
+        let mut from: Vec<(String, Type, Vec<Type>)> = vec![];
+        for c in &self.m.class_order {
+            if self.m.classes[c].tparams.is_empty()
+                && let Some(args) = self.m.class_iface_args(c, iname)
+            {
+                from.push((String::new(), Type::Class(c.clone()), args));
+            }
+        }
+        for j in &self.m.interface_order {
+            let jinfo = &self.m.interfaces[j];
+            let jparams: Vec<Type> = jinfo.tparams.iter().map(|t| Type::Param(t.clone())).collect();
+            if let Some(args) = self.m.iface_args(j, &jparams, iname) {
+                from.push((self.generic_params(&jinfo.tparams, None), Type::Interface(j.clone(), jparams), args));
+            }
+        }
+        for (params, t, args) in &from {
+            let iface = Type::Interface(iname.to_string(), args.clone());
+            let _ = writeln!(
+                out,
+                "impl{} __Has_{} for {} {{\n    fn __to_{}(&self) -> {} {{ {} }}\n}}",
+                params,
+                self.iface_path(iname, args),
+                self.rty(t),
+                iname,
+                self.rty(&iface),
+                self.convert("self.clone()".into(), t, &iface)
+            );
+        }
     }
 
     fn enum_decl(&self, out: &mut String, name: &str) {
         let info = &self.m.enums[name];
         let plain = self.m.plain_enums.contains(name);
+        let self_ty =
+            if info.tparams.is_empty() { name.to_string() } else { format!("{}<{}>", name, info.tparams.join(", ")) };
         let _ = writeln!(out, "\n// enum {}", name);
         let _ = writeln!(out, "#[derive(Clone{})]", if plain { ", PartialEq" } else { "" });
-        let _ = writeln!(out, "enum {} {{", name);
+        let _ = writeln!(out, "enum {} {{", self_ty);
         for (v, fields) in &info.variants {
             if fields.is_empty() {
                 let _ = writeln!(out, "    {},", v);
@@ -160,8 +235,14 @@ impl Gen<'_> {
         if !plain {
             return;
         }
-        let _ =
-            writeln!(out, "impl __KlShow for {} {{\n    fn __show(&self) -> String {{\n        match self {{", name);
+        // A generic enum prints when its type arguments do.
+        let shown: Vec<String> = info.tparams.iter().map(|t| format!("{}: Clone + 'static + __KlShow", t)).collect();
+        let impl_params = if shown.is_empty() { String::new() } else { format!("<{}>", shown.join(", ")) };
+        let _ = writeln!(
+            out,
+            "impl{} __KlShow for {} {{\n    fn __show(&self) -> String {{\n        match self {{",
+            impl_params, self_ty
+        );
         for (v, fields) in &info.variants {
             if fields.is_empty() {
                 let _ = writeln!(out, "            {}::{} => String::from({:?}),", name, v, v);
@@ -227,7 +308,7 @@ impl Gen<'_> {
             let _ = writeln!(out, "    {}: {},", rid(f), self.rty(t));
         }
         out.push_str("}\n");
-        let _ = writeln!(out, "impl{} {} {{", generic_params(&info.tparams), self_ty);
+        let _ = writeln!(out, "impl{} {} {{", self.generic_params(&info.tparams, Some(&info.bounds)), self_ty);
         for meth in &info.decl.methods {
             let (m, Some(b)) =
                 (&info.methods[&meth.name], self.t.struct_methods.get(&(name.to_string(), meth.name.clone())))
@@ -383,7 +464,7 @@ impl Gen<'_> {
         }
         out.push_str("}\n");
         if generic {
-            let _ = writeln!(out, "impl{} {} {{", generic_params(&info.tparams), self_ty);
+            let _ = writeln!(out, "impl{} {} {{", self.generic_params(&info.tparams, Some(&info.bounds)), self_ty);
         } else {
             self.class_trait_decl(out, cname);
             let _ = writeln!(out, "impl {} {{", cname);
@@ -400,7 +481,9 @@ impl Gen<'_> {
     fn class_trait_decl(&self, out: &mut String, cname: &str) {
         let info = &self.m.classes[cname];
         let mut supers: Vec<String> = info.parent.iter().map(|p| class_trait(p)).collect();
-        supers.extend(info.interfaces.iter().cloned());
+        for i in &info.interfaces {
+            supers.push(self.iface_path(i, info.interface_args.get(i).map_or(&[], |a| a.as_slice())));
+        }
         let bound = if supers.is_empty() { String::new() } else { format!(": {}", supers.join(" + ")) };
         let _ = writeln!(out, "trait {}{} {{", class_trait(cname), bound);
         for (mname, sig) in self.m.new_trait_methods(cname) {
@@ -536,9 +619,11 @@ impl Gen<'_> {
             out.push_str("}\n");
         }
         for iname in self.m.all_interfaces(cname) {
-            let _ = writeln!(out, "impl {} for {} {{", iname, cname);
+            let args = self.m.class_iface_args(cname, &iname).unwrap_or_default();
+            let _ = writeln!(out, "impl {} for {} {{", self.iface_path(&iname, &args), cname);
+            let map = self.m.iface_bindings(&iname, &args);
             for (mname, sig) in &self.m.interfaces[&iname].methods {
-                forward(out, mname, sig);
+                forward(out, mname, &subst_sig(sig, &map));
             }
             for target in
                 ancestors.iter().filter(|t| self.m.all_interfaces(t).contains(&iname) && self.is_cast_target(t))
@@ -573,13 +658,4 @@ fn rust_module_name(path: &str) -> String {
         .chars()
         .map(|c| if c.is_ascii_alphanumeric() { c.to_ascii_lowercase() } else { '_' })
         .collect()
-}
-
-/// `<T: Clone + 'static, U: ...>` for a Rust generic item (empty when not generic).
-fn generic_params(tparams: &[String]) -> String {
-    if tparams.is_empty() {
-        String::new()
-    } else {
-        format!("<{}>", tparams.iter().map(|t| format!("{}: Clone + 'static", t)).collect::<Vec<_>>().join(", "))
-    }
 }

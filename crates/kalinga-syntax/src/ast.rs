@@ -23,11 +23,21 @@ pub struct Param {
     pub pos: Span,
 }
 
+/// The bounds of one type parameter: `T: Show + Shape + Store<int>`.
+#[derive(Debug, Clone)]
+pub struct BoundDecl {
+    pub param: String,
+    /// Interface names with their type arguments, or `Show`, `Eq`, `Ord`.
+    pub names: Vec<(String, Vec<TypeExpr>, Span)>,
+}
+
 #[derive(Debug, Clone)]
 pub struct FnDecl {
     pub name: String,
     /// Type parameters: `fn first<T>(...)`.
     pub tparams: Vec<String>,
+    /// Bounds on the type parameters that have them.
+    pub bounds: Vec<BoundDecl>,
     pub params: Vec<Param>,
     pub ret: TypeExpr,
     pub body: Vec<Stmt>,
@@ -77,8 +87,11 @@ pub struct ClassDecl {
     pub name: String,
     /// Type parameters: `class Stack<T>`.
     pub tparams: Vec<String>,
+    pub bounds: Vec<BoundDecl>,
     /// Names after `:` — at most one class, any number of interfaces.
     pub bases: Vec<(String, Span)>,
+    /// The type arguments of each base, in the same order (`Store<int>`).
+    pub base_args: Vec<Vec<TypeExpr>>,
     pub fields: Vec<FieldDecl>,
     pub init: Option<InitDecl>,
     pub methods: Vec<FnDecl>,
@@ -99,8 +112,12 @@ pub struct MethodSig {
 #[derive(Debug, Clone)]
 pub struct InterfaceDecl {
     pub name: String,
+    /// Type parameters: `interface Store<T>`.
+    pub tparams: Vec<String>,
     /// Super-interfaces after `:`.
     pub bases: Vec<(String, Span)>,
+    /// The type arguments of each super-interface, in the same order.
+    pub base_args: Vec<Vec<TypeExpr>>,
     pub methods: Vec<MethodSig>,
     pub pos: Span,
 }
@@ -123,6 +140,7 @@ pub struct StructDecl {
     pub name: String,
     /// Type parameters: `struct Grid<T>`.
     pub tparams: Vec<String>,
+    pub bounds: Vec<BoundDecl>,
     pub fields: Vec<FieldDecl>,
     pub methods: Vec<FnDecl>,
     pub ops: Vec<OpDecl>,
@@ -162,6 +180,9 @@ pub struct VariantDecl {
 #[derive(Debug, Clone)]
 pub struct EnumDecl {
     pub name: String,
+    /// Type parameters: `enum Tree<T>`.
+    pub tparams: Vec<String>,
+    pub bounds: Vec<BoundDecl>,
     pub variants: Vec<VariantDecl>,
     pub pos: Span,
 }

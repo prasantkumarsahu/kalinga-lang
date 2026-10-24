@@ -1,0 +1,13 @@
+interface Shape {
+    fn area() -> float
+}
+
+fn total<T>(xs: [T]) -> float {
+    var sum = 0.0
+    for x in xs {
+        sum += x.area()
+    }
+    return sum
+}
+
+fn main() {}

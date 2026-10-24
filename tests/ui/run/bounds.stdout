@@ -1,0 +1,21 @@
+- 1
+- 2
+- 3
+- Point(x: 1, y: 2)
+- Point(x: 3, y: 4)
+2
+2
+9
+pear
+[-1.0, 0.5, 2.5]
+13.0
+7.0
+cube with area 24.0
+3 == 3: true
+x == y: false
+sorted: [1, 2, 5, 7]
+largest: 7
+<42>
+<hi>
+first is left true
+square: 9.0

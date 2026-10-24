@@ -251,9 +251,83 @@ Rex woof
 hello Rex
 ```
 
+## Generic interfaces
+
+An interface can take type parameters, like a generic class. A class implements it for
+particular types, and a value of the interface type names them too:
+
+```kalinga
+interface Store<T> {
+    fn get() -> T
+    fn put(x: T)
+}
+
+interface Cache<T> : Store<T> {
+    fn clear()
+}
+
+class Counter : Store<int> {
+    n: int = 0
+
+    override fn get() -> int {
+        return self.n
+    }
+
+    override fn put(x: int) {
+        self.n = x
+    }
+}
+
+class Notes : Cache<str> {
+    text: str = ""
+
+    override fn get() -> str {
+        return self.text
+    }
+
+    override fn put(x: str) {
+        self.text = self.text + x + ";"
+    }
+
+    override fn clear() {
+        self.text = ""
+    }
+}
+
+fn fill<T>(s: Store<T>, items: [T]) {
+    for x in items {
+        s.put(x)
+    }
+}
+
+fn main() {
+    let c = Counter()
+    fill(c, [1, 2, 3])
+    println(c.get())
+    let notes = Notes()
+    fill(notes, ["milk", "eggs"])
+    let s: Store<str> = notes
+    println(s.get())
+}
+```
+
+```text
+3
+milk;eggs;
+```
+
+- `Counter : Store<int>` means `T` is `int` in every `Store` method `Counter` writes, so
+  its `get` returns `int`.
+- `Cache<T> : Store<T>` passes its own `T` on; a `Notes` is a `Cache<str>` and so also a
+  `Store<str>`.
+- A `Store<int>` and a `Store<str>` are different types.
+- Bounds can name a generic interface: `fn bump<S: Store<int>>(s: S)`.
+
 ## Limits in this version
 
 - Interfaces contain only methods: no fields, no default method bodies.
+- Generic classes cannot implement interfaces, and interface methods cannot have their
+  own type parameters.
 - Two interfaces listed by one class should not declare methods with the same name.
 
 ---

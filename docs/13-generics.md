@@ -135,9 +135,9 @@ x 5 -> 5 x
 
 ## What you can do with a `T`
 
-Inside generic code, Kalinga does not know what `T` is, so a `T` value can only be
+Inside generic code, Kalinga does not know what `T` is, so a plain `T` value can only be
 **stored, copied, passed and returned** — including in arrays, maps (as values) and
-optionals. It cannot be printed, compared or used in arithmetic:
+optionals. Printing, comparing or calling methods on it needs a **bound** (next section):
 
 ```kalinga error
 fn biggest<T>(a: T, b: T) -> T {
@@ -151,19 +151,97 @@ fn main() {}
 ```
 
 ```text
-main.kl:2:10: error: cannot compare `T` with `T` using `>`
+main.kl:2:10: error: cannot compare `T` with `T` using `>`; add a bound: `<T: Ord>`
 ```
 
-When you need behaviour, pass it in as a function (like `transform` above takes `f`).
+Arithmetic on a `T` is not possible; pass the behaviour in as a function instead (like
+`transform` above takes `f`).
 
 A field whose type is a bare `T` starts out empty. Reading it before it is set stops the
 program with `field `value` was read before it was set` — so set such fields in `init`.
 
+## Bounds
+
+A bound after a type parameter says what every type used for it must allow, and so what
+the generic code may do with it:
+
+| Bound | Allows | Types that have it |
+|---|---|---|
+| `Show` | printing: `println(x)`, `str(x)`, `"{x}"` | numbers, `bool`, `str`, and arrays, maps, optionals, plain structs and enums of them |
+| `Eq` | `==`, `!=`, `contains`, `assert_eq` (with `Show`) | the same |
+| `Ord` | `<`, `<=`, `>`, `>=`, `sort` (and `==`) | `int`, `float`, `str`, `bool` |
+| an interface | calling its methods, passing the value where the interface is expected | classes that implement it, and the interface itself |
+
+```kalinga
+interface Shape {
+    fn area() -> float
+}
+
+class Square : Shape {
+    side: float
+
+    init(side: float) {
+        self.side = side
+    }
+
+    override fn area() -> float {
+        return self.side * self.side
+    }
+}
+
+fn largest<T: Ord>(xs: [T]) -> T? {
+    var best: T? = none
+    for x in xs {
+        if let b = best {
+            if b < x {
+                best = x
+            }
+        } else {
+            best = x
+        }
+    }
+    return best
+}
+
+fn total_area<T: Shape>(shapes: [T]) -> float {
+    var sum = 0.0
+    for s in shapes {
+        sum += s.area()
+    }
+    return sum
+}
+
+fn report<T: Show + Eq>(a: T, b: T) {
+    println("{a} == {b}: {a == b}")
+}
+
+fn main() {
+    println(largest([3, 9, 4]))
+    println(total_area([Square(2.0), Square(3.0)]))
+    report("x", "y")
+}
+```
+
+```text
+9
+13.0
+x == y: false
+```
+
+- Join several bounds with `+`: `<T: Show + Eq>`. Each type parameter has its own:
+  `struct Pair<A: Show, B: Ord>`.
+- Bounds work on generic functions, classes and structs.
+- A type that does not meet a bound is an error where it is used:
+  `` `Player` does not satisfy `T: Show` for `show_all` ``.
+- Inside the generic code, a missing bound is reported with the bound to add.
+
+Interfaces and enums can be generic too: see
+[generic interfaces](11-interfaces.md#generic-interfaces) and
+[generic enums](08-enums-and-match.md#generic-enums).
+
 ## Limits in this version
 
 - Generic classes cannot extend other classes, be extended, or implement interfaces.
-- Interfaces and enums cannot be generic.
-- There are no bounds such as "`T` must be printable".
 
 ---
 

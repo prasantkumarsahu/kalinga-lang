@@ -414,3 +414,18 @@ fn class_body_offers_override_stubs_for_interface_methods() {
     assert!(!has(&items, "override fn draw"), "already written");
     assert_eq!(stub.kind, Some(CompletionItemKind::METHOD));
 }
+
+#[test]
+fn bounded_type_parameters_offer_their_interface_methods() {
+    let src = "interface Shape {\n    fn area() -> float\n    fn name() -> str\n}\nfn total<T: Shape>(xs: [T]) -> float {\n    for x in xs {\n        x.|\n    }\n    return 0.0\n}\n";
+    assert_eq!(labels(&complete(src)), ["area", "name"]);
+}
+
+#[test]
+fn generic_interface_values_show_their_type_arguments() {
+    let src = "interface Store<T> {\n    fn get() -> T\n    fn put(x: T)\n}\nfn use_it(s: Store<int>) {\n    s.|\n}\n";
+    let items = complete(src);
+    assert_eq!(labels(&items), ["get", "put"]);
+    let put = find(&items, "put");
+    assert!(put.detail.as_deref().unwrap_or("").contains("x: int"), "{:?}", put.detail);
+}

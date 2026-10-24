@@ -1,0 +1,13 @@
+interface Store<T> {
+    fn get() -> T
+}
+
+class Ints : Store<int> {
+    override fn get() -> int {
+        return 1
+    }
+}
+
+fn main() {
+    let s: Store<str> = Ints()
+}

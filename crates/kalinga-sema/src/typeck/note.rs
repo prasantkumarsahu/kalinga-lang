@@ -125,7 +125,13 @@ impl Checker<'_> {
     /// Records the variant a `match` arm names.
     pub(super) fn note_variant(&self, pos: Span, enum_name: &str, variant: &str) {
         if enum_name != "Result" {
-            self.note(pos, variant, member(enum_name.to_string(), variant), &Type::Enum(enum_name.to_string()), false);
+            self.note(
+                pos,
+                variant,
+                member(enum_name.to_string(), variant),
+                &Type::Enum(enum_name.to_string(), vec![]),
+                false,
+            );
         }
     }
 
@@ -152,7 +158,7 @@ impl Checker<'_> {
     fn method_owner(&self, ty: &Type, name: &str) -> Option<String> {
         match ty {
             Type::Class(c) | Type::Generic(c, _) => self.m.find_method(c, name).map(|(owner, _)| owner),
-            Type::Interface(i) => self.m.declaring_interface(i, name),
+            Type::Interface(i, _) => self.m.declaring_interface(i, name),
             _ => None,
         }
     }
@@ -182,7 +188,18 @@ impl Checker<'_> {
                 Probe::TypeMembers(n.clone())
             }
             ExprKind::SelfRef => Probe::Members { ty: self.self_value(cx, recv.pos)?.ty, on_self: true },
-            _ => Probe::Members { ty: self.expr(cx, recv, None)?.ty, on_self: false },
+            _ => {
+                let ty = self.expr(cx, recv, None)?.ty;
+                // A type parameter offers the methods of its (first) bound interface.
+                let ty = match &ty {
+                    Type::Param(p) => self
+                        .param_interfaces(p)
+                        .first()
+                        .map_or(ty.clone(), |(i, a)| Type::Interface(i.clone(), a.clone())),
+                    _ => ty,
+                };
+                Probe::Members { ty, on_self: false }
+            }
         };
         self.index.borrow_mut().probe = Some(probe);
         err("completion probe", pos)

@@ -21,7 +21,7 @@ use kalinga_syntax::ast::*;
 use kalinga_syntax::error::{Diagnostic, Result, Span, err};
 
 use crate::index::Index;
-use crate::model::Model;
+use crate::model::{Bound, Bounds, Model};
 use crate::tast::*;
 use crate::types::{Signature, Type};
 
@@ -37,6 +37,7 @@ pub fn analyze(prog: &Program, m: &Model) -> (std::result::Result<TypedProgram, 
         self_values: RefCell::new(HashSet::new()),
         cast_targets: RefCell::new(HashSet::new()),
         index: RefCell::new(Index::default()),
+        bounds: RefCell::new(Bounds::new()),
     };
     let mut out = TypedProgram::default();
     let mut errors = vec![];
@@ -59,6 +60,7 @@ pub fn analyze(prog: &Program, m: &Model) -> (std::result::Result<TypedProgram, 
         let sig = m.functions[&f.name].clone();
         let mut cx = Ctx::new(None, sig.ret.clone(), false);
         cx.tparams = f.tparams.clone();
+        *c.bounds.borrow_mut() = m.fn_bounds.get(&f.name).cloned().unwrap_or_default();
         cx.is_async = f.is_async;
         match c.body(&mut cx, sig, BodyDecl::of_fn(f)) {
             Ok(b) => {
@@ -208,11 +210,14 @@ struct Checker<'a> {
     cast_targets: RefCell<HashSet<String>>,
     /// What names refer to, for editors.
     index: RefCell<Index>,
+    /// The bounds of the type parameters in scope (the generic item being checked).
+    bounds: RefCell<Bounds>,
 }
 
 impl Checker<'_> {
     fn class_bodies(&self, cname: &str, out: &mut TypedProgram, errors: &mut Vec<Diagnostic>) {
         let info = &self.m.classes[cname];
+        *self.bounds.borrow_mut() = info.bounds.clone();
         for f in &info.decl.fields {
             let (Some(e), Some((_, ty))) = (&f.default, info.fields.iter().find(|(n, _)| n == &f.name)) else {
                 continue;
@@ -296,6 +301,7 @@ impl Checker<'_> {
 
     fn struct_bodies(&self, name: &str, out: &mut TypedProgram, errors: &mut Vec<Diagnostic>) {
         let info = &self.m.structs[name];
+        *self.bounds.borrow_mut() = info.bounds.clone();
         let struct_cx = |ret: Type| {
             let mut cx = Ctx::new(None, ret, false);
             cx.tparams = info.tparams.clone();
@@ -380,11 +386,89 @@ impl Checker<'_> {
         if &e.ty == to {
             return Ok(e);
         }
-        if !self.m.assignable(&e.ty, to) {
+        if !self.assignable(&e.ty, to) {
             return err(format!("expected `{}`, found `{}`", to, e.ty), e.pos);
         }
         let pos = e.pos;
+        // A type parameter becomes the interface it is bound to, and that one then `to`.
+        if let Type::Param(p) = &e.ty
+            && !self.m.assignable(&e.ty, to)
+        {
+            let target = if let Type::Optional(inner) = to { &**inner } else { to };
+            if let Some(via) = self.param_bound_for(p, target) {
+                let as_bound = TExpr { kind: TExprKind::Convert(Box::new(e)), ty: via, pos };
+                return self.convert(as_bound, to);
+            }
+        }
         Ok(TExpr { kind: TExprKind::Convert(Box::new(e)), ty: to.clone(), pos })
+    }
+
+    /// `Model::assignable`, plus a type parameter where one of its bound interfaces is expected.
+    fn assignable(&self, from: &Type, to: &Type) -> bool {
+        if self.m.assignable(from, to) {
+            return true;
+        }
+        match (from, to) {
+            (Type::Param(p), Type::Interface(..)) => self.param_bound_for(p, to).is_some(),
+            (f, Type::Optional(inner)) => self.assignable(f, inner),
+            _ => false,
+        }
+    }
+
+    /// The bound interface of `p` through which it can be used as `to` (an interface type).
+    fn param_bound_for(&self, p: &str, to: &Type) -> Option<Type> {
+        let Type::Interface(i, args) = to else { return None };
+        let ifaces = self.param_interfaces(p);
+        let (j, jargs) = ifaces.into_iter().find(|(j, jargs)| self.m.iface_args(j, jargs, i).as_ref() == Some(args))?;
+        Some(Type::Interface(j, jargs))
+    }
+
+    /// The type arguments with which a value of type `t` is an `iface`, if it is one.
+    fn iface_args_of(&self, t: &Type, iface: &str) -> Option<Vec<Type>> {
+        match t {
+            Type::Class(c) => self.m.class_iface_args(c, iface),
+            Type::Interface(j, args) => self.m.iface_args(j, args, iface),
+            Type::Param(p) => self.param_interfaces(p).iter().find_map(|(j, args)| self.m.iface_args(j, args, iface)),
+            _ => None,
+        }
+    }
+
+    /// Does the type parameter `p` in scope have a bound for which `f` holds?
+    fn param_has(&self, p: &str, f: impl Fn(&Bound) -> bool) -> bool {
+        self.bounds.borrow().get(p).is_some_and(|bs| bs.iter().any(f))
+    }
+
+    /// The interfaces (with their type arguments) the type parameter `p` is bound to.
+    fn param_interfaces(&self, p: &str) -> Vec<(String, Vec<Type>)> {
+        let bounds = self.bounds.borrow();
+        let all = bounds.get(p).into_iter().flatten();
+        all.filter_map(|b| if let Bound::Interface(i, args) = b { Some((i.clone(), args.clone())) } else { None })
+            .collect()
+    }
+
+    /// Can `t` values be printed? A type parameter can with a `Show` bound.
+    fn showable(&self, t: &Type) -> bool {
+        self.m.is_plain_with(t, &|p| self.param_has(p, |b| *b == Bound::Show))
+    }
+
+    /// Can `t` values be compared with `==`? A type parameter can with `Eq` or `Ord`.
+    fn comparable(&self, t: &Type) -> bool {
+        self.m.is_plain_with(t, &|p| self.param_has(p, |b| matches!(b, Bound::Eq | Bound::Ord)))
+    }
+
+    /// Is `t` a type parameter with an `Ord` bound?
+    fn ordered_param(&self, t: &Type) -> bool {
+        matches!(t, Type::Param(p) if self.param_has(p, |b| *b == Bound::Ord))
+    }
+
+    /// Does the type argument `t` meet the bound `b`?
+    fn satisfies(&self, t: &Type, b: &Bound) -> bool {
+        match b {
+            Bound::Show => self.showable(t),
+            Bound::Eq => self.comparable(t),
+            Bound::Ord => matches!(t, Type::Int | Type::Float | Type::Str | Type::Bool) || self.ordered_param(t),
+            Bound::Interface(i, args) => self.assignable(t, &Type::Interface(i.clone(), args.clone())),
+        }
     }
 
     /// `e` checked with `to` as the expected type, then converted to it.
@@ -396,6 +480,11 @@ impl Checker<'_> {
 
 fn texpr(kind: TExprKind, ty: Type, pos: Span) -> TExpr {
     TExpr { kind, ty, pos }
+}
+
+/// "; add a bound: `<T: Eq>`" when `t` is a type parameter.
+fn bound_hint(t: &Type, bound: &str) -> String {
+    if let Type::Param(p) = t { format!("; add a bound: `<{}: {}>`", p, bound) } else { String::new() }
 }
 
 /// Conservative check that a body returns on every path.

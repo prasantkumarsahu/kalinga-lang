@@ -1,0 +1,8 @@
+enum Maybe<T> {
+    Nothing
+    Just(value: T)
+}
+
+fn main() {
+    let m = Maybe.Nothing
+}

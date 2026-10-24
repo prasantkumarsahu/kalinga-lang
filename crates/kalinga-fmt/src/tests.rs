@@ -20,6 +20,26 @@ fn spacing() {
 }
 
 #[test]
+fn bounds() {
+    check(
+        "fn f<T:Show+Eq>(x: T) {}
+class Box<T :Ord> : Named {}
+struct P<A: Show, B> {}
+fn g() {
+    if a < b + c > d {}
+}
+",
+        "fn f<T: Show + Eq>(x: T) {}
+class Box<T: Ord> : Named {}
+struct P<A: Show, B> {}
+fn g() {
+    if a < b + c > d {}
+}
+",
+    );
+}
+
+#[test]
 fn generics_and_comparisons() {
     check(
         "fn f(r: Result< int , str >) -> Stack<str> {\n    if a<b && c > d {\n        let c = Channel <int>()\n    }\n    return first<int>(xs)\n}\n",

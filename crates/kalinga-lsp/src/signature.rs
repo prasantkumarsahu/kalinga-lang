@@ -161,7 +161,7 @@ fn method(m: &Model, ty: &Type, name: &str) -> Option<Signature> {
     match ty {
         Type::Class(c) => m.find_method(c, name).map(|(_, s)| s),
         Type::Generic(c, targs) => m.find_method(c, name).map(|(_, s)| subst_sig(&s, &m.bindings(c, targs))),
-        Type::Interface(i) => m.interface_method(i, name),
+        Type::Interface(i, args) => m.interface_method_of(i, args, name),
         Type::Struct(st, targs) => {
             let meth = m.structs.get(st)?.methods.get(name)?;
             Some(subst_sig(&meth.sig, &m.struct_bindings(st, targs)))

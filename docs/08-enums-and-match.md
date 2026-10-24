@@ -305,6 +305,50 @@ fn main() {
 6
 ```
 
+## Generic enums
+
+An enum can take type parameters. Its variants then hold values of any one type:
+
+```kalinga
+enum Tree<T> {
+    Leaf
+    Node(value: T, left: Tree<T>, right: Tree<T>)
+}
+
+fn insert<T: Ord>(t: Tree<T>, x: T) -> Tree<T> {
+    return match t {
+        Leaf => Tree.Node(x, Tree.Leaf, Tree.Leaf),
+        Node(v, l, r) => if x < v { Tree.Node(v, insert(l, x), r) } else { Tree.Node(v, l, insert(r, x)) },
+    }
+}
+
+fn size<T>(t: Tree<T>) -> int {
+    return match t {
+        Leaf => 0,
+        Node(_, l, r) => 1 + size(l) + size(r),
+    }
+}
+
+fn main() {
+    var t: Tree<int> = Tree.Leaf
+    for x in [5, 2, 8] {
+        t = insert(t, x)
+    }
+    println(size(t))
+    println(Tree.Node("a", Tree.Leaf, Tree.Leaf))
+}
+```
+
+```text
+3
+Node(a, Leaf, Leaf)
+```
+
+- `Tree.Node(x, ...)` learns `T` from its values. A variant without values, like
+  `Tree.Leaf`, takes it from where it goes: `var t: Tree<int> = Tree.Leaf`, or a parameter
+  or return type. Alone (`let t = Tree.Leaf`) it is an error that asks for the type.
+- A generic enum prints and compares with `==` when its type arguments do.
+
 ---
 
 Previous: [7. Optionals](07-optionals.md) · Next: [9. Classes](09-classes.md)

@@ -1,0 +1,3 @@
+tests/ui/errors/generic_iface_arity.kl:5:15: error: `Store` needs 1 type argument(s), e.g. `Store<int>`
+5 | class Wrong : Store {
+  |               ^^^^^

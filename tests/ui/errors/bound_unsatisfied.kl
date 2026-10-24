@@ -1,0 +1,11 @@
+class Player {}
+
+fn show_all<T: Show>(xs: [T]) {
+    for x in xs {
+        println(x)
+    }
+}
+
+fn main() {
+    show_all([Player()])
+}
