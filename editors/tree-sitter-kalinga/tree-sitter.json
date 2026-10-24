@@ -1,0 +1,23 @@
+{
+  "$schema": "https://tree-sitter.github.io/tree-sitter/assets/schemas/config.schema.json",
+  "grammars": [
+    {
+      "name": "kalinga",
+      "camelcase": "Kalinga",
+      "scope": "source.kalinga",
+      "path": ".",
+      "file-types": [
+        "kl"
+      ],
+      "highlights": "../zed/languages/kalinga/highlights.scm"
+    }
+  ],
+  "metadata": {
+    "version": "0.1.0",
+    "license": "MIT",
+    "description": "Kalinga grammar for tree-sitter",
+    "links": {
+      "repository": "https://github.com/prasantkumarsahu/kalinga-lang"
+    }
+  }
+}

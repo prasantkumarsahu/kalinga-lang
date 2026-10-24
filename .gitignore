@@ -3,3 +3,7 @@
 node_modules/
 editors/vscode/dist/
 skills/kalinga/evals/results/
+editors/zed/target/
+editors/zed/grammars/
+editors/zed/extension.wasm
+editors/tree-sitter-kalinga/parser.*

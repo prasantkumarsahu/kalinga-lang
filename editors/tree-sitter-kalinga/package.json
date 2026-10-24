@@ -1,0 +1,25 @@
+{
+  "name": "tree-sitter-kalinga",
+  "version": "0.1.0",
+  "description": "Kalinga grammar for tree-sitter (editors such as Zed)",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/prasantkumarsahu/kalinga-lang",
+    "directory": "editors/tree-sitter-kalinga"
+  },
+  "main": "grammar.js",
+  "scripts": {
+    "generate": "tree-sitter generate",
+    "test": "tree-sitter test"
+  },
+  "devDependencies": {
+    "tree-sitter-cli": "0.25.10"
+  },
+  "tree-sitter": [
+    {
+      "scope": "source.kalinga",
+      "file-types": ["kl"]
+    }
+  ]
+}
