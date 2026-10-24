@@ -102,14 +102,13 @@ impl Checker<'_> {
     fn place_kind(&self, cx: &mut Ctx, e: &Expr) -> Result<TPlace> {
         match &e.kind {
             ExprKind::Ident(name) => match cx.lookup(name) {
+                Some(v) if v.mutable && v.shared => Ok(TPlace::SharedLocal { name: name.clone(), ty: v.ty }),
                 Some(v) if v.mutable => Ok(TPlace::Local { name: name.clone(), ty: v.ty }),
-                Some(v) if v.captured => err(
-                    format!(
-                        "cannot change `{}` inside a lambda: lambdas get a read-only copy of outside variables",
-                        name
-                    ),
-                    e.pos,
-                ),
+                // A lambda changes a `var` from outside: it is shared (`body` checks again).
+                Some(v) if v.captured && v.is_var => {
+                    self.shared.borrow_mut().insert(v.decl);
+                    err(format!("`{}` is changed inside a lambda", name), e.pos)
+                }
                 Some(_) => err(
                     format!("cannot change `{}`: it was declared with `let` (use `var` for a mutable variable)", name),
                     e.pos,

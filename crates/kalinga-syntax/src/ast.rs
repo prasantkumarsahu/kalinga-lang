@@ -14,6 +14,8 @@ pub enum TypeExpr {
     Optional(Box<TypeExpr>),
     /// `fn(int, str) -> bool`
     Func(Vec<TypeExpr>, Box<TypeExpr>),
+    /// `(int, str)`
+    Tuple(Vec<TypeExpr>),
 }
 
 #[derive(Debug, Clone)]
@@ -281,6 +283,8 @@ pub enum ExprKind {
     SelfRef,
     Ident(String),
     Array(Vec<Expr>),
+    /// `(a, b)`; parts are read as `t.0`, `t.1` (a `Field` named by the index).
+    Tuple(Vec<Expr>),
     /// `{k: v, ...}`
     Map(Vec<(Expr, Expr)>),
     /// `"text {expr} text"`
@@ -313,6 +317,8 @@ pub enum ExprKind {
     /// `if cond { ... a } else { ... b }` used as a value. Each branch ends with an
     /// expression statement, its value; `else if` is an `otherwise` holding one `If`.
     If {
+        /// `if let NAME = value`: `cond` is the optional value, and `then` sees `NAME`.
+        binding: Option<String>,
         cond: Box<Expr>,
         then: Vec<Stmt>,
         otherwise: Vec<Stmt>,
@@ -346,9 +352,11 @@ impl Expr {
             | ExprKind::SelfRef
             | ExprKind::Ident(_)
             | ExprKind::Lambda { .. } => vec![],
-            ExprKind::Array(xs) | ExprKind::Call(_, _, xs) | ExprKind::SuperInit(xs) | ExprKind::SuperCall(_, xs) => {
-                xs.iter().collect()
-            }
+            ExprKind::Array(xs)
+            | ExprKind::Tuple(xs)
+            | ExprKind::Call(_, _, xs)
+            | ExprKind::SuperInit(xs)
+            | ExprKind::SuperCall(_, xs) => xs.iter().collect(),
             ExprKind::Map(entries) => entries.iter().flat_map(|(k, v)| [k, v]).collect(),
             ExprKind::Interp(parts) => parts
                 .iter()
@@ -369,7 +377,7 @@ impl Expr {
                 std::iter::once(&**base).chain(from.as_deref()).chain(to.as_deref()).collect()
             }
             // Statements inside the branches are not included, only the values they end with.
-            ExprKind::If { cond, then, otherwise } => {
+            ExprKind::If { cond, then, otherwise, .. } => {
                 std::iter::once(&**cond).chain(block_value(then)).chain(block_value(otherwise)).collect()
             }
             ExprKind::Match { value, arms } => {
@@ -441,6 +449,12 @@ pub struct Stmt {
 
 #[derive(Debug, Clone)]
 pub enum StmtKind {
+    /// `let (a, b) = value` (or `var`): takes a tuple apart.
+    LetTuple {
+        names: Vec<(String, Span)>,
+        mutable: bool,
+        value: Expr,
+    },
     Let {
         name: String,
         mutable: bool,

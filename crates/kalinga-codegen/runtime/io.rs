@@ -31,3 +31,9 @@ fn __input(prompt: &str) -> String {
     std::io::stdin().read_line(&mut s).ok();
     s.trim_end_matches(['\r', '\n']).to_string()
 }
+
+/// The value of a `var` shared with lambdas, copied out so no borrow is held while the
+/// code around it runs (which may change the variable again).
+fn __kl_get<T: Clone>(cell: &Rc<RefCell<T>>) -> T {
+    cell.borrow().clone()
+}

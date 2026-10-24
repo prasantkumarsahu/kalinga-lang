@@ -1,0 +1,3 @@
+tests/ui/errors/lambda_let_capture.kl:4:9: error: cannot change `n`: it was declared with `let` (use `var` for a mutable variable)
+4 |         n += 1
+  |         ^

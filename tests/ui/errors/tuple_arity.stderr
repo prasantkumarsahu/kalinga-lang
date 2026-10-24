@@ -1,0 +1,3 @@
+tests/ui/errors/tuple_arity.kl:2:18: error: `(int, int, int)` has 3 parts, but 2 names are given
+2 |     let (a, b) = (1, 2, 3)
+  |                  ^

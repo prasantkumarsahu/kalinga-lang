@@ -370,6 +370,11 @@ impl<'a> Resolver<'a> {
                 }
                 self.ty(r, tparams)?;
             }
+            TypeExpr::Tuple(parts) => {
+                for p in parts.iter_mut() {
+                    self.ty(p, tparams)?;
+                }
+            }
             _ => {}
         }
         Ok(())
@@ -390,6 +395,12 @@ impl<'a> Resolver<'a> {
                 }
                 self.expr(value, sc)?;
                 sc.add(name);
+            }
+            StmtKind::LetTuple { names, value, .. } => {
+                self.expr(value, sc)?;
+                for (n, _) in names.iter() {
+                    sc.add(n);
+                }
             }
             StmtKind::Assign { target, value, .. } => {
                 self.expr(target, sc)?;
@@ -553,7 +564,7 @@ impl<'a> Resolver<'a> {
                 self.expr(value, sc)?;
                 *class = self.resolve(class, pos)?;
             }
-            ExprKind::Array(items) => {
+            ExprKind::Array(items) | ExprKind::Tuple(items) => {
                 for i in items {
                     self.expr(i, sc)?;
                 }
@@ -600,9 +611,15 @@ impl<'a> Resolver<'a> {
             }
             // The name is a parameter's, not a declaration's.
             ExprKind::Named(_, value) => self.expr(value, sc)?,
-            ExprKind::If { cond, then, otherwise } => {
+            ExprKind::If { binding, cond, then, otherwise } => {
                 self.expr(cond, sc)?;
-                self.block(then, sc)?;
+                sc.push();
+                if let Some(name) = binding {
+                    sc.add(name);
+                }
+                let r = self.block(then, sc);
+                sc.pop();
+                r?;
                 self.block(otherwise, sc)?;
             }
             ExprKind::Match { value, arms } => {

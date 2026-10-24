@@ -25,9 +25,30 @@ impl Gen<'_> {
         format!("{{\n{}{}}}", self.block_inner(stmts, depth + 1), indent(depth))
     }
 
+    /// `let (a, b) = value`; parts that a lambda changes then move into shared cells.
+    fn let_tuple(&self, names: &[(String, bool)], mutable: bool, value: &TExpr) -> String {
+        let kw = if mutable { "mut " } else { "" };
+        let binds: Vec<String> = names.iter().map(|(n, _)| format!("{}{}", kw, rid(n))).collect();
+        let mut out = format!("let ({}) = {};", binds.join(", "), self.expr(value));
+        for (n, _) in names.iter().filter(|(_, shared)| *shared) {
+            out += &format!(" let {} = Rc::new(RefCell::new({}));", rid(n), rid(n));
+        }
+        out
+    }
+
     fn stmt(&self, s: &TStmt, depth: usize) -> String {
         match s {
-            TStmt::Let { name, mutable, ty, value } => {
+            TStmt::LetTuple { names, mutable, value } => self.let_tuple(names, *mutable, value),
+            // A `var` a lambda changes lives in a shared cell.
+            TStmt::Let { name, shared: true, ty, value, .. } => {
+                format!(
+                    "let {}: Rc<RefCell<{}>> = Rc::new(RefCell::new({}));",
+                    rid(name),
+                    self.rty(ty),
+                    self.expr(value)
+                )
+            }
+            TStmt::Let { name, mutable, ty, value, .. } => {
                 let kw = if *mutable { "let mut" } else { "let" };
                 format!("{} {}: {} = {};", kw, rid(name), self.rty(ty), self.expr(value))
             }
@@ -141,6 +162,7 @@ impl Gen<'_> {
     pub(crate) fn place(&self, p: &TPlace, n: &mut usize) -> (String, String) {
         match p {
             TPlace::Local { name, .. } => (String::new(), rid(name)),
+            TPlace::SharedLocal { name, .. } => (String::new(), format!("(*{}.borrow_mut())", rid(name))),
             TPlace::SelfField { field, .. } => (String::new(), format!("self.{}", rid(field))),
             TPlace::Static { owner, name, .. } => (String::new(), format!("(*{}::__s_{}().borrow_mut())", owner, name)),
             TPlace::StructField { base, field, .. } => {

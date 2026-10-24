@@ -8,23 +8,39 @@ use crate::tast::*;
 use crate::types::Type;
 
 impl Checker<'_> {
+    #[allow(clippy::too_many_arguments)]
     pub(super) fn if_expr(
         &self,
         cx: &mut Ctx,
+        binding: Option<&str>,
         cond: &Expr,
         then: &[Stmt],
         otherwise: &[Stmt],
         expected: Option<&Type>,
         pos: Span,
     ) -> Result<TExpr> {
-        let cond = self.cond(cx, cond)?;
         let mut ty = expected.cloned();
-        let then = self.value_block(cx, then, &mut ty)?;
+        let (cond, then) = match binding {
+            // `if let x = optional { ... }`: the `then` branch sees the value as `x`.
+            Some(name) => {
+                let (value, inner) = self.optional_value(cx, cond, "if let")?;
+                let then = cx.scoped(|cx| {
+                    self.declare(cx, name, inner, false, cond.pos)?;
+                    self.value_block(cx, then, &mut ty)
+                })?;
+                (value, then)
+            }
+            None => {
+                let cond = self.cond(cx, cond)?;
+                (cond, self.value_block(cx, then, &mut ty)?)
+            }
+        };
         let otherwise = self.value_block(cx, otherwise, &mut ty)?;
         let mut branches = [then, otherwise];
         let ty = self.branch_type(&mut branches, ty, pos)?;
         let [then, otherwise] = branches;
-        Ok(texpr(TExprKind::If { cond: Box::new(cond), then, otherwise }, ty, pos))
+        let binding = binding.map(str::to_string);
+        Ok(texpr(TExprKind::If { binding, cond: Box::new(cond), then, otherwise }, ty, pos))
     }
 
     pub(super) fn match_expr(

@@ -14,11 +14,14 @@ impl Gen<'_> {
             TExprKind::Bool(b) => b.to_string(),
             TExprKind::None => "None".into(),
             TExprKind::Local(name) => clone_if(rid(name), &e.ty),
+            TExprKind::SharedLocal(name) => format!("__kl_get(&{})", rid(name)),
             TExprKind::FnRef(name) => format!("(Rc::new({}) as {})", fn_id(name), self.rty(&e.ty)),
             TExprKind::StructSelf => "self.clone()".into(),
             TExprKind::ObjectSelf => format!("(self.__self.upgrade().unwrap() as {})", self.rty(&e.ty)),
             TExprKind::Convert(inner) => self.convert(self.expr(inner), &inner.ty, &e.ty),
             TExprKind::Array(items) => format!("vec![{}]", self.exprs(items)),
+            TExprKind::Tuple(items) => format!("({})", self.exprs(items)),
+            TExprKind::TupleField { recv, index } => clone_if(format!("{}.{}", self.recv(recv), index), &e.ty),
             TExprKind::Map(entries) => self.map_literal(entries),
             TExprKind::Interp(parts) => self.interp(parts),
             TExprKind::Neg(v) => format!("(-{})", self.expr(v)),
@@ -36,13 +39,12 @@ impl Gen<'_> {
             TExprKind::StructOp { index, lhs, rhs, swapped } => self.struct_op(*index, lhs, rhs.as_deref(), *swapped),
             TExprKind::Downcast { value, target, via, test_only } => self.downcast(value, target, via, *test_only),
             TExprKind::Lambda(l) => self.lambda(l, &e.ty),
-            TExprKind::If { cond, then, otherwise } => {
-                format!(
-                    "(if {} {} else {})",
-                    self.expr(cond),
-                    self.value_block(then, ""),
-                    self.value_block(otherwise, "")
-                )
+            TExprKind::If { binding, cond, then, otherwise } => {
+                let test = match binding {
+                    Some(name) => format!("let Some({}) = {}", rid(name), self.expr(cond)),
+                    None => self.expr(cond),
+                };
+                format!("(if {} {} else {})", test, self.value_block(then, ""), self.value_block(otherwise, ""))
             }
             TExprKind::Match { value, arms } => self.match_expr(value, arms),
             TExprKind::Await(v) => match v.ty {

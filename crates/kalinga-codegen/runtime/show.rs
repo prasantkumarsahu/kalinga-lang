@@ -55,6 +55,22 @@ impl<T: __KlShow> __KlShow for Box<T> {
         (**self).__show()
     }
 }
+// Tuples print as `(1, a)`.
+macro_rules! __kl_show_tuple {
+    ($($t:ident $i:tt),+) => {
+        impl<$($t: __KlShow),+> __KlShow for ($($t,)+) {
+            fn __show(&self) -> String {
+                let parts: Vec<String> = vec![$(self.$i.__show()),+];
+                format!("({})", parts.join(", "))
+            }
+        }
+    };
+}
+__kl_show_tuple!(A 0, B 1);
+__kl_show_tuple!(A 0, B 1, C 2);
+__kl_show_tuple!(A 0, B 1, C 2, D 3);
+__kl_show_tuple!(A 0, B 1, C 2, D 3, E 4);
+__kl_show_tuple!(A 0, B 1, C 2, D 3, E 4, F 5);
 impl<T: __KlShow> __KlShow for Option<T> {
     fn __show(&self) -> String {
         match self {

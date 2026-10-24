@@ -64,7 +64,12 @@ impl Checker<'_> {
         if let Some(v) = cx.lookup(name) {
             return match v.ty.clone() {
                 Type::Func(ps, r) => {
-                    let f = texpr(TExprKind::Local(name.to_string()), v.ty, pos);
+                    let kind = if v.shared {
+                        TExprKind::SharedLocal(name.to_string())
+                    } else {
+                        TExprKind::Local(name.to_string())
+                    };
+                    let f = texpr(kind, v.ty, pos);
                     self.call_value(cx, f, &ps, &r, args, pos, name)
                 }
                 other => err(format!("`{}` is a `{}`, not a function", name, other), pos),
@@ -764,6 +769,7 @@ fn mentions(t: &Type, tp: &str) -> bool {
         }
         Type::Map(k, v) | Type::Result(k, v) => mentions(k, tp) || mentions(v, tp),
         Type::Func(ps, r) => ps.iter().any(|p| mentions(p, tp)) || mentions(r, tp),
+        Type::Tuple(parts) => parts.iter().any(|p| mentions(p, tp)),
         Type::Generic(_, args) | Type::Struct(_, args) | Type::Enum(_, args) | Type::Interface(_, args) => {
             args.iter().any(|a| mentions(a, tp))
         }
@@ -779,6 +785,7 @@ fn unknown_params(t: &Type) -> Type {
         Type::Optional(i) => Type::Optional(Box::new(unknown_params(i))),
         Type::Map(k, v) => Type::Map(Box::new(unknown_params(k)), Box::new(unknown_params(v))),
         Type::Func(ps, r) => Type::Func(ps.iter().map(unknown_params).collect(), Box::new(unknown_params(r))),
+        Type::Tuple(parts) => Type::Tuple(parts.iter().map(unknown_params).collect()),
         Type::Generic(n, args) => Type::Generic(n.clone(), args.iter().map(unknown_params).collect()),
         Type::Struct(n, args) => Type::Struct(n.clone(), args.iter().map(unknown_params).collect()),
         Type::Enum(n, args) => Type::Enum(n.clone(), args.iter().map(unknown_params).collect()),

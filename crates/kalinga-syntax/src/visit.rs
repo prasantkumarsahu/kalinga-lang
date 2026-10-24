@@ -100,6 +100,7 @@ pub fn ty(t: &TypeExpr, v: &mut impl Visitor) {
             ps.iter().for_each(|p| ty(p, v));
             ty(r, v);
         }
+        TypeExpr::Tuple(parts) => parts.iter().for_each(|p| ty(p, v)),
         TypeExpr::Int | TypeExpr::Float | TypeExpr::Bool | TypeExpr::Str | TypeExpr::Void => {}
     }
 }
@@ -119,6 +120,7 @@ pub fn stmt(s: &Stmt, v: &mut impl Visitor) {
             }
             expr(value, v);
         }
+        StmtKind::LetTuple { value, .. } => expr(value, v),
         StmtKind::Assign { target, value, .. } => {
             expr(target, v);
             expr(value, v);
@@ -171,7 +173,7 @@ pub fn expr(e: &Expr, v: &mut impl Visitor) {
             }
         }
         // Branch values are visited with their statements.
-        ExprKind::If { cond, then, otherwise } => {
+        ExprKind::If { cond, then, otherwise, .. } => {
             expr(cond, v);
             block(then, v);
             block(otherwise, v);

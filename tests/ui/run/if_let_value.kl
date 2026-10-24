@@ -1,0 +1,26 @@
+fn first_even(xs: [int]) -> int? {
+    for x in xs {
+        if x % 2 == 0 {
+            return x
+        }
+    }
+    return none
+}
+
+fn describe(name: str?) -> str {
+    return if let n = name { "hello, {n}" } else { "hello, stranger" }
+}
+
+fn main() {
+    let a = if let x = first_even([1, 4, 5]) { x * 10 } else { -1 }
+    let b = if let x = first_even([1, 3]) { x * 10 } else { -1 }
+    println(a, b)
+    println(describe("Asha"), describe(none))
+    let ages: {str: int} = {"Asha": 30}
+    // `else if let` chains, and the value is optional when a branch is `none`.
+    let who = "Ravi"
+    let age = if let a = ages.get(who) { a } else if let a = ages.get("Asha") { a + 100 } else { 0 }
+    println(age)
+    let maybe = if let a = ages.get("Asha") { a } else { none }
+    println(maybe)
+}

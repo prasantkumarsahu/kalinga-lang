@@ -37,8 +37,9 @@ Output:
 true true
 ```
 
-- The lambda gets a **copy** of every outside variable it uses (as lambdas always do), so
-  the thread cannot change the caller's variables.
+- The lambda gets a **copy** of every outside variable it uses, so the thread cannot
+  change the caller's variables. (A `var` that some other lambda changes is shared, not
+  copied, so a thread cannot use it; share state with threads through a `Shared`.)
 - `task.is_done()` tells whether the thread has finished, without waiting.
 - If the thread stops with a runtime error, `join()` stops the program with that error.
 

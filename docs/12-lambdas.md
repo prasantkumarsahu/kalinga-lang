@@ -81,8 +81,8 @@ fn main() {
 
 ## Capturing variables
 
-A lambda can use variables from where it was written. It gets its own **read-only copy**
-of each one, made when the lambda is created:
+A lambda can use variables from where it was written. Usually it gets its own **copy** of
+each one, made when the lambda is created:
 
 ```kalinga
 fn make_adder(k: int) -> fn(int) -> int {
@@ -106,14 +106,58 @@ fn main() {
 hello, Asha
 ```
 
-Assigning to a captured variable inside a lambda is a compile error:
+### Lambdas that change a variable
 
-```text
-error: cannot change `count` inside a lambda: lambdas get a read-only copy of outside variables
+When a lambda **changes** a `var` from outside it (assigns to it, or changes it in place
+with `push`, `remove`, a struct's `mut fn`, ...), there is no copy: the lambda and the
+code around it share that one variable, and every other lambda that uses it shares it too.
+
+```kalinga
+fn make_counter() -> fn() -> int {
+    var count = 0
+    return fn() -> int {
+        count += 1
+        return count
+    }
+}
+
+fn main() {
+    var total = 0
+    let add = fn(x: int) {
+        total += x
+    }
+    add(5)
+    add(7)
+    println(total)
+
+    var log: [str] = []
+    let note = fn(s: str) {
+        log.push(s)
+    }
+    note("start")
+    note("stop")
+    println(log)
+
+    let a = make_counter()
+    let b = make_counter()
+    println(a(), a(), b())
+}
 ```
 
-To share changing state, keep it in an object: objects are references, so the lambda and
-the outside code see the same object.
+```text
+12
+[start, stop]
+1 2 1
+```
+
+- Only variables declared with `var` can be changed this way; changing a `let` is an
+  error, inside a lambda or not.
+- Each call of `make_counter` makes a new `count`, so every counter has its own.
+- A variable shared like this cannot be used by a lambda that runs on another thread
+  (`Thread.spawn`, `par_map`); use a `Shared` there ([chapter 20](20-threads.md)).
+
+Objects are always shared, since they are references: a lambda that changes `c.n` changes
+the one object the outside code sees too.
 
 ```kalinga
 class Counter {

@@ -215,6 +215,53 @@ fn main() {
 }
 ```
 
+## Returning several values: tuples
+
+A **tuple** groups a few values of any types, written in parentheses. It is the easy way
+for a function to return more than one thing:
+
+```kalinga
+fn min_max(xs: [int]) -> (int, int) {
+    var lo = xs[0]
+    var hi = xs[0]
+    for x in xs {
+        if x < lo {
+            lo = x
+        }
+        if x > hi {
+            hi = x
+        }
+    }
+    return (lo, hi)
+}
+
+fn main() {
+    let (lo, hi) = min_max([4, 9, 1, 7])
+    println(lo, hi)
+
+    let range = min_max([3, 8])
+    println(range, range.0, range.1)
+
+    let people: [(str, int)] = [("Asha", 30), ("Ravi", 25)]
+    for (name, age) in people {
+        println(name, "is", age)
+    }
+}
+```
+
+```text
+1 9
+(3, 8) 3 8
+Asha is 30
+Ravi is 25
+```
+
+- The type of `(1, "a")` is `(int, str)`; a tuple has two to six parts.
+- `let (a, b) = t` (or `var`) gives each part its own variable; `for (a, b) in xs` does the
+  same for each element. `t.0`, `t.1`, ... read one part.
+- Tuples are values: they print, and compare with `==` when their parts do. For more parts,
+  or names for them, use a [struct](14-structs-and-operators.md).
+
 ## Things functions cannot do (yet)
 
 - No default parameter values and no overloading (two functions with the same name).
