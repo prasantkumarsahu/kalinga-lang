@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## 0.5.2
+
+The VS Code extension on the Marketplace; the compiler and the language are unchanged.
 
 ### Editor (VS Code extension 0.6.2)
 - On the VS Code Marketplace as **Kalinga Language** (`PrasantKumarSahu.kalinga-lang`);
