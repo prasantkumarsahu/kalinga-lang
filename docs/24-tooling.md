@@ -251,8 +251,8 @@ Extensions view):
 code --install-extension PrasantKumarSahu.kalinga-lang
 ```
 
-(VSCodium, Cursor and other editors find it on [Open VSX](https://open-vsx.org/extension/PrasantKumarSahu/kalinga-lang)), or package
-it yourself:
+(VSCodium, Cursor and other editors find it on [Open VSX](https://open-vsx.org/extension/kalinga-lang/kalinga-lang) as
+`kalinga-lang.kalinga-lang`), or package it yourself:
 
 ```bash
 cd editors/vscode
@@ -338,14 +338,16 @@ Linux and macOS for every push (`.github/workflows/ci.yml`).
    published and the workflow warns that the Marketplace step was skipped.
 5. It also publishes the extension to Open VSX, with the repository secret `OVSX_PAT`: an
    access token from open-vsx.org (sign in with GitHub and sign the publisher agreement
-   first). The `PrasantKumarSahu` namespace is created once, by hand:
+   first). Open VSX takes the namespace from the extension's `publisher`, so the workflow
+   packages a second `.vsix` with `publisher` set to `kalinga-lang`, our namespace there
+   (extension ID `kalinga-lang.kalinga-lang`). The namespace is created once, by hand:
 
    ```bash
    npm install -g ovsx
    ```
 
    ```bash
-   ovsx create-namespace PrasantKumarSahu -p <token>
+   ovsx create-namespace kalinga-lang -p <token>
    ```
 
    Without the secret, the Open VSX step is skipped with a warning, like the Marketplace
