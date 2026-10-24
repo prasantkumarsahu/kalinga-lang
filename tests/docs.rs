@@ -1,4 +1,5 @@
-//! Keeps the documentation honest. In `docs/*.md`:
+//! Keeps the documentation honest. In `docs/*.md` and the Kalinga skill for AI models
+//! (`skills/kalinga/**/*.md`):
 //! - every complete program (a ```` ```kalinga ```` block with `fn main()`, or with
 //!   `test fn`s) must compile, and when a ```` ```text ```` block follows it, running it
 //!   (with `kalinga test` for tests) must print exactly that;
@@ -51,13 +52,21 @@ fn fenced(text: &str) -> Vec<(String, usize, String)> {
     out
 }
 
-fn doc_blocks() -> Vec<Block> {
-    let mut paths: Vec<_> = std::fs::read_dir("docs")
-        .expect("docs folder")
+/// The Markdown files in `dir`, sorted.
+fn markdown_in(dir: &str) -> Vec<std::path::PathBuf> {
+    let mut paths: Vec<_> = std::fs::read_dir(dir)
+        .unwrap_or_else(|e| panic!("{}: {}", dir, e))
         .map(|e| e.unwrap().path())
         .filter(|p| p.extension().is_some_and(|x| x == "md"))
         .collect();
     paths.sort();
+    paths
+}
+
+fn doc_blocks() -> Vec<Block> {
+    let mut paths = markdown_in("docs");
+    paths.extend(markdown_in("skills/kalinga"));
+    paths.extend(markdown_in("skills/kalinga/references"));
     let mut blocks = vec![];
     for path in paths {
         let all = fenced(&std::fs::read_to_string(&path).unwrap());
@@ -188,6 +197,48 @@ fn called_names(cell: &str) -> Vec<String> {
         }
     }
     out
+}
+
+/// The skill's language reference is the docs' Reference chapter, with its title and its
+/// links adapted to where it lives.
+#[test]
+fn skill_reference_is_the_reference_chapter() {
+    let chapter = std::fs::read_to_string("docs/26-reference.md").unwrap().replace(
+        "
+", "
+",
+    );
+    let body = chapter
+        .split(
+            "
+---
+",
+        )
+        .next()
+        .unwrap()
+        .trim_end();
+    let expected = body
+        .replacen(
+            "# 26. Language Reference
+
+A compact summary of the whole language. For explanations and examples, see the guide
+chapters linked from the [docs index](README.md).",
+            "# Kalinga language reference
+
+A compact summary of the whole language (a copy of `docs/26-reference.md` in the Kalinga
+repository; chapter numbers below refer to the docs there).",
+            1,
+        )
+        .replace("[Standard Library](15-standard-library.md)", "[standard-library.md](standard-library.md)");
+    let copy = std::fs::read_to_string("skills/kalinga/references/language-reference.md").unwrap().replace(
+        "
+", "
+",
+    );
+    assert!(
+        copy.trim_end() == expected,
+        "skills/kalinga/references/language-reference.md differs from docs/26-reference.md; copy the chapter again"
+    );
 }
 
 #[test]

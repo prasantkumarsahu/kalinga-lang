@@ -1,0 +1,8 @@
+schema_version: "1.1"
+name: fix-foreign-habits
+expected_outcome: |
+  shop.kl compiles and runs, keeping the program's behaviour: removing the first product,
+  printing how many remain, describing the "bag" product (or "not found"), and listing
+  the products.
+context:
+  scaffold_script: place-files.sh

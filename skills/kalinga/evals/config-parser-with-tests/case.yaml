@@ -1,0 +1,5 @@
+schema_version: "1.1"
+name: config-parser-with-tests
+expected_outcome: |
+  config.kl has a parser returning a Result of a map, an int helper returning a Result,
+  and test fns for good and bad input that all pass under `kalinga test`.

@@ -1,0 +1,5 @@
+schema_version: "1.1"
+name: inventory-program
+expected_outcome: |
+  inventory.kl is a complete Kalinga program that compiles and runs, with Item and
+  Inventory classes, removal by name, a total value, and an optional most expensive item.
