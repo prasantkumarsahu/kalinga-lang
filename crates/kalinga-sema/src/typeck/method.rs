@@ -5,7 +5,9 @@ use kalinga_syntax::ast::*;
 use kalinga_syntax::error::{Result, Span, err};
 
 use super::{Checker, Ctx, texpr};
-use crate::index::PROBE;
+use crate::builtins;
+use crate::index::{PROBE, registry_receiver};
+use crate::suggest::unknown;
 use crate::tast::*;
 use crate::types::{Type, subst_sig};
 
@@ -48,7 +50,9 @@ impl Checker<'_> {
             Type::Array(_) | Type::Str | Type::Map(..) => self.value_method(cx, recv_t, name, args, pos),
             Type::Generic(c, targs) => {
                 let Some((owner, sig)) = self.m.find_method(&c, name) else {
-                    return err(format!("`{}` has no method `{}`", recv_t.ty, name), pos);
+                    let methods = self.class_methods(&c);
+                    let names = methods.iter().map(String::as_str);
+                    return unknown(format!("`{}` has no method `{}`", recv_t.ty, name), pos, name, names);
                 };
                 self.check_method_access(cx, &owner, name, pos)?;
                 let sig = subst_sig(&sig, &self.m.bindings(&c, &targs));
@@ -59,14 +63,17 @@ impl Checker<'_> {
             Type::Class(c) => self.object_method(cx, recv_t, &c, name, args, pos),
             Type::Interface(i) => {
                 let Some(sig) = self.m.interface_method(&i, name) else {
-                    return err(format!("interface `{}` has no method `{}`", i, name), pos);
+                    let closure = self.m.iface_closure(&i);
+                    let methods =
+                        closure.iter().flat_map(|x| self.m.interfaces[x].methods.iter().map(|(n, _)| n.as_str()));
+                    return unknown(format!("interface `{}` has no method `{}`", i, name), pos, name, methods);
                 };
                 let args = self.args(cx, &sig, args, pos, name)?;
                 let dispatch = self.m.declaring_interface(&i, name);
                 let callee = Callee::Method { recv: Box::new(recv_t), name: name.to_string(), dispatch };
                 Ok(texpr(TExprKind::Call { callee, args }, sig.ret, pos))
             }
-            other => err(format!("`{}` has no method `{}`", other, name), pos),
+            other => unknown(format!("`{}` has no method `{}`", other, name), pos, name, builtin_methods(&other)),
         }
     }
 
@@ -93,7 +100,13 @@ impl Checker<'_> {
                     let f = texpr(TExprKind::SelfField { field: name.to_string(), wrapped: false }, ft, pos);
                     return self.call_value(cx, f, &ps, &r, args, pos, name);
                 }
-                return err(format!("`{}` has no method `{}`", class, name), pos);
+                let methods = self.class_methods(&class);
+                return unknown(
+                    format!("`{}` has no method `{}`", class, name),
+                    pos,
+                    name,
+                    methods.iter().map(String::as_str),
+                );
             }
         };
         let args = self.args(cx, &sig, args, pos, name)?;
@@ -123,7 +136,13 @@ impl Checker<'_> {
                     let f = texpr(TExprKind::Field { recv: Box::new(recv_t), field: name.to_string() }, ft, pos);
                     return self.call_value(cx, f, &ps, &r, args, pos, name);
                 }
-                return err(format!("`{}` has no method `{}`", c, name), pos);
+                let methods = self.class_methods(c);
+                return unknown(
+                    format!("`{}` has no method `{}`", c, name),
+                    pos,
+                    name,
+                    methods.iter().map(String::as_str),
+                );
             }
         };
         let args = self.args(cx, &sig, args, pos, name)?;
@@ -158,7 +177,10 @@ impl Checker<'_> {
         let mut m = match info.methods.get(name) {
             Some(m) if !m.is_static => m.clone(),
             Some(_) => return err(format!("`{}` is a `static fn`; call it as `{}.{}(...)`", name, st, name), pos),
-            None => return err(format!("`{}` has no method `{}`", st, name), pos),
+            None => {
+                let methods = info.methods.iter().filter(|(_, m)| !m.is_static).map(|(n, _)| n.as_str());
+                return unknown(format!("`{}` has no method `{}`", st, name), pos, name, methods);
+            }
         };
         if m.is_private && cx.strukt.as_deref() != Some(st.as_str()) {
             return err(format!("method `{}` is private to `{}`", name, st), pos);
@@ -342,7 +364,7 @@ impl Checker<'_> {
                 }
                 done(place, Mutation::Pop, vec![], Type::Optional(elem))
             }
-            (other, _) => err(format!("`{}` has no method `{}`", other, name), pos),
+            (other, _) => unknown(format!("`{}` has no method `{}`", other, name), pos, name, builtin_methods(&other)),
         }
     }
 
@@ -409,7 +431,7 @@ impl Checker<'_> {
                 }
                 (BuiltinMethod::ArrayJoin, vec![self.expr_to(cx, &args[0], &Type::Str)?], Type::Str)
             }
-            _ => return err(format!("`{}` has no method `{}`", t, name), pos),
+            _ => return unknown(format!("`{}` has no method `{}`", t, name), pos, name, builtin_methods(&t)),
         };
         Ok(texpr(TExprKind::BuiltinMethod { op, recv: Box::new(recv_t), args }, ty, pos))
     }
@@ -460,8 +482,20 @@ impl Checker<'_> {
             "parse_float" => {
                 (arity(0).map(|_| BuiltinMethod::ParseFloat)?, vec![], Type::Optional(Box::new(Type::Float)))
             }
-            _ => return err(format!("`str` has no method `{}`", name), pos),
+            _ => return unknown(format!("`str` has no method `{}`", name), pos, name, builtin_methods(&Type::Str)),
         };
         Ok(texpr(TExprKind::BuiltinMethod { op, recv: Box::new(recv_t), args }, ty, pos))
+    }
+}
+
+/// The method names of a built-in type, from the built-ins registry.
+fn builtin_methods(t: &Type) -> impl Iterator<Item = &'static str> {
+    registry_receiver(t).into_iter().flat_map(|r| builtins::methods_of(r).map(|m| m.name))
+}
+
+impl Checker<'_> {
+    /// The methods of class `c`, its own and inherited ones.
+    fn class_methods(&self, c: &str) -> Vec<String> {
+        self.m.ancestors(c).iter().flat_map(|a| self.m.classes[a].methods.keys().cloned()).collect()
     }
 }

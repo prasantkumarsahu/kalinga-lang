@@ -10,6 +10,7 @@ mod declare;
 pub mod index;
 pub mod model;
 pub mod namespaces;
+pub mod suggest;
 pub mod tast;
 pub mod typeck;
 pub mod types;

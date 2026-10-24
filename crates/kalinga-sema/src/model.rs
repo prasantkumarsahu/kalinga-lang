@@ -600,7 +600,11 @@ fn resolve_named(n: &str, args: &[TypeExpr], pos: Span, names: &TypeNames, tpara
     } else if names.externs.contains(&n) {
         Type::Extern(n)
     } else {
-        return err(format!("unknown type `{}`", n), pos);
+        let declared =
+            names.classes.iter().chain(&names.ifaces).chain(&names.enums).chain(&names.structs).chain(&names.externs);
+        let builtin = ["int", "float", "bool", "str", "void", "Result", "Channel", "Shared", "Task", "Async"];
+        let all = declared.map(String::as_str).chain(builtin);
+        return crate::suggest::unknown(format!("unknown type `{}`", n), pos, &n, all);
     })
 }
 

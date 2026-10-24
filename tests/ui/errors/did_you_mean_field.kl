@@ -1,0 +1,9 @@
+struct Point {
+    x: int
+    y: int
+    label: str
+}
+fn main() {
+    let p = Point(x: 1, y: 2, label: "a")
+    println(p.lable)
+}

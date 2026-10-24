@@ -1,0 +1,4 @@
+tests/ui/errors/did_you_mean_variable.kl:3:13: error: unknown variable `cout`
+3 |     println(cout)
+  |             ^^^^
+  = help: did you mean `count`?

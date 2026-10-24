@@ -1,0 +1,4 @@
+tests/ui/errors/did_you_mean_field.kl:8:14: error: `Point` has no field `lable`
+8 |     println(p.lable)
+  |              ^
+  = help: did you mean `label`?

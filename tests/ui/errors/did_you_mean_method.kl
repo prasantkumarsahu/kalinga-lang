@@ -1,0 +1,10 @@
+class Animal {
+    fn speak() -> str {
+        return "..."
+    }
+}
+class Dog : Animal {}
+fn main() {
+    let d = Dog()
+    println(d.spek())
+}

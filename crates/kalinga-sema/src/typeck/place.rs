@@ -5,6 +5,7 @@ use kalinga_syntax::error::{Result, Span, err};
 
 use super::{Checker, Ctx};
 use crate::model::StructOp;
+use crate::suggest::unknown;
 use crate::tast::*;
 use crate::types::{Type, subst};
 
@@ -116,7 +117,10 @@ impl Checker<'_> {
                 None if self.m.consts.contains_key(name) => {
                     err(format!("`{}` is a constant and cannot be changed", name), e.pos)
                 }
-                None => err(format!("unknown variable `{}`", name), e.pos),
+                None => {
+                    let locals = cx.visible();
+                    unknown(format!("unknown variable `{}`", name), e.pos, name, locals.iter().map(|(n, _)| n.as_str()))
+                }
             },
             ExprKind::Field(recv, f) => self.field_place(cx, recv, f, e.pos),
             ExprKind::Index(base, idx) => {
@@ -206,7 +210,15 @@ impl Checker<'_> {
                 }
                 Ok(t)
             }
-            None => err(format!("`{}` has no field `{}`", class, field), pos),
+            None => {
+                let fields = self.m.all_fields(class);
+                unknown(
+                    format!("`{}` has no field `{}`", class, field),
+                    pos,
+                    field,
+                    fields.iter().map(|(n, _, _)| n.as_str()),
+                )
+            }
         }
     }
 
@@ -223,7 +235,9 @@ impl Checker<'_> {
             None if info.methods.contains_key(f) => {
                 err(format!("`{}` is a method of `{}`; call it with `()`", f, st), pos)
             }
-            None => err(format!("`{}` has no field `{}`", st, f), pos),
+            None => {
+                unknown(format!("`{}` has no field `{}`", st, f), pos, f, info.fields.iter().map(|(n, _)| n.as_str()))
+            }
         }
     }
 

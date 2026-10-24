@@ -744,7 +744,13 @@ fn check_method_modifiers(c: &ClassDecl, meth: &FnDecl) -> Result<()> {
 
 fn check_type_name(name: &str, pos: Span) -> Result<()> {
     if RESERVED_TYPES.contains(&name) || BUILTINS.contains(&name) {
-        return err(format!("`{}` is reserved and cannot be used as a type name", name), pos);
+        return err(
+            format!(
+                "`{}` is a name Kalinga uses for its own types (or the Rust it generates); choose another name",
+                name
+            ),
+            pos,
+        );
     }
     if !name.starts_with(|c: char| c.is_uppercase()) {
         return err(format!("type names must start with an uppercase letter: `{}`", name), pos);

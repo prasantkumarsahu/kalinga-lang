@@ -9,6 +9,7 @@ use kalinga_syntax::error::{Result, Span, err};
 
 use super::{Checker, Ctx, texpr};
 use crate::model::{BUILTINS, StructInfo, at_pos};
+use crate::suggest::unknown;
 use crate::tast::*;
 use crate::types::{Signature, Type, has_params, subst, unify};
 
@@ -85,7 +86,11 @@ impl Checker<'_> {
             return Ok(texpr(TExprKind::Call { callee, args }, sig.ret.clone(), pos));
         }
         let Some(sig) = self.m.functions.get(name).cloned() else {
-            return err(format!("unknown function `{}`", name), pos);
+            let m = self.m;
+            let callable =
+                m.functions.keys().chain(m.extern_fns.keys()).chain(m.classes.keys()).chain(m.structs.keys());
+            let names = callable.map(String::as_str).chain(BUILTINS.iter().copied());
+            return unknown(format!("unknown function `{}`", name), pos, name, names);
         };
         let args = self.args(cx, &sig, args, pos, name)?;
         let ret = if self.m.async_fns.contains(name) { Type::Async(Box::new(sig.ret)) } else { sig.ret };
@@ -568,7 +573,11 @@ impl Checker<'_> {
             None if self.m.find_method(class, name).is_some() => {
                 return err(format!("`{}` is not a `static fn`; call it on a `{}` object", name, class), pos);
             }
-            None => return err(format!("`{}` has no static method `{}`", class, name), pos),
+            None => {
+                let ancestors = self.m.ancestors(class);
+                let statics = ancestors.iter().flat_map(|a| self.m.classes[a].statics.keys()).map(String::as_str);
+                return unknown(format!("`{}` has no static method `{}`", class, name), pos, name, statics);
+            }
         };
         self.check_method_access(cx, &owner, name, pos)?;
         let args = self.args(cx, &sig, args, pos, name)?;
@@ -590,7 +599,11 @@ impl Checker<'_> {
         let m = match self.m.structs[strukt].methods.get(name) {
             Some(m) if m.is_static => m.clone(),
             Some(_) => return err(format!("`{}` is not a `static fn`; call it on a `{}` value", name, strukt), pos),
-            None => return err(format!("`{}` has no static method `{}`", strukt, name), pos),
+            None => {
+                let methods = &self.m.structs[strukt].methods;
+                let statics = methods.iter().filter(|(_, m)| m.is_static).map(|(n, _)| n.as_str());
+                return unknown(format!("`{}` has no static method `{}`", strukt, name), pos, name, statics);
+            }
         };
         if m.is_private && cx.strukt.as_deref() != Some(strukt) {
             return err(format!("method `{}` is private to `{}`", name, strukt), pos);
@@ -616,8 +629,10 @@ impl Checker<'_> {
         args: Option<&[Expr]>,
         pos: Span,
     ) -> Result<TExpr> {
-        let Some(fields) = self.m.enums[type_name].variant(variant).cloned() else {
-            return err(format!("enum `{}` has no variant `{}`", type_name, variant), pos);
+        let info = &self.m.enums[type_name];
+        let Some(fields) = info.variant(variant).cloned() else {
+            let variants = info.variants.iter().map(|(v, _)| v.as_str());
+            return unknown(format!("enum `{}` has no variant `{}`", type_name, variant), pos, variant, variants);
         };
         let ty = Type::Enum(type_name.to_string());
         let args = match args {
