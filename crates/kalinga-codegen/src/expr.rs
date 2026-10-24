@@ -64,8 +64,18 @@ impl Gen<'_> {
                 "E" => "std::f64::consts::E".into(),
                 _ => "f64::INFINITY".into(),
             },
-            TExprKind::Variant { enum_name, variant, args } if args.is_empty() => format!("{}::{}", enum_name, variant),
-            TExprKind::Variant { enum_name, variant, args } => self.variant(enum_name, variant, args),
+            TExprKind::Variant { enum_name, variant, args } => {
+                // A generic enum's variant names its type arguments: `Tree::<i64>::Leaf`.
+                let targs = match &e.ty {
+                    Type::Enum(_, targs) => self.turbofish(targs),
+                    _ => String::new(),
+                };
+                if args.is_empty() {
+                    format!("{}{}::{}", enum_name, targs, variant)
+                } else {
+                    self.variant(&format!("{}{}", enum_name, targs), enum_name, variant, args)
+                }
+            }
             TExprKind::Index { base, index } => self.index(base, index, &e.ty),
             TExprKind::Slice { base, from, to } => self.slice(base, from.as_deref(), to.as_deref()),
             TExprKind::Call { callee, args } => self.call(callee, args, &e.ty),
@@ -75,8 +85,9 @@ impl Gen<'_> {
         }
     }
 
-    /// `Enum.Variant(args)`, boxing the fields that lead back to the enum.
-    fn variant(&self, enum_name: &str, variant: &str, args: &[TExpr]) -> String {
+    /// `Enum.Variant(args)`, boxing the fields that lead back to the enum; `path` is the
+    /// enum's Rust path (with type arguments).
+    fn variant(&self, path: &str, enum_name: &str, variant: &str, args: &[TExpr]) -> String {
         let (binds, _) = self.bind_args(args);
         let names: Vec<String> = (0..args.len())
             .map(|i| match self.m.enums.get(enum_name) {
@@ -84,7 +95,7 @@ impl Gen<'_> {
                 _ => format!("__a{}", i),
             })
             .collect();
-        format!("{{ {}{}::{}({}) }}", binds, enum_name, variant, names.join(", "))
+        format!("{{ {}{}::{}({}) }}", binds, path, variant, names.join(", "))
     }
 
     fn map_literal(&self, entries: &[(TExpr, TExpr)]) -> String {

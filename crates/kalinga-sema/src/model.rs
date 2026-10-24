@@ -7,10 +7,10 @@ use std::collections::{HashMap, HashSet};
 use kalinga_syntax::ast::*;
 use kalinga_syntax::error::{Result, Span, err};
 
-use crate::types::{Signature, Type, is_map_key, subst};
+use crate::types::{Signature, Type, is_map_key, subst, subst_sig};
 
 /// A bound on a type parameter: what every type argument for it must allow.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Bound {
     /// Printable: `println`, `str`, `"{x}"`.
     Show,
@@ -18,8 +18,8 @@ pub enum Bound {
     Eq,
     /// Ordered: `<`, `sort` (and `==`).
     Ord,
-    /// Implements the interface.
-    Interface(String),
+    /// Implements the interface (with these type arguments, when it is generic).
+    Interface(String, Vec<Type>),
 }
 
 impl std::fmt::Display for Bound {
@@ -28,7 +28,7 @@ impl std::fmt::Display for Bound {
             Bound::Show => write!(f, "Show"),
             Bound::Eq => write!(f, "Eq"),
             Bound::Ord => write!(f, "Ord"),
-            Bound::Interface(i) => write!(f, "{}", i),
+            Bound::Interface(i, args) => write!(f, "{}", Type::Interface(i.clone(), args.clone())),
         }
     }
 }
@@ -42,6 +42,8 @@ pub struct ClassInfo {
     pub parent: Option<String>,
     /// Interfaces listed directly after `:`.
     pub interfaces: Vec<String>,
+    /// The type arguments of each generic interface in `interfaces`.
+    pub interface_args: HashMap<String, Vec<Type>>,
     pub fields: Vec<(String, Type)>,
     pub methods: HashMap<String, Signature>,
     /// `static fn`s: not inherited through objects, called as `Class.name(...)`.
@@ -70,14 +72,21 @@ pub struct StaticInfo {
 
 #[derive(Debug, Clone)]
 pub struct InterfaceInfo {
+    /// Type parameters of a generic interface (empty otherwise).
+    pub tparams: Vec<String>,
     /// Methods declared by this interface itself.
     pub methods: Vec<(String, Signature)>,
     /// Interfaces listed after `:`.
     pub supers: Vec<String>,
+    /// The type arguments of each generic super-interface (in terms of `tparams`).
+    pub super_args: HashMap<String, Vec<Type>>,
 }
 
 #[derive(Debug, Clone, Default)]
 pub struct EnumInfo {
+    /// Type parameters of a generic enum (empty otherwise).
+    pub tparams: Vec<String>,
+    pub bounds: Bounds,
     pub variants: Vec<(String, Vec<(String, Type)>)>,
     /// `(variant, field index)` of the fields that lead back to this enum by value
     /// (`Add(a: Expr, b: Expr)`); they are boxed in Rust so the enum has a finite size.
@@ -146,6 +155,10 @@ pub struct TypeNames {
     pub externs: HashSet<String>,
     /// Generic classes and their number of type parameters.
     pub generic: HashMap<String, usize>,
+    /// Generic enums and their number of type parameters.
+    pub enum_arity: HashMap<String, usize>,
+    /// Generic interfaces and their number of type parameters.
+    pub iface_arity: HashMap<String, usize>,
 }
 
 impl TypeNames {
@@ -318,10 +331,68 @@ impl Model {
         out
     }
 
-    /// Signature of a method visible on an interface (own or inherited).
+    /// Signature of a method visible on an interface (own or inherited), as declared (a
+    /// generic interface's type parameters left in).
     pub fn interface_method(&self, iface: &str, method: &str) -> Option<Signature> {
         self.declaring_interface(iface, method)
             .and_then(|d| self.interfaces[&d].methods.iter().find(|(n, _)| n == method).map(|(_, s)| s.clone()))
+    }
+
+    /// Method `method` of the interface type `iface<args>`, with the type arguments filled in.
+    pub fn interface_method_of(&self, iface: &str, args: &[Type], method: &str) -> Option<Signature> {
+        let d = self.declaring_interface(iface, method)?;
+        let sig = self.interfaces[&d].methods.iter().find(|(n, _)| n == method).map(|(_, s)| s.clone())?;
+        let dargs = self.iface_args(iface, args, &d)?;
+        Some(subst_sig(&sig, &self.iface_bindings(&d, &dargs)))
+    }
+
+    /// A generic interface's type parameters mapped to `args`.
+    pub fn iface_bindings(&self, iface: &str, args: &[Type]) -> HashMap<String, Type> {
+        self.interfaces[iface].tparams.iter().cloned().zip(args.iter().cloned()).collect()
+    }
+
+    /// The type arguments `target` gets when it is reached from `iface<args>` (itself or
+    /// through super-interfaces), or `None` when `target` is not among them.
+    pub fn iface_args(&self, iface: &str, args: &[Type], target: &str) -> Option<Vec<Type>> {
+        self.iface_args_seen(iface, args, target, &mut HashSet::new())
+    }
+
+    fn iface_args_seen(
+        &self,
+        iface: &str,
+        args: &[Type],
+        target: &str,
+        seen: &mut HashSet<String>,
+    ) -> Option<Vec<Type>> {
+        if iface == target {
+            return Some(args.to_vec());
+        }
+        if !seen.insert(iface.to_string()) {
+            return None;
+        }
+        let info = &self.interfaces[iface];
+        let map = self.iface_bindings(iface, args);
+        for s in &info.supers {
+            let sargs: Vec<Type> = info.super_args.get(s).into_iter().flatten().map(|t| subst(t, &map)).collect();
+            if let Some(found) = self.iface_args_seen(s, &sargs, target, seen) {
+                return Some(found);
+            }
+        }
+        None
+    }
+
+    /// The type arguments with which `class` (or an ancestor) implements `target`.
+    pub fn class_iface_args(&self, class: &str, target: &str) -> Option<Vec<Type>> {
+        for a in self.ancestors(class) {
+            let info = &self.classes[&a];
+            for i in &info.interfaces {
+                let args = info.interface_args.get(i).cloned().unwrap_or_default();
+                if let Some(found) = self.iface_args(i, &args, target) {
+                    return Some(found);
+                }
+            }
+        }
+        None
     }
 
     /// The interface (this one or a super-interface) that declares `method`.
@@ -400,7 +471,7 @@ impl Model {
             Type::Param(p) => param(p),
             Type::Array(i) | Type::Optional(i) => plain(i),
             Type::Map(k, v) => plain(k) && plain(v),
-            Type::Enum(e) => self.plain_enums.contains(e),
+            Type::Enum(e, args) => self.plain_enums.contains(e) && args.iter().all(plain),
             Type::Struct(st, args) => self.plain_structs.contains(st) && args.iter().all(plain),
             Type::Result(t, e) => (**t == Type::Void || plain(t)) && plain(e),
             _ => false,
@@ -419,7 +490,10 @@ impl Model {
                 let map = self.struct_bindings(st, args);
                 self.structs[st].fields.iter().all(|(_, ft)| self.is_sendable(&subst(ft, &map)))
             }
-            Type::Enum(e) => self.enums[e].variants.iter().all(|(_, fs)| fs.iter().all(|(_, ft)| self.is_sendable(ft))),
+            Type::Enum(e, args) => {
+                let info = self.enum_variants(e, args);
+                info.variants.iter().all(|(_, fs)| fs.iter().all(|(_, ft)| self.is_sendable(ft)))
+            }
             _ => false,
         }
     }
@@ -441,6 +515,18 @@ impl Model {
     /// `owner.name` as a `const` or `static var` member.
     pub fn static_value(&self, owner: &str, name: &str) -> Option<&StaticInfo> {
         self.static_values_of(owner)?.iter().find(|(n, _)| n == name).map(|(_, s)| s)
+    }
+
+    /// The enum `e` with its type parameters replaced by `args` (as is when not generic).
+    pub fn enum_variants(&self, e: &str, args: &[Type]) -> EnumInfo {
+        let mut info = self.enums[e].clone();
+        let map: HashMap<String, Type> = info.tparams.iter().cloned().zip(args.iter().cloned()).collect();
+        for (_, fields) in &mut info.variants {
+            for (_, t) in fields.iter_mut() {
+                *t = subst(t, &map);
+            }
+        }
+        info
     }
 
     /// A struct's type parameters mapped to `args` (empty for non-generic structs).
@@ -490,8 +576,8 @@ impl Model {
             (Type::Result(a, ea), Type::Result(b, eb)) => ea == eb && self.assignable(a, b),
             (f, Type::Optional(inner)) => self.assignable(f, inner),
             (Type::Class(d), Type::Class(c)) => self.is_subclass(d, c),
-            (Type::Class(d), Type::Interface(i)) => self.all_interfaces(d).contains(i),
-            (Type::Interface(a), Type::Interface(b)) => self.iface_closure(a).contains(b),
+            (Type::Class(d), Type::Interface(i, args)) => self.class_iface_args(d, i).as_deref() == Some(args),
+            (Type::Interface(a, aa), Type::Interface(b, ba)) => self.iface_args(a, aa, b).as_deref() == Some(ba),
             (Type::Array(a), Type::Array(b)) => self.assignable(a, b),
             (Type::Map(ka, va), Type::Map(kb, vb)) => ka == kb && self.assignable(va, vb),
             _ => false,
@@ -590,6 +676,26 @@ fn resolve_named(n: &str, args: &[TypeExpr], pos: Span, names: &TypeNames, tpara
         }
         return Ok(Type::Result(Box::new(t), Box::new(e)));
     }
+    if let Some(&arity) = names.iface_arity.get(n) {
+        if args.len() != arity {
+            return err(format!("`{}` needs {} type argument(s), e.g. `{}<int>`", n, arity, n), pos);
+        }
+        let mut targs = Vec::new();
+        for a in args {
+            targs.push(resolve_type(a, names, tparams)?);
+        }
+        return Ok(Type::Interface(n.to_string(), targs));
+    }
+    if let Some(&arity) = names.enum_arity.get(n) {
+        if args.len() != arity {
+            return err(format!("`{}` needs {} type argument(s), e.g. `{}<int>`", n, arity, n), pos);
+        }
+        let mut targs = Vec::new();
+        for a in args {
+            targs.push(resolve_type(a, names, tparams)?);
+        }
+        return Ok(Type::Enum(n.to_string(), targs));
+    }
     if let Some(&arity) = names.struct_arity.get(n) {
         if args.len() != arity {
             return err(format!("`{}` needs {} type argument(s), e.g. `{}<int>`", n, arity, n), pos);
@@ -621,9 +727,9 @@ fn resolve_named(n: &str, args: &[TypeExpr], pos: Span, names: &TypeNames, tpara
     Ok(if names.classes.contains(&n) {
         Type::Class(n)
     } else if names.ifaces.contains(&n) {
-        Type::Interface(n)
+        Type::Interface(n, vec![])
     } else if names.enums.contains(&n) {
-        Type::Enum(n)
+        Type::Enum(n, vec![])
     } else if names.structs.contains(&n) {
         Type::Struct(n, vec![])
     } else if names.externs.contains(&n) {
@@ -640,7 +746,7 @@ fn resolve_named(n: &str, args: &[TypeExpr], pos: Span, names: &TypeNames, tpara
 /// The enums and structs a value of type `t` holds directly (not behind an array, map or object).
 fn held_by_value(t: &Type, out: &mut Vec<String>) {
     match t {
-        Type::Enum(e) | Type::Struct(e, _) => out.push(e.clone()),
+        Type::Enum(e, _) | Type::Struct(e, _) => out.push(e.clone()),
         Type::Optional(i) => held_by_value(i, out),
         _ => {}
     }

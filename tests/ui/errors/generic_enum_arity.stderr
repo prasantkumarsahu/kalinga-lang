@@ -1,0 +1,3 @@
+tests/ui/errors/generic_enum_arity.kl:6:9: error: `Maybe` needs 1 type argument(s), e.g. `Maybe<int>`
+6 | fn f(m: Maybe) {}
+  |         ^^^^^

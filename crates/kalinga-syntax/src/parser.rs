@@ -360,7 +360,9 @@ impl Parser {
                 if self.eat(&Tok::Colon) {
                     let mut b = BoundDecl { param: param.clone(), names: vec![] };
                     loop {
-                        b.names.push(self.ident("an interface, `Show`, `Eq` or `Ord`")?);
+                        let (n, npos) = self.ident("an interface, `Show`, `Eq` or `Ord`")?;
+                        let args = if self.check(&Tok::Lt) { self.targs()? } else { vec![] };
+                        b.names.push((n, args, npos));
                         if !self.eat(&Tok::Plus) {
                             break;
                         }
@@ -375,6 +377,23 @@ impl Parser {
             self.expect(Tok::Gt, "`>` to close the type parameters")?;
         }
         Ok((names, bounds))
+    }
+
+    /// `: Base, Store<int>` after a class or interface name: the names and their type arguments.
+    #[allow(clippy::type_complexity)]
+    fn bases(&mut self, what: &str) -> Result<(Vec<(String, Span)>, Vec<Vec<TypeExpr>>)> {
+        let mut bases = Vec::new();
+        let mut args = Vec::new();
+        if self.eat(&Tok::Colon) {
+            loop {
+                bases.push(self.ident(what)?);
+                args.push(if self.check(&Tok::Lt) { self.targs()? } else { vec![] });
+                if !self.eat(&Tok::Comma) {
+                    break;
+                }
+            }
+        }
+        Ok((bases, args))
     }
 
     /// `<int, str>` type arguments.
@@ -416,24 +435,14 @@ impl Parser {
         let pos = self.expect(Tok::Class, "`class`")?;
         let (name, _) = self.ident("class name")?;
         let (tparams, bounds) = self.tparams()?;
-        let mut bases = Vec::new();
-        if self.eat(&Tok::Colon) {
-            loop {
-                bases.push(self.ident("base class or interface name")?);
-                if self.check(&Tok::Lt) {
-                    return err("generic classes cannot be extended (yet)", self.pos());
-                }
-                if !self.eat(&Tok::Comma) {
-                    break;
-                }
-            }
-        }
+        let (bases, base_args) = self.bases("base class or interface name")?;
         self.expect(Tok::LBrace, "`{` to start class body")?;
         let mut class = ClassDecl {
             name,
             tparams,
             bounds,
             bases,
+            base_args,
             fields: vec![],
             init: None,
             methods: vec![],
@@ -532,15 +541,12 @@ impl Parser {
     fn interface(&mut self) -> Result<InterfaceDecl> {
         let pos = self.expect(Tok::Interface, "`interface`")?;
         let (name, _) = self.ident("interface name")?;
-        let mut bases = Vec::new();
-        if self.eat(&Tok::Colon) {
-            loop {
-                bases.push(self.ident("interface name")?);
-                if !self.eat(&Tok::Comma) {
-                    break;
-                }
-            }
+        let tpos = self.pos();
+        let (tparams, bounds) = self.tparams()?;
+        if !bounds.is_empty() {
+            return err("an interface's type parameters cannot have bounds (yet)", tpos);
         }
+        let (bases, base_args) = self.bases("interface name")?;
         self.expect(Tok::LBrace, "`{` to start interface body")?;
         self.skip_newlines();
         let mut methods = Vec::new();
@@ -553,7 +559,7 @@ impl Parser {
             self.end_of_statement()?;
         }
         self.expect(Tok::RBrace, "`}`")?;
-        Ok(InterfaceDecl { name, bases, methods, pos })
+        Ok(InterfaceDecl { name, tparams, bases, base_args, methods, pos })
     }
 
     fn struct_decl(&mut self) -> Result<StructDecl> {
@@ -650,6 +656,7 @@ impl Parser {
     fn enum_decl(&mut self) -> Result<EnumDecl> {
         let pos = self.expect(Tok::Enum, "`enum`")?;
         let (name, _) = self.ident("enum name")?;
+        let (tparams, bounds) = self.tparams()?;
         self.expect(Tok::LBrace, "`{` to start enum body")?;
         self.skip_newlines();
         let mut variants = Vec::new();
@@ -664,7 +671,7 @@ impl Parser {
             }
         }
         self.expect(Tok::RBrace, "`}`")?;
-        Ok(EnumDecl { name, variants, pos })
+        Ok(EnumDecl { name, tparams, bounds, variants, pos })
     }
 
     fn pattern(&mut self) -> Result<Pattern> {

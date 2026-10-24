@@ -14,8 +14,10 @@ pub enum Type {
     Map(Box<Type>, Box<Type>),
     Optional(Box<Type>),
     Class(String),
-    Interface(String),
-    Enum(String),
+    /// An interface, with its type arguments when generic (`Store<int>`).
+    Interface(String, Vec<Type>),
+    /// An enum, with its type arguments when generic (`Tree<int>`).
+    Enum(String, Vec<Type>),
     /// A value-type struct, with type arguments if it is generic (`Grid<int>`).
     Struct(String, Vec<Type>),
     /// An opaque Rust type declared with `extern type`.
@@ -48,7 +50,7 @@ impl Type {
     }
 
     pub fn is_object(&self) -> bool {
-        matches!(self, Type::Class(_) | Type::Interface(_) | Type::Generic(..))
+        matches!(self, Type::Class(_) | Type::Interface(..) | Type::Generic(..))
     }
 }
 
@@ -63,9 +65,11 @@ impl fmt::Display for Type {
             Type::Array(t) => write!(f, "[{}]", t),
             Type::Map(k, v) => write!(f, "{{{}: {}}}", k, v),
             Type::Optional(t) => write!(f, "{}?", t),
-            Type::Class(n) | Type::Interface(n) | Type::Enum(n) | Type::Extern(n) => write!(f, "{}", n),
-            Type::Struct(n, args) if args.is_empty() => write!(f, "{}", n),
-            Type::Struct(n, args) => {
+            Type::Class(n) | Type::Extern(n) => write!(f, "{}", n),
+            Type::Struct(n, args) | Type::Enum(n, args) | Type::Interface(n, args) if args.is_empty() => {
+                write!(f, "{}", n)
+            }
+            Type::Struct(n, args) | Type::Enum(n, args) | Type::Interface(n, args) => {
                 let a: Vec<String> = args.iter().map(|t| t.to_string()).collect();
                 write!(f, "{}<{}>", n, a.join(", "))
             }
@@ -126,6 +130,8 @@ pub fn subst(t: &Type, map: &HashMap<String, Type>) -> Type {
         Type::Func(ps, r) => Type::Func(ps.iter().map(|p| subst(p, map)).collect(), Box::new(subst(r, map))),
         Type::Generic(n, args) => Type::Generic(n.clone(), args.iter().map(|a| subst(a, map)).collect()),
         Type::Struct(n, args) => Type::Struct(n.clone(), args.iter().map(|a| subst(a, map)).collect()),
+        Type::Enum(n, args) => Type::Enum(n.clone(), args.iter().map(|a| subst(a, map)).collect()),
+        Type::Interface(n, args) => Type::Interface(n.clone(), args.iter().map(|a| subst(a, map)).collect()),
         Type::Result(t, e) => Type::Result(Box::new(subst(t, map)), Box::new(subst(e, map))),
         Type::Channel(t) => Type::Channel(Box::new(subst(t, map))),
         Type::Shared(t) => Type::Shared(Box::new(subst(t, map))),
@@ -165,7 +171,12 @@ pub fn unify(pattern: &Type, actual: &Type, map: &mut HashMap<String, Type>) {
             unify(pt, at, map);
             unify(pe, ae, map);
         }
-        (Type::Generic(pn, pa), Type::Generic(an, aa)) | (Type::Struct(pn, pa), Type::Struct(an, aa)) if pn == an => {
+        (Type::Generic(pn, pa), Type::Generic(an, aa))
+        | (Type::Struct(pn, pa), Type::Struct(an, aa))
+        | (Type::Enum(pn, pa), Type::Enum(an, aa))
+        | (Type::Interface(pn, pa), Type::Interface(an, aa))
+            if pn == an =>
+        {
             for (p, a) in pa.iter().zip(aa) {
                 unify(p, a, map);
             }
@@ -180,7 +191,9 @@ pub fn has_params(t: &Type) -> bool {
         Type::Array(i) | Type::Optional(i) => has_params(i),
         Type::Map(k, v) => has_params(k) || has_params(v),
         Type::Func(ps, r) => ps.iter().any(has_params) || has_params(r),
-        Type::Generic(_, args) | Type::Struct(_, args) => args.iter().any(has_params),
+        Type::Generic(_, args) | Type::Struct(_, args) | Type::Enum(_, args) | Type::Interface(_, args) => {
+            args.iter().any(has_params)
+        }
         Type::Result(t, e) => has_params(t) || has_params(e),
         _ => false,
     }

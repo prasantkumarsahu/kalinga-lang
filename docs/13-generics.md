@@ -235,10 +235,13 @@ x == y: false
   `` `Player` does not satisfy `T: Show` for `show_all` ``.
 - Inside the generic code, a missing bound is reported with the bound to add.
 
+Interfaces and enums can be generic too: see
+[generic interfaces](11-interfaces.md#generic-interfaces) and
+[generic enums](08-enums-and-match.md#generic-enums).
+
 ## Limits in this version
 
 - Generic classes cannot extend other classes, be extended, or implement interfaces.
-- Interfaces and enums cannot be generic.
 
 ---
 

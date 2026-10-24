@@ -23,12 +23,12 @@ pub struct Param {
     pub pos: Span,
 }
 
-/// The bounds of one type parameter: `T: Show + Shape`.
+/// The bounds of one type parameter: `T: Show + Shape + Store<int>`.
 #[derive(Debug, Clone)]
 pub struct BoundDecl {
     pub param: String,
-    /// Interface names, or `Show`, `Eq`, `Ord`.
-    pub names: Vec<(String, Span)>,
+    /// Interface names with their type arguments, or `Show`, `Eq`, `Ord`.
+    pub names: Vec<(String, Vec<TypeExpr>, Span)>,
 }
 
 #[derive(Debug, Clone)]
@@ -90,6 +90,8 @@ pub struct ClassDecl {
     pub bounds: Vec<BoundDecl>,
     /// Names after `:` — at most one class, any number of interfaces.
     pub bases: Vec<(String, Span)>,
+    /// The type arguments of each base, in the same order (`Store<int>`).
+    pub base_args: Vec<Vec<TypeExpr>>,
     pub fields: Vec<FieldDecl>,
     pub init: Option<InitDecl>,
     pub methods: Vec<FnDecl>,
@@ -110,8 +112,12 @@ pub struct MethodSig {
 #[derive(Debug, Clone)]
 pub struct InterfaceDecl {
     pub name: String,
+    /// Type parameters: `interface Store<T>`.
+    pub tparams: Vec<String>,
     /// Super-interfaces after `:`.
     pub bases: Vec<(String, Span)>,
+    /// The type arguments of each super-interface, in the same order.
+    pub base_args: Vec<Vec<TypeExpr>>,
     pub methods: Vec<MethodSig>,
     pub pos: Span,
 }
@@ -174,6 +180,9 @@ pub struct VariantDecl {
 #[derive(Debug, Clone)]
 pub struct EnumDecl {
     pub name: String,
+    /// Type parameters: `enum Tree<T>`.
+    pub tparams: Vec<String>,
+    pub bounds: Vec<BoundDecl>,
     pub variants: Vec<VariantDecl>,
     pub pos: Span,
 }

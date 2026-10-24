@@ -10,7 +10,7 @@ use kalinga_syntax::ast::*;
 use kalinga_syntax::error::{Diagnostic, Result, Span, err};
 
 use crate::model::*;
-use crate::types::{Signature, Type};
+use crate::types::{Signature, Type, subst_sig};
 
 impl Model {
     /// `require_main` is false when only checking a file, which may be a library
@@ -100,6 +100,7 @@ impl Model {
             if e.variants.is_empty() {
                 return err(format!("enum `{}` needs at least one variant", e.name), e.pos);
             }
+            self.check_tparams(&e.tparams, e.pos)?;
             let mut variants: Vec<(String, Vec<(String, Type)>)> = Vec::new();
             for v in &e.variants {
                 if !v.name.starts_with(|c: char| c.is_uppercase()) || v.name == "Self" {
@@ -108,10 +109,16 @@ impl Model {
                 if variants.iter().any(|(n, _)| n == &v.name) {
                     return err(format!("variant `{}` declared twice in `{}`", v.name, e.name), v.pos);
                 }
-                let sig = signature(&v.fields, &TypeExpr::Void, &|t| resolve_type(t, &self.names, &[]))?;
+                let sig = signature(&v.fields, &TypeExpr::Void, &|t| resolve_type(t, &self.names, &e.tparams))?;
                 variants.push((v.name.clone(), sig.params));
             }
-            self.enums.insert(e.name.clone(), EnumInfo { variants, ..EnumInfo::default() });
+            let info = EnumInfo {
+                tparams: e.tparams.clone(),
+                bounds: resolve_bounds(&e.bounds, &self.names, &e.tparams)?,
+                variants,
+                ..EnumInfo::default()
+            };
+            self.enums.insert(e.name.clone(), info);
             self.enum_order.push(e.name.clone());
         }
         Ok(())
@@ -175,7 +182,10 @@ impl Model {
             let bad_enums: Vec<String> = self
                 .plain_enums
                 .iter()
-                .filter(|n| self.enums[*n].variants.iter().any(|(_, fs)| fs.iter().any(|(_, t)| !self.is_plain(t))))
+                .filter(|n| {
+                    // As for generic structs, type parameters count as plain here.
+                    self.enums[*n].variants.iter().any(|(_, fs)| fs.iter().any(|(_, t)| !self.is_plain_params_ok(t)))
+                })
                 .cloned()
                 .collect();
             // For generic structs, type parameters count as plain here; uses then also need
@@ -200,15 +210,18 @@ impl Model {
 
     fn declare_interfaces(&mut self, prog: &Program) -> Result<()> {
         for i in &prog.interfaces {
+            self.check_tparams(&i.tparams, i.pos)?;
+            let resolve = |t: &TypeExpr| resolve_type(t, &self.names, &i.tparams);
             let mut methods: Vec<(String, Signature)> = Vec::new();
             for s in &i.methods {
                 if methods.iter().any(|(n, _)| n == &s.name) {
                     return err(format!("method `{}` declared twice in `{}`", s.name, i.name), s.pos);
                 }
-                methods.push((s.name.clone(), signature(&s.params, &s.ret, &|t| resolve_type(t, &self.names, &[]))?));
+                methods.push((s.name.clone(), signature(&s.params, &s.ret, &resolve)?));
             }
             let mut supers = Vec::new();
-            for (b, pos) in &i.bases {
+            let mut super_args = HashMap::new();
+            for ((b, pos), args) in i.bases.iter().zip(&i.base_args) {
                 if !self.names.ifaces.contains(b) {
                     return err(format!("`{}` is not an interface (interfaces can only extend interfaces)", b), *pos);
                 }
@@ -216,8 +229,12 @@ impl Model {
                     return err(format!("interface `{}` listed twice", b), *pos);
                 }
                 supers.push(b.clone());
+                if let Type::Interface(_, targs) = resolve(&TypeExpr::Named(b.clone(), args.clone(), *pos))? {
+                    super_args.insert(b.clone(), targs);
+                }
             }
-            self.interfaces.insert(i.name.clone(), InterfaceInfo { methods, supers });
+            let info = InterfaceInfo { tparams: i.tparams.clone(), methods, supers, super_args };
+            self.interfaces.insert(i.name.clone(), info);
             self.interface_order.push(i.name.clone());
         }
         for i in &prog.interfaces {
@@ -287,7 +304,7 @@ impl Model {
             let sig = signature(&f.params, &f.ret, &|t| resolve_type(t, &self.names, &f.tparams))?;
             self.functions.insert(f.name.clone(), sig);
             self.fn_tparams.insert(f.name.clone(), f.tparams.clone());
-            self.fn_bounds.insert(f.name.clone(), resolve_bounds(&f.bounds, &self.names)?);
+            self.fn_bounds.insert(f.name.clone(), resolve_bounds(&f.bounds, &self.names, &f.tparams)?);
             if f.is_async {
                 self.async_fns.insert(f.name.clone());
             }
@@ -461,8 +478,12 @@ impl Model {
     fn check_conformance(&self, name: &str) -> Result<()> {
         let info = &self.classes[name];
         for direct in &info.interfaces {
+            let dargs = info.interface_args.get(direct).cloned().unwrap_or_default();
             for iname in self.iface_closure(direct) {
+                let iargs = self.iface_args(direct, &dargs, &iname).unwrap_or_default();
+                let map = self.iface_bindings(&iname, &iargs);
                 for (mname, isig) in &self.interfaces[&iname].methods {
+                    let isig = &subst_sig(isig, &map);
                     match self.find_method(name, mname) {
                         None => {
                             return err(
@@ -527,20 +548,40 @@ fn type_names(prog: &Program) -> Result<TypeNames> {
             .filter(|c| !c.tparams.is_empty())
             .map(|c| (c.name.clone(), c.tparams.len()))
             .collect(),
+        enum_arity: prog
+            .enums
+            .iter()
+            .filter(|e| !e.tparams.is_empty())
+            .map(|e| (e.name.clone(), e.tparams.len()))
+            .collect(),
+        iface_arity: prog
+            .interfaces
+            .iter()
+            .filter(|i| !i.tparams.is_empty())
+            .map(|i| (i.name.clone(), i.tparams.len()))
+            .collect(),
     })
 }
 
 /// The bounds written on type parameters: interfaces, or `Show`, `Eq`, `Ord`.
-fn resolve_bounds(decls: &[BoundDecl], names: &TypeNames) -> Result<Bounds> {
+fn resolve_bounds(decls: &[BoundDecl], names: &TypeNames, tparams: &[String]) -> Result<Bounds> {
     let mut out = Bounds::new();
     for d in decls {
         let mut bounds = vec![];
-        for (name, pos) in &d.names {
+        for (name, args, pos) in &d.names {
             let b = match name.as_str() {
+                "Show" | "Eq" | "Ord" if !args.is_empty() => {
+                    return err(format!("`{}` takes no type arguments", name), *pos);
+                }
                 "Show" => Bound::Show,
                 "Eq" => Bound::Eq,
                 "Ord" => Bound::Ord,
-                _ if names.ifaces.contains(name) => Bound::Interface(name.clone()),
+                _ if names.ifaces.contains(name) => {
+                    match resolve_type(&TypeExpr::Named(name.clone(), args.clone(), *pos), names, tparams)? {
+                        Type::Interface(i, targs) => Bound::Interface(i, targs),
+                        _ => unreachable!("an interface name resolves to an interface"),
+                    }
+                }
                 _ => {
                     let what = if names.contains(name) {
                         format!("`{}` is not an interface; a bound is an interface, `Show`, `Eq` or `Ord`", name)
@@ -581,7 +622,7 @@ fn struct_info(st: &StructDecl, names: &TypeNames) -> Result<StructInfo> {
     Ok(StructInfo {
         decl: st.clone(),
         tparams: st.tparams.clone(),
-        bounds: resolve_bounds(&st.bounds, names)?,
+        bounds: resolve_bounds(&st.bounds, names, &st.tparams)?,
         fields,
         private_fields: st.fields.iter().filter(|f| f.is_private).map(|f| f.name.clone()).collect(),
         methods,
@@ -651,7 +692,7 @@ fn struct_ops(st: &StructDecl, resolve: &dyn Fn(&TypeExpr) -> Result<Type>) -> R
 
 fn class_info(c: &ClassDecl, names: &TypeNames) -> Result<ClassInfo> {
     let resolve = |t: &TypeExpr| resolve_type(t, names, &c.tparams);
-    let (parent, interfaces) = class_bases(c, names)?;
+    let (parent, interfaces, interface_args) = class_bases(c, names, &resolve)?;
     let fields = class_fields(c, &resolve)?;
     let mut methods = HashMap::new();
     let mut statics = HashMap::new();
@@ -678,6 +719,7 @@ fn class_info(c: &ClassDecl, names: &TypeNames) -> Result<ClassInfo> {
         decl: c.clone(),
         parent,
         interfaces,
+        interface_args,
         fields,
         methods,
         statics,
@@ -688,21 +730,28 @@ fn class_info(c: &ClassDecl, names: &TypeNames) -> Result<ClassInfo> {
         init,
         children: vec![],
         tparams: c.tparams.clone(),
-        bounds: resolve_bounds(&c.bounds, names)?,
+        bounds: resolve_bounds(&c.bounds, names, &c.tparams)?,
         static_values,
     })
 }
 
 /// The base class (at most one) and the interfaces listed after `:`.
-fn class_bases(c: &ClassDecl, names: &TypeNames) -> Result<(Option<String>, Vec<String>)> {
-    for (b, pos) in &c.bases {
-        if names.generic.contains_key(b) {
+/// The base class, the interfaces, and the type arguments of the generic interfaces.
+#[allow(clippy::type_complexity)]
+fn class_bases(
+    c: &ClassDecl,
+    names: &TypeNames,
+    resolve: &dyn Fn(&TypeExpr) -> Result<Type>,
+) -> Result<(Option<String>, Vec<String>, HashMap<String, Vec<Type>>)> {
+    for ((b, pos), args) in c.bases.iter().zip(&c.base_args) {
+        if names.generic.contains_key(b) || (names.classes.contains(b) && !args.is_empty()) {
             return err(format!("`{}` is generic and cannot be extended (yet)", b), *pos);
         }
     }
     let mut parent = None;
     let mut interfaces = Vec::new();
-    for (b, pos) in &c.bases {
+    let mut interface_args = HashMap::new();
+    for ((b, pos), args) in c.bases.iter().zip(&c.base_args) {
         if names.classes.contains(b) {
             if parent.is_some() {
                 return err(
@@ -722,11 +771,14 @@ fn class_bases(c: &ClassDecl, names: &TypeNames) -> Result<(Option<String>, Vec<
                 return err(format!("interface `{}` listed twice", b), *pos);
             }
             interfaces.push(b.clone());
+            if let Type::Interface(_, targs) = resolve(&TypeExpr::Named(b.clone(), args.clone(), *pos))? {
+                interface_args.insert(b.clone(), targs);
+            }
         } else {
             return err(format!("unknown class or interface `{}`", b), *pos);
         }
     }
-    Ok((parent, interfaces))
+    Ok((parent, interfaces, interface_args))
 }
 
 fn class_fields(c: &ClassDecl, resolve: &dyn Fn(&TypeExpr) -> Result<Type>) -> Result<Vec<(String, Type)>> {
@@ -742,7 +794,7 @@ fn class_fields(c: &ClassDecl, resolve: &dyn Fn(&TypeExpr) -> Result<Type>) -> R
         let needs_default = ty.is_object()
             || matches!(
                 ty,
-                Type::Enum(_) | Type::Func(..) | Type::Struct(..) | Type::Extern(_) | Type::Result(..) | Type::Task(_)
+                Type::Enum(..) | Type::Func(..) | Type::Struct(..) | Type::Extern(_) | Type::Result(..) | Type::Task(_)
             );
         if needs_default && f.default.is_none() {
             return err(

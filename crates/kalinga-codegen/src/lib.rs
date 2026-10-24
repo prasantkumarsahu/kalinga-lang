@@ -96,8 +96,10 @@ impl Gen<'_> {
             Type::Async(t) => format!("__Async<{}>", self.rty(t)),
             Type::Class(c) if self.m.has_subclasses(c) => format!("Rc<RefCell<dyn {}>>", class_trait(c)),
             Type::Class(c) => format!("Rc<RefCell<{}>>", c),
-            Type::Interface(i) => format!("Rc<RefCell<dyn {}>>", i),
-            Type::Enum(e) | Type::Extern(e) => e.clone(),
+            Type::Interface(i, args) => format!("Rc<RefCell<dyn {}>>", self.iface_path(i, args)),
+            Type::Extern(e) => e.clone(),
+            Type::Enum(e, args) if args.is_empty() => e.clone(),
+            Type::Enum(e, args) => format!("{}<{}>", e, self.rtys(args)),
             Type::Struct(n, args) if args.is_empty() => n.clone(),
             Type::Struct(n, args) => format!("{}<{}>", n, self.rtys(args)),
             Type::Func(ps, r) if **r == Type::Void => format!("Rc<dyn Fn({})>", self.rtys(ps)),
@@ -113,6 +115,11 @@ impl Gen<'_> {
     }
 
     /// `::<A, B>` for explicit type arguments (empty when there are none).
+    /// An interface as a Rust trait path: `Store<i64>`.
+    fn iface_path(&self, iface: &str, args: &[Type]) -> String {
+        if args.is_empty() { iface.to_string() } else { format!("{}<{}>", iface, self.rtys(args)) }
+    }
+
     fn turbofish(&self, types: &[Type]) -> String {
         if types.is_empty() { String::new() } else { format!("::<{}>", self.rtys(types)) }
     }
@@ -150,8 +157,8 @@ impl Gen<'_> {
                 format!("({}).map(|__v| {})", code, self.convert("__v".into(), a, b))
             }
             (f, Type::Optional(inner)) => format!("Some({})", self.convert(code, f, inner)),
-            (Type::Param(_), Type::Interface(i)) => format!("({}).__to_{}()", code, i),
-            (Type::Class(_) | Type::Interface(_), Type::Class(_) | Type::Interface(_)) => {
+            (Type::Param(_), Type::Interface(i, _)) => format!("({}).__to_{}()", code, i),
+            (Type::Class(_) | Type::Interface(..), Type::Class(_) | Type::Interface(..)) => {
                 format!("({} as {})", code, self.rty(to))
             }
             (Type::Map(_, a), Type::Map(_, b)) => format!(

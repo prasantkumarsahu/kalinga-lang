@@ -17,7 +17,7 @@ impl Checker<'_> {
             return self.probe_members(cx, recv, pos);
         }
         if let Some(t) = self.type_receiver(cx, recv) {
-            return self.variant_value(cx, &t, name, Some(args), pos);
+            return self.variant_value(cx, &t, name, Some(args), None, pos);
         }
         if let Some(ns) = self.library_receiver(cx, recv) {
             return self.library_call(cx, &ns, name, args, pos);
@@ -61,8 +61,8 @@ impl Checker<'_> {
                 Ok(texpr(TExprKind::Call { callee, args }, sig.ret, pos))
             }
             Type::Class(c) => self.object_method(cx, recv_t, &c, name, args, pos),
-            Type::Interface(i) => {
-                let Some(sig) = self.m.interface_method(&i, name) else {
+            Type::Interface(i, iargs) => {
+                let Some(sig) = self.m.interface_method_of(&i, &iargs, name) else {
                     let closure = self.m.iface_closure(&i);
                     let methods =
                         closure.iter().flat_map(|x| self.m.interfaces[x].methods.iter().map(|(n, _)| n.as_str()));
@@ -512,8 +512,10 @@ impl Checker<'_> {
         pos: Span,
     ) -> Result<TExpr> {
         let ifaces = self.param_interfaces(p);
-        let found = ifaces.iter().find_map(|i| self.m.interface_method(i, name).map(|sig| (i.clone(), sig)));
-        let Some((iface, sig)) = found else {
+        let found = ifaces
+            .iter()
+            .find_map(|(i, a)| self.m.interface_method_of(i, a, name).map(|sig| (i.clone(), a.clone(), sig)));
+        let Some((iface, iargs, sig)) = found else {
             if ifaces.is_empty() {
                 let mut with: Vec<&String> = self
                     .m
@@ -526,13 +528,13 @@ impl Checker<'_> {
                 let example = with.first().map_or("SomeInterface", |i| i.as_str());
                 return err(format!("`{}` has no method `{}`; add a bound, e.g. `<{}: {}>`", p, name, p, example), pos);
             }
-            let closure: Vec<String> = ifaces.iter().flat_map(|i| self.m.iface_closure(i)).collect();
+            let closure: Vec<String> = ifaces.iter().flat_map(|(i, _)| self.m.iface_closure(i)).collect();
             let methods = closure.iter().flat_map(|x| self.m.interfaces[x].methods.iter().map(|(n, _)| n.as_str()));
             return unknown(format!("`{}` has no method `{}`", p, name), pos, name, methods);
         };
         let args = self.args(cx, &sig, args, pos, name)?;
         let dispatch = self.m.declaring_interface(&iface, name);
-        let recv = texpr(TExprKind::Convert(Box::new(recv_t)), Type::Interface(iface), pos);
+        let recv = texpr(TExprKind::Convert(Box::new(recv_t)), Type::Interface(iface, iargs), pos);
         let callee = Callee::Method { recv: Box::new(recv), name: name.to_string(), dispatch };
         Ok(texpr(TExprKind::Call { callee, args }, sig.ret, pos))
     }

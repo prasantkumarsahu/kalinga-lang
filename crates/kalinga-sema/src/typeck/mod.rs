@@ -390,6 +390,16 @@ impl Checker<'_> {
             return err(format!("expected `{}`, found `{}`", to, e.ty), e.pos);
         }
         let pos = e.pos;
+        // A type parameter becomes the interface it is bound to, and that one then `to`.
+        if let Type::Param(p) = &e.ty
+            && !self.m.assignable(&e.ty, to)
+        {
+            let target = if let Type::Optional(inner) = to { &**inner } else { to };
+            if let Some(via) = self.param_bound_for(p, target) {
+                let as_bound = TExpr { kind: TExprKind::Convert(Box::new(e)), ty: via, pos };
+                return self.convert(as_bound, to);
+            }
+        }
         Ok(TExpr { kind: TExprKind::Convert(Box::new(e)), ty: to.clone(), pos })
     }
 
@@ -399,11 +409,27 @@ impl Checker<'_> {
             return true;
         }
         match (from, to) {
-            (Type::Param(p), Type::Interface(i)) => {
-                self.param_interfaces(p).iter().any(|j| j == i || self.m.iface_closure(j).contains(i))
-            }
+            (Type::Param(p), Type::Interface(..)) => self.param_bound_for(p, to).is_some(),
             (f, Type::Optional(inner)) => self.assignable(f, inner),
             _ => false,
+        }
+    }
+
+    /// The bound interface of `p` through which it can be used as `to` (an interface type).
+    fn param_bound_for(&self, p: &str, to: &Type) -> Option<Type> {
+        let Type::Interface(i, args) = to else { return None };
+        let ifaces = self.param_interfaces(p);
+        let (j, jargs) = ifaces.into_iter().find(|(j, jargs)| self.m.iface_args(j, jargs, i).as_ref() == Some(args))?;
+        Some(Type::Interface(j, jargs))
+    }
+
+    /// The type arguments with which a value of type `t` is an `iface`, if it is one.
+    fn iface_args_of(&self, t: &Type, iface: &str) -> Option<Vec<Type>> {
+        match t {
+            Type::Class(c) => self.m.class_iface_args(c, iface),
+            Type::Interface(j, args) => self.m.iface_args(j, args, iface),
+            Type::Param(p) => self.param_interfaces(p).iter().find_map(|(j, args)| self.m.iface_args(j, args, iface)),
+            _ => None,
         }
     }
 
@@ -412,11 +438,12 @@ impl Checker<'_> {
         self.bounds.borrow().get(p).is_some_and(|bs| bs.iter().any(f))
     }
 
-    /// The interfaces the type parameter `p` is bound to.
-    fn param_interfaces(&self, p: &str) -> Vec<String> {
+    /// The interfaces (with their type arguments) the type parameter `p` is bound to.
+    fn param_interfaces(&self, p: &str) -> Vec<(String, Vec<Type>)> {
         let bounds = self.bounds.borrow();
         let all = bounds.get(p).into_iter().flatten();
-        all.filter_map(|b| if let Bound::Interface(i) = b { Some(i.clone()) } else { None }).collect()
+        all.filter_map(|b| if let Bound::Interface(i, args) = b { Some((i.clone(), args.clone())) } else { None })
+            .collect()
     }
 
     /// Can `t` values be printed? A type parameter can with a `Show` bound.
@@ -440,7 +467,7 @@ impl Checker<'_> {
             Bound::Show => self.showable(t),
             Bound::Eq => self.comparable(t),
             Bound::Ord => matches!(t, Type::Int | Type::Float | Type::Str | Type::Bool) || self.ordered_param(t),
-            Bound::Interface(i) => self.assignable(t, &Type::Interface(i.clone())),
+            Bound::Interface(i, args) => self.assignable(t, &Type::Interface(i.clone(), args.clone())),
         }
     }
 

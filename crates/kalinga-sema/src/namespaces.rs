@@ -210,7 +210,8 @@ impl<'a> Resolver<'a> {
             for (b, p) in &mut c.bases {
                 *b = self.resolve(b, *p)?;
             }
-            self.bounds(&mut c.bounds)?;
+            self.bounds(&mut c.bounds, &c.tparams)?;
+            self.base_args(&mut c.base_args, &c.tparams)?;
             for fd in &mut c.fields {
                 self.ty(&mut fd.ty, &c.tparams)?;
                 if let Some(d) = &mut fd.default {
@@ -235,24 +236,26 @@ impl<'a> Resolver<'a> {
             for (b, p) in &mut i.bases {
                 *b = self.resolve(b, *p)?;
             }
+            self.base_args(&mut i.base_args, &i.tparams)?;
             for m in &mut i.methods {
                 for p in &mut m.params {
-                    self.ty(&mut p.ty, &[])?;
+                    self.ty(&mut p.ty, &i.tparams)?;
                 }
-                self.ty(&mut m.ret, &[])?;
+                self.ty(&mut m.ret, &i.tparams)?;
             }
         }
         for e in &mut prog.enums {
             e.name = self.final_name(&unit_of(e.pos), &e.name);
+            self.bounds(&mut e.bounds, &e.tparams)?;
             for v in &mut e.variants {
                 for p in &mut v.fields {
-                    self.ty(&mut p.ty, &[])?;
+                    self.ty(&mut p.ty, &e.tparams)?;
                 }
             }
         }
         for s in &mut prog.structs {
             s.name = self.final_name(&unit_of(s.pos), &s.name);
-            self.bounds(&mut s.bounds)?;
+            self.bounds(&mut s.bounds, &s.tparams)?;
             self.statics(&mut s.statics)?;
             for fd in &mut s.fields {
                 self.ty(&mut fd.ty, &s.tparams)?;
@@ -307,17 +310,26 @@ impl<'a> Resolver<'a> {
         Ok(())
     }
 
-    /// Interface names in bounds (`Show`, `Eq` and `Ord` are not declared, so they stay).
-    fn bounds(&self, bounds: &mut [BoundDecl]) -> Result<()> {
-        for (name, pos) in bounds.iter_mut().flat_map(|b| b.names.iter_mut()) {
+    /// The type arguments after `:` (`class C : Store<int>`).
+    fn base_args(&self, args: &mut [Vec<TypeExpr>], tparams: &[String]) -> Result<()> {
+        args.iter_mut().flatten().try_for_each(|a| self.ty(a, tparams))
+    }
+
+    /// Interface names in bounds (`Show`, `Eq` and `Ord` are not declared, so they stay),
+    /// and their type arguments.
+    fn bounds(&self, bounds: &mut [BoundDecl], tparams: &[String]) -> Result<()> {
+        for (name, args, pos) in bounds.iter_mut().flat_map(|b| b.names.iter_mut()) {
             *name = self.resolve(name, *pos)?;
+            for a in args {
+                self.ty(a, tparams)?;
+            }
         }
         Ok(())
     }
 
     fn func(&self, f: &mut FnDecl, outer_tparams: &[String]) -> Result<()> {
-        self.bounds(&mut f.bounds)?;
         let tps: Vec<String> = outer_tparams.iter().chain(f.tparams.iter()).cloned().collect();
+        self.bounds(&mut f.bounds, &tps)?;
         let mut sc = Scope(vec![HashSet::new()]);
         for p in &mut f.params {
             self.ty(&mut p.ty, &tps)?;

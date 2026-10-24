@@ -1,0 +1,3 @@
+tests/ui/errors/generic_iface_signature.kl:5:1: error: `Wrong.get` must match `Store.get() -> int`
+5 | class Wrong : Store<int> {
+  | ^^^^^

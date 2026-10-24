@@ -8,10 +8,10 @@ use kalinga_syntax::ast::*;
 use kalinga_syntax::error::{Result, Span, err};
 
 use super::{Checker, Ctx, bound_hint, texpr};
-use crate::model::{BUILTINS, Bounds, StructInfo, at_pos};
+use crate::model::{BUILTINS, Bound, Bounds, StructInfo, at_pos};
 use crate::suggest::unknown;
 use crate::tast::*;
-use crate::types::{Signature, Type, has_params, subst, unify};
+use crate::types::{Signature, Type, subst, unify};
 
 /// A resolved generic call: the type arguments learned and the converted arguments.
 struct Inferred {
@@ -434,7 +434,10 @@ impl Checker<'_> {
                     continue;
                 }
                 let pt = subst(&sig.params[i].1, &map);
-                let t = if !has_params(&pt) {
+                // Known once every type parameter of the callee in it is (type parameters
+                // of the code making the call are known types here).
+                let known = tparams.iter().all(|tp| map.contains_key(tp) || !mentions(&sig.params[i].1, tp));
+                let t = if known {
                     self.expr_to(cx, a, &pt)?
                 } else if is_lambda {
                     self.expr(cx, a, Some(&unknown_params(&pt)))?
@@ -443,6 +446,19 @@ impl Checker<'_> {
                 };
                 unify(&sig.params[i].1, &t.ty, &mut map);
                 checked[i] = Some(t);
+            }
+        }
+        // A type parameter only used in another one's bound (`S: Store<T>`) is learnt from it.
+        for (tp, bs) in bounds {
+            let Some(t) = map.get(tp).cloned() else { continue };
+            for b in bs {
+                if let Bound::Interface(i, pattern) = b
+                    && let Some(actual) = self.iface_args_of(&t, i)
+                {
+                    for (p, a) in pattern.iter().zip(&actual) {
+                        unify(p, a, &mut map);
+                    }
+                }
             }
         }
         for tp in tparams {
@@ -461,7 +477,13 @@ impl Checker<'_> {
         let targs: Vec<Type> = tparams.iter().map(|t| map[t].clone()).collect();
         for (tp, t) in tparams.iter().zip(&targs) {
             for b in bounds.get(tp).into_iter().flatten() {
-                if !self.satisfies(t, b) {
+                let b = match b {
+                    Bound::Interface(i, args) => {
+                        Bound::Interface(i.clone(), args.iter().map(|a| subst(a, &map)).collect())
+                    }
+                    other => other.clone(),
+                };
+                if !self.satisfies(t, &b) {
                     return err(format!("`{}` does not satisfy `{}: {}` for `{}`", t, tp, b, what), pos);
                 }
             }
@@ -633,13 +655,15 @@ impl Checker<'_> {
         Ok(texpr(TExprKind::Call { callee, args }, ret, pos))
     }
 
-    /// `Shape.Circle(args)` or `Shape.Empty`, when `type_name` is an enum.
+    /// `Shape.Circle(args)` or `Shape.Empty`, when `type_name` is an enum. A generic enum's
+    /// type arguments come from the values and the expected type.
     pub(super) fn variant_value(
         &self,
         cx: &mut Ctx,
         type_name: &str,
         variant: &str,
         args: Option<&[Expr]>,
+        expected: Option<&Type>,
         pos: Span,
     ) -> Result<TExpr> {
         let info = &self.m.enums[type_name];
@@ -647,7 +671,10 @@ impl Checker<'_> {
             let variants = info.variants.iter().map(|(v, _)| v.as_str());
             return unknown(format!("enum `{}` has no variant `{}`", type_name, variant), pos, variant, variants);
         };
-        let ty = Type::Enum(type_name.to_string());
+        if !info.tparams.is_empty() {
+            return self.generic_variant(cx, type_name, variant, fields, args, expected, pos);
+        }
+        let ty = Type::Enum(type_name.to_string(), vec![]);
         let args = match args {
             None if fields.is_empty() => vec![],
             None => {
@@ -672,11 +699,75 @@ impl Checker<'_> {
         Ok(texpr(kind, ty, pos))
     }
 
+    /// A variant of a generic enum: `Tree.Node(1, left, right)`, or `Tree.Leaf` where the
+    /// expected type says what `T` is.
+    #[allow(clippy::too_many_arguments)]
+    fn generic_variant(
+        &self,
+        cx: &mut Ctx,
+        type_name: &str,
+        variant: &str,
+        fields: Vec<(String, Type)>,
+        args: Option<&[Expr]>,
+        expected: Option<&Type>,
+        pos: Span,
+    ) -> Result<TExpr> {
+        let info = &self.m.enums[type_name];
+        let what = format!("{}.{}", type_name, variant);
+        let args = match args {
+            None if !fields.is_empty() => {
+                return err(format!("`{}` needs {} value(s): `{}(...)`", what, fields.len(), what), pos);
+            }
+            Some(_) if fields.is_empty() => {
+                return err(format!("`{}` takes no values; write it without `()`", what), pos);
+            }
+            a => a.unwrap_or(&[]),
+        };
+        // `Tree<int>?` expects a `Tree<int>`.
+        let expected = match expected {
+            Some(Type::Optional(inner)) => Some(&**inner),
+            e => e,
+        };
+        let expected = expected.filter(|t| matches!(t, Type::Enum(n, _) if n == type_name));
+        if args.is_empty() && expected.is_none() {
+            let tp = &info.tparams[0];
+            return err(
+                format!(
+                    "cannot tell what `{}` is for `{}`; give the variable a type, e.g. `let x: {}<int> = {}`",
+                    tp, what, type_name, what
+                ),
+                pos,
+            );
+        }
+        let generic = Type::Enum(type_name.to_string(), info.tparams.iter().map(|t| Type::Param(t.clone())).collect());
+        let sig = Signature { params: fields, ret: generic };
+        let inf = self.infer_call(cx, (&info.tparams, &info.bounds), &[], &sig, args, expected, pos, &what)?;
+        let kind =
+            TExprKind::Variant { enum_name: type_name.to_string(), variant: variant.to_string(), args: inf.args };
+        Ok(texpr(kind, inf.ret, pos))
+    }
+
     pub(super) fn check_method_access(&self, cx: &Ctx, owner: &str, method: &str, pos: Span) -> Result<()> {
         if self.m.classes[owner].private_methods.contains(method) && cx.class.as_deref() != Some(owner) {
             return err(format!("method `{}` is private to `{}`", method, owner), pos);
         }
         Ok(())
+    }
+}
+
+/// Does `t` mention the type parameter `tp`?
+fn mentions(t: &Type, tp: &str) -> bool {
+    match t {
+        Type::Param(p) => p == tp,
+        Type::Array(i) | Type::Optional(i) | Type::Channel(i) | Type::Shared(i) | Type::Task(i) | Type::Async(i) => {
+            mentions(i, tp)
+        }
+        Type::Map(k, v) | Type::Result(k, v) => mentions(k, tp) || mentions(v, tp),
+        Type::Func(ps, r) => ps.iter().any(|p| mentions(p, tp)) || mentions(r, tp),
+        Type::Generic(_, args) | Type::Struct(_, args) | Type::Enum(_, args) | Type::Interface(_, args) => {
+            args.iter().any(|a| mentions(a, tp))
+        }
+        _ => false,
     }
 }
 
@@ -690,6 +781,8 @@ fn unknown_params(t: &Type) -> Type {
         Type::Func(ps, r) => Type::Func(ps.iter().map(unknown_params).collect(), Box::new(unknown_params(r))),
         Type::Generic(n, args) => Type::Generic(n.clone(), args.iter().map(unknown_params).collect()),
         Type::Struct(n, args) => Type::Struct(n.clone(), args.iter().map(unknown_params).collect()),
+        Type::Enum(n, args) => Type::Enum(n.clone(), args.iter().map(unknown_params).collect()),
+        Type::Interface(n, args) => Type::Interface(n.clone(), args.iter().map(unknown_params).collect()),
         Type::Result(t, e) => Type::Result(Box::new(unknown_params(t)), Box::new(unknown_params(e))),
         other => other.clone(),
     }

@@ -61,10 +61,15 @@ pub fn members(snap: &Snapshot, ty: &Type, on_self: bool) -> Vec<CompletionItem>
     match ty {
         Type::Class(c) => class_members(snap, m, c, &[], on_self),
         Type::Generic(c, targs) => class_members(snap, m, c, targs, on_self),
-        Type::Interface(i) => m
+        // With a generic interface's type arguments filled in.
+        Type::Interface(i, args) => m
             .iface_closure(i)
             .iter()
-            .flat_map(|iface| m.interfaces[iface].methods.iter().map(move |(n, sig)| method_item(snap, iface, n, sig)))
+            .flat_map(|iface| {
+                let map = m.iface_bindings(iface, &m.iface_args(i, args, iface).unwrap_or_default());
+                let methods = m.interfaces[iface].methods.iter();
+                methods.map(move |(n, sig)| method_item(snap, iface, n, &subst_sig(sig, &map))).collect::<Vec<_>>()
+            })
             .collect(),
         Type::Struct(st, targs) => struct_members(snap, m, st, targs, on_self),
         other => match registry_receiver(other) {
@@ -161,7 +166,7 @@ fn variant_item(snap: &Snapshot, enum_name: &str, v: &str, fields: &[(String, Ty
 /// The patterns a `match` on a value of type `ty` can use.
 pub fn patterns(snap: &Snapshot, ty: &Type) -> Vec<CompletionItem> {
     let mut out: Vec<CompletionItem> = match ty {
-        Type::Enum(e) => snap
+        Type::Enum(e, _) => snap
             .model()
             .and_then(|m| m.enums.get(e))
             .map_or_else(Vec::new, |info| info.variants.iter().map(|(v, fs)| variant_item(snap, e, v, fs)).collect()),
