@@ -9,7 +9,9 @@ use std::collections::HashSet;
 use kalinga_sema::index::{PROBE, Probe};
 use kalinga_syntax::lexer;
 use kalinga_syntax::token::Tok;
-use lsp_types::{CompletionItem, CompletionItemKind, CompletionParams, CompletionResponse, Url};
+use lsp_types::{
+    CompletionItem, CompletionItemKind, CompletionParams, CompletionResponse, CompletionTextEdit, Range, TextEdit, Url,
+};
 
 use crate::text;
 use crate::world::World;
@@ -21,8 +23,25 @@ pub fn complete(world: &mut World, p: CompletionParams) -> Option<CompletionResp
     let text = world.text(&uri)?.to_string();
     let offset = text::offset(&text, p.text_document_position.position);
     let word_start = text[..offset].trim_end_matches(|c: char| c.is_alphanumeric() || c == '_').len();
+    let trigger = p.context.and_then(|c| c.trigger_character);
+    if trigger.as_deref().is_some_and(|t| !wanted_here(t, &text, offset)) {
+        return Some(CompletionResponse::Array(vec![]));
+    }
     let items = items_at(world, &uri, &text, word_start, offset);
     Some(CompletionResponse::Array(items))
+}
+
+/// Whether the character `trigger` just typed asks for a list here: `"` and `/` inside
+/// `import "...`, `{` opening a string's `{...}`. Elsewhere they are ordinary typing
+/// (`{` opening a block), so the editor shows nothing.
+fn wanted_here(trigger: &str, text: &str, offset: usize) -> bool {
+    let line_start = text[..offset].rfind('\n').map_or(0, |i| i + 1);
+    let line = &text[line_start..offset];
+    match trigger {
+        "\"" | "/" => matches!(context(text, offset, offset), Context::ImportPath),
+        "{" => context::code_part(line).is_some_and(|code| code.len() < line.len()),
+        _ => true,
+    }
 }
 
 /// The items for the cursor at `offset`, with the identifier being typed starting at
@@ -31,7 +50,7 @@ pub fn items_at(world: &mut World, uri: &Url, text: &str, word_start: usize, off
     let good = world.stable_snapshot(uri, text::line_index(text, offset));
     match context(text, offset, word_start) {
         Context::Nothing => vec![],
-        Context::ImportPath => import_paths(uri),
+        Context::ImportPath => import_paths(uri, text, offset),
         Context::TopLevel => top_level(),
         Context::Type => good.map(|s| types(&s)).unwrap_or_default(),
         Context::ClassHeader => good.map(|s| bases(&s)).unwrap_or_default(),
@@ -102,17 +121,69 @@ fn expression(world: &mut World, uri: &Url, text: &str, word_start: usize, offse
     out
 }
 
-/// `import "...": the standard modules and the project's packages.
-fn import_paths(uri: &Url) -> Vec<CompletionItem> {
-    let mut out: Vec<CompletionItem> = kalinga_driver::std_modules()
-        .iter()
-        .map(|m| item(&format!("std/{}", m), CompletionItemKind::MODULE, Some("standard module".into()), None))
-        .collect();
-    let project = uri.to_file_path().ok().and_then(|p| kalinga_project::find_project(&p));
+/// `import "...": the `.kl` files next to this one (and in folders below it), the
+/// standard modules and the project's packages. Each replaces the whole path typed so far,
+/// so the editor matches against all of it (`/` and `.` included).
+fn import_paths(uri: &Url, text: &str, offset: usize) -> Vec<CompletionItem> {
+    let this_file = uri.to_file_path().ok();
+    let mut out: Vec<CompletionItem> = vec![];
+    if let Some(dir) = this_file.as_ref().and_then(|f| f.parent()) {
+        let mut files = vec![];
+        kl_files_below(dir, dir, 0, &mut files);
+        files.sort();
+        for (path, rel) in files {
+            if this_file.as_ref().is_some_and(|f| *f == path) {
+                continue;
+            }
+            out.push(item(&rel, CompletionItemKind::FILE, Some("file".into()), None));
+        }
+    }
+    out.extend(
+        kalinga_driver::std_modules()
+            .iter()
+            .map(|m| item(&format!("std/{}", m), CompletionItemKind::MODULE, Some("standard module".into()), None)),
+    );
+    let project = this_file.as_deref().and_then(kalinga_project::find_project);
     if let Some(r) = project.and_then(|p| kalinga_project::resolve(&p, kalinga_project::Mode::Offline).ok()) {
         out.extend(r.packages.keys().map(|name| item(name, CompletionItemKind::MODULE, Some("package".into()), None)));
     }
+    // From just after the opening `"` to the cursor.
+    let line_start = text[..offset].rfind('\n').map_or(0, |i| i + 1);
+    let quote = text[line_start..offset].find('"').map_or(offset, |i| line_start + i + 1);
+    let (line, col) = text::line_col_of_offset(text, quote);
+    let (end_line, end_col) = text::line_col_of_offset(text, offset);
+    let range = Range::new(text::position(text, line, col), text::position(text, end_line, end_col));
+    for (i, it) in out.iter_mut().enumerate() {
+        it.text_edit = Some(CompletionTextEdit::Edit(TextEdit::new(range, it.label.clone())));
+        it.filter_text = Some(it.label.clone());
+        // Files first, then the standard modules and packages, each in order.
+        it.sort_text = Some(format!("{:04}", i));
+    }
     out
+}
+
+/// The `.kl` files in `dir` and its folders (a few levels down, skipping hidden folders and
+/// build output), as (path, path relative to `base` written with `/`).
+fn kl_files_below(
+    base: &std::path::Path,
+    dir: &std::path::Path,
+    depth: usize,
+    out: &mut Vec<(std::path::PathBuf, String)>,
+) {
+    let Ok(entries) = std::fs::read_dir(dir) else { return };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let name = entry.file_name().to_string_lossy().to_string();
+        if path.is_dir() {
+            if depth < 3 && !name.starts_with('.') && !matches!(name.as_str(), "target" | "node_modules") {
+                kl_files_below(base, &path, depth + 1, out);
+            }
+        } else if name.ends_with(".kl") {
+            let rel = path.strip_prefix(base).unwrap_or(&path);
+            let rel: Vec<String> = rel.components().map(|c| c.as_os_str().to_string_lossy().to_string()).collect();
+            out.push((path.clone(), rel.join("/")));
+        }
+    }
 }
 
 /// The names given to packages with `import "..." as name`.

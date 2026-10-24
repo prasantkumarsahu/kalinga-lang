@@ -405,6 +405,29 @@ fn package_and_std_import_paths() {
 }
 
 #[test]
+fn import_paths_offer_the_kl_files_next_to_this_one() {
+    let dir = temp_dir("import-files");
+    std::fs::create_dir_all(dir.join("ui")).expect("dir");
+    std::fs::create_dir_all(dir.join("target")).expect("dir");
+    for f in ["domain.kl", "storage.kl", "ui/screens.kl", "target/old.kl", "notes.txt"] {
+        std::fs::write(dir.join(f), "").expect("write");
+    }
+    let items = complete_in(&dir, "import \"|");
+    for f in ["domain.kl", "storage.kl", "ui/screens.kl", "std/reactive"] {
+        assert!(has(&items, f), "{} in {:?}", f, labels(&items));
+    }
+    assert!(!has(&items, "main.kl"), "not the file itself");
+    assert!(!has(&items, "target/old.kl"), "not build output");
+    assert!(!has(&items, "notes.txt"));
+    // The item replaces what is typed after the quote, so `ui/sc` still matches.
+    let items = complete_in(&dir, "import \"ui/sc|");
+    let it = find(&items, "ui/screens.kl");
+    let Some(lsp_types::CompletionTextEdit::Edit(edit)) = &it.text_edit else { panic!("a text edit") };
+    assert_eq!((edit.range.start.character, edit.range.end.character), (8, 13));
+    assert_eq!(edit.new_text, "ui/screens.kl");
+}
+
+#[test]
 fn class_body_offers_override_stubs_for_interface_methods() {
     let items = complete(
         "interface Game {\n    fn update(dt: float)\n    fn draw()\n}\nclass G : Game {\n    override fn draw() {}\n    |\n}\n",
@@ -428,4 +451,39 @@ fn generic_interface_values_show_their_type_arguments() {
     assert_eq!(labels(&items), ["get", "put"]);
     let put = find(&items, "put");
     assert!(put.detail.as_deref().unwrap_or("").contains("x: int"), "{:?}", put.detail);
+}
+
+#[test]
+fn inside_string_interpolation() {
+    let program = "class Dog {\n    name: str = \"Rex\"\n    fn bark() -> str { return \"woof\" }\n}\n";
+    let at = |body: &str| {
+        complete(&format!("{}fn main() {{\n    let dog = Dog()\n    let count = 3\n{}\n}}\n", program, body))
+    };
+    // Members after `.`, whether the `}` and the closing quote are written yet or not.
+    for body in [
+        "    println(\"hi {dog.|}\")",
+        "    println(\"hi {dog.|\")",
+        "    println(\"hi {dog.|",
+        "    let s = \"{dog.na|}\"",
+    ] {
+        assert_eq!(labels(&at(body)), ["bark", "name"], "{}", body);
+    }
+    // Variables and functions right after `{`.
+    for body in ["    println(\"hi {|}\")", "    println(\"hi {co|}\")", "    println(\"n = {|"] {
+        let items = at(body);
+        assert!(has(&items, "dog") && has(&items, "count") && has(&items, "len"), "{}: {:?}", body, labels(&items));
+    }
+    // Plain text in a string offers nothing.
+    assert!(at("    println(\"hi th|\")").is_empty());
+}
+
+#[test]
+fn trigger_characters_only_open_a_list_where_they_mean_one() {
+    let at = |src: &str, trigger: &str| complete_triggered(src, trigger);
+    assert!(!at("fn main() {\n    println(\"hi {|}\")\n}\n", "{").is_empty(), "`{{` in a string");
+    assert!(at("fn main() {|\n}\n", "{").is_empty(), "`{{` opening a block");
+    assert!(!at("import \"|", "\"").is_empty(), "`\"` in an import");
+    assert!(at("fn main() {\n    let s = \"|\n}\n", "\"").is_empty(), "`\"` starting a string");
+    assert!(!at("import \"std/|", "/").is_empty(), "`/` in an import path");
+    assert!(at("fn main() {\n    let x = 4 /|\n}\n", "/").is_empty(), "`/` dividing");
 }

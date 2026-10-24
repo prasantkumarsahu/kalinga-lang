@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+### Fixes
+- `kalinga fmt` no longer refuses a file when it re-indents a line holding an interpolated
+  string ("the formatter would change the program").
+
+### Editor (VS Code extension 0.6.3)
+- `import "` offers the project's own `.kl` files (and those in folders below), before the
+  standard modules and packages; the list opens as you type `"` or `/`.
+- Completion inside a string's `{...}`: variables and functions after `{`, members after
+  `.`, also while the string is still being typed. Suggestions show while typing in
+  strings, and `{` opening a block no longer opens a list.
+
 ## 0.6.0
 
 Everything here is new; code written for 0.5 compiles and does the same thing.

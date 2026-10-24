@@ -2,7 +2,7 @@
   "name": "kalinga-lang",
   "displayName": "Kalinga Language",
   "description": "Kalinga language support (.kl) from the Kalinga language server: errors as you type, completion, hover, signature help, go to definition, find references, rename, outline and quick fixes; plus syntax highlighting, snippets, run commands and utkal.toml hints",
-  "version": "0.6.2",
+  "version": "0.6.3",
   "publisher": "PrasantKumarSahu",
   "license": "MIT",
   "repository": {
@@ -148,6 +148,15 @@
         "fileMatch": "utkal.toml",
         "url": "./schemas/utkal.schema.json"
       }
-    ]
+    ],
+    "configurationDefaults": {
+      "[kalinga]": {
+        "editor.quickSuggestions": {
+          "other": "on",
+          "comments": "off",
+          "strings": "on"
+        }
+      }
+    }
   }
 }
