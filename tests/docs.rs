@@ -203,38 +203,19 @@ fn called_names(cell: &str) -> Vec<String> {
 /// links adapted to where it lives.
 #[test]
 fn skill_reference_is_the_reference_chapter() {
-    let chapter = std::fs::read_to_string("docs/26-reference.md").unwrap().replace(
-        "
-", "
-",
-    );
-    let body = chapter
-        .split(
-            "
----
-",
-        )
-        .next()
-        .unwrap()
-        .trim_end();
+    let chapter = std::fs::read_to_string("docs/26-reference.md").unwrap().replace("\r\n", "\n");
+    let body = chapter.split("\n---\n").next().unwrap().trim_end();
     let expected = body
         .replacen(
-            "# 26. Language Reference
-
-A compact summary of the whole language. For explanations and examples, see the guide
-chapters linked from the [docs index](README.md).",
-            "# Kalinga language reference
-
-A compact summary of the whole language (a copy of `docs/26-reference.md` in the Kalinga
-repository; chapter numbers below refer to the docs there).",
+            "# 26. Language Reference\n\nA compact summary of the whole language. For explanations and examples, see the \
+             guide\nchapters linked from the [docs index](README.md).",
+            "# Kalinga language reference\n\nA compact summary of the whole language (a copy of `docs/26-reference.md` \
+             in the Kalinga\nrepository; chapter numbers below refer to the docs there).",
             1,
         )
         .replace("[Standard Library](15-standard-library.md)", "[standard-library.md](standard-library.md)");
-    let copy = std::fs::read_to_string("skills/kalinga/references/language-reference.md").unwrap().replace(
-        "
-", "
-",
-    );
+    let copy =
+        std::fs::read_to_string("skills/kalinga/references/language-reference.md").unwrap().replace("\r\n", "\n");
     assert!(
         copy.trim_end() == expected,
         "skills/kalinga/references/language-reference.md differs from docs/26-reference.md; copy the chapter again"
