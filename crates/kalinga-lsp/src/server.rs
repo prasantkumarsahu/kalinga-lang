@@ -1,6 +1,7 @@
 //! The protocol side: messages in, the right feature called, answers and diagnostics out.
 
 use std::error::Error;
+use std::panic::{AssertUnwindSafe, catch_unwind};
 
 use lsp_server::{Connection, ErrorCode, Message, Notification, Request, Response};
 use lsp_types::notification::{
@@ -97,7 +98,8 @@ fn notify(world: &mut World, n: Notification) -> Fallible<bool> {
 /// Sends the diagnostics of every open document (an edit can affect the files importing it).
 fn publish(connection: &Connection, world: &mut World) -> Fallible<()> {
     for uri in world.uris() {
-        let diagnostics = world.diagnostics(&uri);
+        // A bug in the checker must not stop the server: the file just gets no diagnostics.
+        let diagnostics = catch_unwind(AssertUnwindSafe(|| world.diagnostics(&uri))).unwrap_or_default();
         let params = PublishDiagnosticsParams { uri, diagnostics, version: None };
         let n = Notification::new(PublishDiagnostics::METHOD.into(), params);
         connection.sender.send(Message::Notification(n))?;
@@ -105,9 +107,22 @@ fn publish(connection: &Connection, world: &mut World) -> Fallible<()> {
     Ok(())
 }
 
+/// Answers `req`. A panic in a feature answers this one request with an error instead of
+/// stopping the server.
 fn respond(world: &mut World, req: Request) -> Response {
     let id = req.id.clone();
-    let result = match req.method.as_str() {
+    let method = req.method.clone();
+    let result = catch_unwind(AssertUnwindSafe(|| dispatch(world, req))).unwrap_or_else(|_| {
+        Err((ErrorCode::InternalError, format!("the Kalinga language server failed on `{}`", method)))
+    });
+    match result {
+        Ok(value) => Response::new_ok(id, value),
+        Err((code, message)) => Response::new_err(id, code as i32, message),
+    }
+}
+
+fn dispatch(world: &mut World, req: Request) -> Result<serde_json::Value, (ErrorCode, String)> {
+    match req.method.as_str() {
         HoverRequest::METHOD => answer::<HoverRequest>(req, |p| hover::hover(world, p)),
         Completion::METHOD => answer::<Completion>(req, |p| completion::complete(world, p)),
         SignatureHelpRequest::METHOD => answer::<SignatureHelpRequest>(req, |p| signature::help(world, p)),
@@ -119,10 +134,6 @@ fn respond(world: &mut World, req: Request) -> Response {
         CodeActionRequest::METHOD => answer::<CodeActionRequest>(req, |p| actions::actions(world, p)),
         Formatting::METHOD => answer::<Formatting>(req, |p| formatting::format(world, p)),
         _ => Err((ErrorCode::MethodNotFound, format!("unknown request `{}`", req.method))),
-    };
-    match result {
-        Ok(value) => Response::new_ok(id, value),
-        Err((code, message)) => Response::new_err(id, code as i32, message),
     }
 }
 

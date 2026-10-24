@@ -4,6 +4,8 @@
 use kalinga_syntax::lexer;
 use kalinga_syntax::token::Tok;
 
+use crate::text;
+
 /// What kind of place the cursor is at.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Context {
@@ -141,7 +143,7 @@ fn is_type_position(line: &str, in_type_body: bool) -> bool {
     let core = t.trim_end_matches(|c: char| "[{<, ".contains(c));
     let Some(head) = core.strip_suffix(':') else { return false };
     let head = head.trim_end();
-    let name_start = head.rfind(|c: char| !(c.is_alphanumeric() || c == '_')).map_or(0, |i| i + 1);
+    let name_start = text::name_start(head);
     let (lead, name) = head.split_at(name_start);
     if name.is_empty() {
         return false;
@@ -160,7 +162,7 @@ fn in_parameter_list(lead: &str) -> bool {
             '(' if depth > 0 => depth -= 1,
             '(' => {
                 let before = lead[..i].trim_end();
-                let word_start = before.rfind(|c: char| !(c.is_alphanumeric() || c == '_')).map_or(0, |j| j + 1);
+                let word_start = text::name_start(before);
                 let word = &before[word_start..];
                 let prev = before[..word_start].trim_end();
                 return word == "fn" || word == "init" || prev.ends_with("fn") || prev.ends_with("op");
