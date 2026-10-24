@@ -1,0 +1,4 @@
+tests/ui/errors/did_you_mean_function.kl:5:5: error: unknown function `gret`
+5 |     gret("Asha")
+  |     ^^^^
+  = help: did you mean `greet`?

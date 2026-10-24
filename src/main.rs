@@ -13,9 +13,11 @@ usage:
   kalinga check <file.kl> [--stdin]    report errors only; `fn main()` is optional, so files
                                        meant to be imported can be checked (--stdin reads the
                                        source from stdin)
-  kalinga fix   <file.kl or folder>...  update code written for an earlier Kalinga version
-                                       (0.4 → 0.5: `print(...)` becomes `println(...)`,
-                                       `static NAME: T = v` becomes `const NAME: T = v`)
+  kalinga fix   [--from <version>] <file.kl or folder>...
+                                       update code written for an earlier Kalinga version
+                                       (the nearest utkal.toml says which, or --from 0.4);
+                                       0.4 → 0.5: `print(...)` becomes `println(...)`,
+                                       `static NAME: T = v` becomes `const NAME: T = v`
   kalinga fmt   [--check] <file.kl or folder>...  lay out code in the standard style
                                        (--check lists the files it would change, and fails)
   kalinga lsp                          run the language server (editors start it)
@@ -48,12 +50,34 @@ fn fmt(args: &[String]) -> CliResult<i32> {
     Ok(code)
 }
 
-/// `kalinga fix`: updates each file (or every `.kl` file in each folder) in place.
-fn fix(paths: &[String]) -> CliResult<i32> {
+/// `kalinga fix [--from <version>]`: updates each file (or every `.kl` file in each
+/// folder) in place. The code's version comes from `--from`, else the nearest
+/// `utkal.toml`; rules that only apply to older code are skipped when it is unknown.
+fn fix(args: &[String]) -> CliResult<i32> {
+    let mut from = None;
+    let mut paths = vec![];
+    let mut rest = args.iter();
+    while let Some(a) = rest.next() {
+        if a == "--from" {
+            let v = rest.next().ok_or("`--from` needs a version, e.g. `--from 0.4`")?;
+            from = Some(driver::fix::parse_version(v).ok_or_else(|| format!("`{}` is not a version like `0.4`", v))?);
+        } else {
+            paths.push(a);
+        }
+    }
     for p in paths {
-        let report = driver::fix::fix_path(Path::new(p))?;
+        let path = Path::new(p);
+        let report = driver::fix::fix_path(path, from.or_else(|| driver::fix::project_version(path)))?;
         for (file, n) in &report.changed {
             println!("fixed {} place(s) in {}", n, file.display());
+        }
+        for (file, n) in &report.held_back {
+            println!(
+                "left {} `print(...)` call(s) in {} as they are; if this code was written for 0.4, run `kalinga fix --from 0.4 {}`",
+                n,
+                file.display(),
+                p
+            );
         }
         for e in &report.skipped {
             eprintln!("skipped a file that is not valid Kalinga:\n{}", e);

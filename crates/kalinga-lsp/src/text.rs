@@ -9,6 +9,16 @@ pub fn line(text: &str, line: usize) -> &str {
     text.split('\n').nth(line).map_or("", |l| l.strip_suffix('\r').unwrap_or(l))
 }
 
+/// Where the run of characters matching `keep` at the end of `s` starts (a byte offset).
+pub fn tail_start(s: &str, keep: impl Fn(char) -> bool) -> usize {
+    s.char_indices().rev().find(|&(_, c)| !keep(c)).map_or(0, |(i, c)| i + c.len_utf8())
+}
+
+/// Where the name at the end of `s` starts.
+pub fn name_start(s: &str) -> usize {
+    tail_start(s, |c| c.is_alphanumeric() || c == '_')
+}
+
 /// The LSP position of the 1-based `line` and character `col`.
 pub fn position(text: &str, line_no: usize, col: usize) -> Position {
     let l = line(text, line_no.saturating_sub(1));

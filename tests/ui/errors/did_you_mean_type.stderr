@@ -1,0 +1,4 @@
+tests/ui/errors/did_you_mean_type.kl:2:13: error: unknown type `Plyer`
+2 | fn spawn(p: Plyer) {}
+  |             ^^^^^
+  = help: did you mean `Player`?

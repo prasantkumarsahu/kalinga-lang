@@ -62,7 +62,9 @@ impl Checker<'_> {
     pub(super) fn library_call(&self, cx: &mut Ctx, ns: &str, name: &str, args: &[Expr], pos: Span) -> Result<TExpr> {
         let call = LibCall { what: format!("{}.{}", ns, name), args, pos };
         if builtins::function(&call.what).is_none() {
-            return err(format!("`{}` has no function `{}`", ns, name), pos);
+            let prefix = format!("{}.", ns);
+            let names = builtins::FUNCTIONS.iter().filter_map(|f| f.name.strip_prefix(prefix.as_str()));
+            return crate::suggest::unknown(format!("`{}` has no function `{}`", ns, name), pos, name, names);
         }
         match ns {
             "Math" => self.math_call(cx, name, &call),

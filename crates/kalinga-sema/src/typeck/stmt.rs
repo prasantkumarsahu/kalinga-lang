@@ -5,6 +5,7 @@ use kalinga_syntax::error::{Result, Span, err};
 
 use super::{Checker, Ctx};
 use crate::model::EnumInfo;
+use crate::suggest::unknown;
 use crate::tast::*;
 use crate::types::Type;
 
@@ -277,7 +278,8 @@ impl Checker<'_> {
             }
             (Pattern::Variant(v, binds), Some((ename, info))) => {
                 let Some(fields) = info.variant(v).cloned() else {
-                    return err(format!("enum `{}` has no variant `{}`", ename, v), arm.pos);
+                    let variants = info.variants.iter().map(|(n, _)| n.as_str());
+                    return unknown(format!("enum `{}` has no variant `{}`", ename, v), arm.pos, v, variants);
                 };
                 if cover.variants.contains(v) {
                     return err(format!("variant `{}` is already handled by an earlier arm", v), arm.pos);

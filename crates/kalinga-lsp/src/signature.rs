@@ -75,7 +75,7 @@ fn find_call(text: &str, offset: usize) -> Option<Call> {
     if before.ends_with('>') {
         before = &before[..before.rfind('<')?];
     }
-    let name_at = before.rfind(|c: char| !(c.is_alphanumeric() || c == '_')).map_or(0, |i| i + 1);
+    let name_at = text::name_start(before);
     let name = &before[name_at..];
     if name.is_empty()
         || name.starts_with(|c: char| c.is_ascii_digit())
@@ -84,10 +84,8 @@ fn find_call(text: &str, offset: usize) -> Option<Call> {
         return None;
     }
     let recv = before[..name_at].strip_suffix('.').map(|r| {
-        let start = r.rfind(|c: char| {
-            !(c.is_alphanumeric() || c == '_' || c == '.' || c == ')' || c == '(' || c == ']' || c == '[')
-        });
-        r[start.map_or(0, |i| i + 1)..].to_string()
+        let start = text::tail_start(r, |c| c.is_alphanumeric() || "_.()[]".contains(c));
+        r[start..].to_string()
     });
     Some(Call { name: name.to_string(), name_start: line_start + name_at, recv, active })
 }

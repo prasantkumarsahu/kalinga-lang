@@ -1,0 +1,4 @@
+tests/ui/errors/did_you_mean_builtin_method.kl:3:14: error: `str` has no method `uper`
+3 |     println(s.uper())
+  |              ^
+  = help: did you mean `upper`?

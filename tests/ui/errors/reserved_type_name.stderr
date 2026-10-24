@@ -1,0 +1,3 @@
+tests/ui/errors/reserved_type_name.kl:1:1: error: `Box` is a name Kalinga uses for its own types (or the Rust it generates); choose another name
+1 | class Box {}
+  | ^^^^^

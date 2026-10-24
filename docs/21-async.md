@@ -42,7 +42,7 @@ launch done
 ## Running jobs at the same time
 
 `Async.all` waits for several jobs at once. While one is waiting, the others run, so three
-waits of 0.15 s, 0.05 s and 0.1 s take about 0.15 s in total, not 0.3 s:
+waits of 0.6 s, 0.2 s and 0.4 s take about 0.6 s in total, not 1.2 s:
 
 ```kalinga
 class Log {
@@ -61,12 +61,12 @@ async fn delayed(log: Log, name: str, seconds: float) -> str {
 
 async fn main() {
     let log = Log()
-    let jobs = [delayed(log, "slow", 0.15), delayed(log, "fast", 0.05), delayed(log, "medium", 0.1)]
+    let jobs = [delayed(log, "slow", 0.6), delayed(log, "fast", 0.2), delayed(log, "medium", 0.4)]
     let t0 = Time.now()
     let names = await Async.all(jobs)
     println(names)
     println(log.lines)
-    println("concurrent:", Time.now() - t0 < 0.25)
+    println("concurrent:", Time.now() - t0 < 1.0)
 }
 ```
 

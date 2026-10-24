@@ -1,0 +1,4 @@
+tests/ui/errors/did_you_mean_method.kl:9:14: error: `Dog` has no method `spek`
+9 |     println(d.spek())
+  |              ^
+  = help: did you mean `speak`?

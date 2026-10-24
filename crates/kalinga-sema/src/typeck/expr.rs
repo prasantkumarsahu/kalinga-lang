@@ -7,6 +7,7 @@ use kalinga_syntax::error::{Result, Span, err};
 use super::{Checker, Ctx, texpr};
 use crate::index::PROBE;
 use crate::model::class_trait;
+use crate::suggest::unknown;
 use crate::tast::*;
 use crate::types::{Type, is_map_key, subst};
 
@@ -138,7 +139,10 @@ impl Checker<'_> {
         if self.m.classes.contains_key(name) {
             return err(format!("`{}` is a class; create one with `{}(...)`", name, name), pos);
         }
-        err(format!("unknown variable `{}`", name), pos)
+        let locals = cx.visible();
+        let names = locals.iter().map(|(n, _)| n.as_str());
+        let globals = self.m.functions.keys().chain(self.m.consts.keys()).map(String::as_str);
+        unknown(format!("unknown variable `{}`", name), pos, name, names.chain(globals))
     }
 
     fn array(&self, cx: &mut Ctx, items: &[Expr], expected: Option<&Type>, pos: Span) -> Result<TExpr> {
@@ -410,7 +414,8 @@ impl Checker<'_> {
         }
         if let Some(n) = self.static_owner(cx, recv) {
             let Some(s) = self.m.static_value(n, f) else {
-                return err(format!("`{}` has no `const` or `static var` named `{}`", n, f), pos);
+                let values = self.m.static_values_of(n).unwrap_or_default().iter().map(|(v, _)| v.as_str());
+                return unknown(format!("`{}` has no `const` or `static var` named `{}`", n, f), pos, f, values);
             };
             let kind = TExprKind::Static { owner: n.clone(), name: f.to_string(), mutable: s.mutable };
             return Ok(texpr(kind, s.ty.clone(), pos));

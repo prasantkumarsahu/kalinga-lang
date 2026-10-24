@@ -12,9 +12,14 @@ Kalinga 0.5 is the first **stable** release. From 0.5 on:
   kalinga fix src/
   ```
 
-  `utkal fix` does the same for a whole project and records the new version in
-  `utkal.toml`. 0.5 itself has two such rules, for code written for 0.4: `print(...)`
-  becomes `println(...)` (`print` no longer ends the line), and member constants written
+  `kalinga fix` needs to know which version the code was written for: the nearest
+  `utkal.toml` says (`kalinga = "0.4"`), or you tell it with `--from 0.4`. A rule only
+  changes code older than the rule, so fixing code twice, or fixing code already written
+  for the new version, changes nothing. `utkal fix` does the same for a whole project and
+  records the new version in `utkal.toml`.
+
+  0.5 itself has two such rules, for code written for 0.4: `print(...)` becomes
+  `println(...)` (`print` no longer ends the line), and member constants written
   `static NAME: Type = value` become `const NAME: Type = value`.
 
 ## What the promise covers
