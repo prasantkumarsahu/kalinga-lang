@@ -499,3 +499,10 @@ fn classes_offer_the_default_methods_of_their_interfaces() {
         find(&items, "greet").detail
     );
 }
+
+#[test]
+fn classes_with_show_offer_the_generated_as_str() {
+    let src = "class Dog : Show {\n    name: str = \"Rex\"\n}\nfn main() {\n    let d = Dog()\n    d.|\n}\n";
+    let items = complete(src);
+    assert_eq!(labels(&items), ["as_str", "name"]);
+}

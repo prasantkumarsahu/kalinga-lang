@@ -41,6 +41,8 @@ impl Model {
             rules.extend(check_tests(prog).err());
             m.declare_classes(prog)?;
             m.order_classes(prog)?;
+            m.add_generated_methods();
+            m.find_show_types();
             Ok(m)
         })();
         let m = match declared {
@@ -75,6 +77,8 @@ impl Model {
             structs: HashMap::new(),
             struct_order: vec![],
             plain_structs: HashSet::new(),
+            show_enums: HashSet::new(),
+            show_structs: HashSet::new(),
             names,
         }
     }
@@ -203,6 +207,38 @@ impl Model {
                 self.plain_structs.remove(&b);
             }
             if self.plain_enums.len() + self.plain_structs.len() == before {
+                break;
+            }
+        }
+    }
+
+    /// Like `find_plain_types`, for printing only: enums and structs can also hold objects
+    /// whose class has `Show`. Runs once classes are known.
+    fn find_show_types(&mut self) {
+        self.show_enums = self.enums.keys().cloned().collect();
+        self.show_structs = self.structs.keys().cloned().collect();
+        let ok = |m: &Model, t: &Type| m.showable_with(t, &|_| true);
+        loop {
+            let before = self.show_enums.len() + self.show_structs.len();
+            let bad_enums: Vec<String> = self
+                .show_enums
+                .iter()
+                .filter(|n| self.enums[*n].variants.iter().any(|(_, fs)| fs.iter().any(|(_, t)| !ok(self, t))))
+                .cloned()
+                .collect();
+            let bad_structs: Vec<String> = self
+                .show_structs
+                .iter()
+                .filter(|n| self.structs[*n].fields.iter().any(|(_, t)| !ok(self, t)))
+                .cloned()
+                .collect();
+            for b in bad_enums {
+                self.show_enums.remove(&b);
+            }
+            for b in bad_structs {
+                self.show_structs.remove(&b);
+            }
+            if self.show_enums.len() + self.show_structs.len() == before {
                 break;
             }
         }
@@ -363,6 +399,28 @@ impl Model {
         Ok(())
     }
 
+    /// The methods classes get from the built-in interfaces they list (`as_str` for `Show`),
+    /// unless the class or a base class has written them. A subclass of a class with a
+    /// generated method gets its own (with its own name and fields); one that inherits a
+    /// hand-written method keeps it. Parents come first.
+    fn add_generated_methods(&mut self) {
+        for c in self.class_order.clone() {
+            for (cap, name) in CAPABILITIES {
+                let Some(b) = Bound::capability(cap).filter(|b| self.class_has(&c, b)) else { continue };
+                let written = match self.find_method(&c, name) {
+                    Some((owner, _)) => !self.classes[&owner].generated.contains(*name),
+                    None => false,
+                };
+                if !written {
+                    let sig = self.capability_signature(&c, &b);
+                    let info = self.classes.get_mut(&c).expect("a declared class");
+                    info.methods.insert(name.to_string(), sig);
+                    info.generated.insert(name.to_string());
+                }
+            }
+        }
+    }
+
     /// Rejects inheritance cycles; orders classes parents first and links children.
     fn order_classes(&mut self, prog: &Program) -> Result<()> {
         for c in &prog.classes {
@@ -401,6 +459,7 @@ impl Model {
         }
         self.check_overrides(name)?;
         self.check_conformance(name)?;
+        self.check_generated(name)?;
         // Concrete classes must implement every inherited abstract method.
         if !info.decl.is_abstract {
             for (mname, owner, _) in self.method_table(name) {
@@ -448,6 +507,31 @@ impl Model {
                     );
                 }
                 continue;
+            }
+            if inherited.is_none()
+                && let Some(cap) = self.capability_of(name, &meth.name)
+            {
+                // The method a built-in interface gives the class (`as_str` for `Show`).
+                let want = self.capability_signature(name, &cap);
+                if !meth.is_override {
+                    return err(
+                        format!("method `{}` implements `{}.{}`; mark it `override fn`", meth.name, cap, meth.name),
+                        meth.pos,
+                    );
+                }
+                if !want.same_shape(sig) {
+                    return err(
+                        format!("override of `{}` must match `{}.{}{}`", meth.name, cap, meth.name, want.describe()),
+                        meth.pos,
+                    );
+                }
+                continue;
+            }
+            if inherited.is_none()
+                && meth.is_override
+                && let Some((cap, _)) = CAPABILITIES.iter().find(|(_, m)| *m == meth.name)
+            {
+                return err(format!("`{}` overrides nothing; add `: {}` to `{}`", meth.name, cap, name), meth.pos);
             }
             match (inherited, meth.is_override) {
                 (Some((owner, psig)), true) if !psig.same_shape(sig) => {
@@ -525,6 +609,40 @@ impl Model {
                         _ => {}
                     }
                 }
+            }
+        }
+        Ok(())
+    }
+}
+
+impl Model {
+    /// A generated `as_str` shows every field, so each must be showable, and none may lead
+    /// back to an object of this class (it would print forever).
+    fn check_generated(&self, name: &str) -> Result<()> {
+        let info = &self.classes[name];
+        if !info.generated.contains("as_str") {
+            return Ok(());
+        }
+        for (f, t, owner) in self.all_fields(name) {
+            // Point at the field when this class declares it, else at the class.
+            let pos = info.decl.fields.iter().find(|d| d.name == f && owner == name).map_or(info.decl.pos, |d| d.pos);
+            if self.reaches_class(&t, name, &mut HashSet::new()) {
+                return err(
+                    format!(
+                        "`{}` cannot have a generated `as_str`: field `{}` can lead back to a `{}`, which would print forever; write `override fn as_str() -> str`",
+                        name, f, name
+                    ),
+                    pos,
+                );
+            }
+            if !self.showable_with(&t, &|_| false) {
+                return err(
+                    format!(
+                        "field `{}` of type `{}` cannot be shown; give `{}` `: Show`, or write `override fn as_str() -> str` in `{}`",
+                        f, t, t, name
+                    ),
+                    pos,
+                );
             }
         }
         Ok(())
@@ -711,7 +829,7 @@ fn struct_ops(st: &StructDecl, resolve: &dyn Fn(&TypeExpr) -> Result<Type>) -> R
 
 fn class_info(c: &ClassDecl, names: &TypeNames) -> Result<ClassInfo> {
     let resolve = |t: &TypeExpr| resolve_type(t, names, &c.tparams);
-    let (parent, interfaces, interface_args) = class_bases(c, names, &resolve)?;
+    let (parent, interfaces, interface_args, capabilities) = class_bases(c, names, &resolve)?;
     let fields = class_fields(c, &resolve)?;
     let mut methods = HashMap::new();
     let mut statics = HashMap::new();
@@ -748,6 +866,8 @@ fn class_info(c: &ClassDecl, names: &TypeNames) -> Result<ClassInfo> {
         async_statics: names_where(|m| m.is_async),
         init,
         children: vec![],
+        capabilities,
+        generated: HashSet::new(),
         tparams: c.tparams.clone(),
         bounds: resolve_bounds(&c.bounds, names, &c.tparams)?,
         static_values,
@@ -761,7 +881,7 @@ fn class_bases(
     c: &ClassDecl,
     names: &TypeNames,
     resolve: &dyn Fn(&TypeExpr) -> Result<Type>,
-) -> Result<(Option<String>, Vec<String>, HashMap<String, Vec<Type>>)> {
+) -> Result<(Option<String>, Vec<String>, HashMap<String, Vec<Type>>, Vec<Bound>)> {
     for ((b, pos), args) in c.bases.iter().zip(&c.base_args) {
         if names.generic.contains_key(b) || (names.classes.contains(b) && !args.is_empty()) {
             return err(format!("`{}` is generic and cannot be extended (yet)", b), *pos);
@@ -770,6 +890,7 @@ fn class_bases(
     let mut parent = None;
     let mut interfaces = Vec::new();
     let mut interface_args = HashMap::new();
+    let mut capabilities = Vec::new();
     for ((b, pos), args) in c.bases.iter().zip(&c.base_args) {
         if names.classes.contains(b) {
             if parent.is_some() {
@@ -793,11 +914,18 @@ fn class_bases(
             if let Type::Interface(_, targs) = resolve(&TypeExpr::Named(b.clone(), args.clone(), *pos))? {
                 interface_args.insert(b.clone(), targs);
             }
+        } else if let Some(cap) = Bound::capability(b).filter(|_| !names.contains(b)) {
+            // A built-in interface, unless the program declares its own type with that name.
+            if capabilities.contains(&cap) {
+                return err(format!("interface `{}` listed twice", b), *pos);
+            }
+            capabilities.push(cap);
         } else {
-            return err(format!("unknown class or interface `{}`", b), *pos);
+            let known = names.classes.iter().chain(&names.ifaces).map(String::as_str).chain(["Show"]);
+            return crate::suggest::unknown(format!("unknown class or interface `{}`", b), *pos, b, known);
         }
     }
-    Ok((parent, interfaces, interface_args))
+    Ok((parent, interfaces, interface_args, capabilities))
 }
 
 fn class_fields(c: &ClassDecl, resolve: &dyn Fn(&TypeExpr) -> Result<Type>) -> Result<Vec<(String, Type)>> {

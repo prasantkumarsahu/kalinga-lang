@@ -1,0 +1,3 @@
+tests/ui/errors/show_missing.kl:6:13: error: cannot print a `Dog` value; add `: Show` to `Dog`
+6 |     println(Dog())
+  |             ^^^

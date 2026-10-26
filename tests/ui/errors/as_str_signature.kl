@@ -1,0 +1,9 @@
+class Dog : Show {
+    override fn as_str() -> int {
+        return 1
+    }
+}
+
+fn main() {
+    println(Dog())
+}

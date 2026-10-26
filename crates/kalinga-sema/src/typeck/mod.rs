@@ -508,7 +508,7 @@ impl Checker<'_> {
 
     /// Can `t` values be printed? A type parameter can with a `Show` bound.
     fn showable(&self, t: &Type) -> bool {
-        self.m.is_plain_with(t, &|p| self.param_has(p, |b| *b == Bound::Show))
+        self.m.showable_with(t, &|p| self.param_has(p, |b| *b == Bound::Show))
     }
 
     /// Can `t` values be compared with `==`? A type parameter can with `Eq` or `Ord`.
@@ -542,9 +542,13 @@ fn texpr(kind: TExprKind, ty: Type, pos: Span) -> TExpr {
     TExpr { kind, ty, pos }
 }
 
-/// "; add a bound: `<T: Eq>`" when `t` is a type parameter.
+/// "; add a bound: `<T: Eq>`" when `t` is a type parameter, "; add `: Eq` to `Dog`" for a class.
 fn bound_hint(t: &Type, bound: &str) -> String {
-    if let Type::Param(p) = t { format!("; add a bound: `<{}: {}>`", p, bound) } else { String::new() }
+    match t {
+        Type::Param(p) => format!("; add a bound: `<{}: {}>`", p, bound),
+        Type::Class(c) => format!("; add `: {}` to `{}`", bound.replace(" + ", ", "), c),
+        _ => String::new(),
+    }
 }
 
 /// Conservative check that a body returns on every path.

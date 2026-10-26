@@ -236,7 +236,7 @@ impl Gen<'_> {
             }
         }
         out.push_str("}\n");
-        if !plain {
+        if !self.m.show_enums.contains(name) {
             return;
         }
         // A generic enum prints when its type arguments do.
@@ -354,7 +354,7 @@ impl Gen<'_> {
             );
         }
         out.push_str("}\n");
-        if plain {
+        if self.m.show_structs.contains(name) {
             self.struct_show(out, name, &self_ty);
         }
     }
@@ -478,6 +478,9 @@ impl Gen<'_> {
         out.push_str("}\n");
         if !generic {
             self.class_trait_impls(out, cname);
+            if self.m.class_has(cname, &Bound::Show) {
+                self.class_show(out, cname);
+            }
         }
     }
 
@@ -536,6 +539,30 @@ impl Gen<'_> {
         out.push_str("            RefCell::new(__o)\n        })\n    }\n");
     }
 
+    /// The body of a method the compiler writes for class `owner` from its fields (`as_str`
+    /// for `Show`): `Dog(name: Rex, age: 3)`, base class fields first.
+    fn generated_body(&self, owner: &str, method: &str) -> String {
+        let fields = self.m.all_fields(owner);
+        match method {
+            "as_str" => {
+                let parts: Vec<String> = fields.iter().map(|(f, _, _)| format!("{}: {{}}", f)).collect();
+                let shows: Vec<String> =
+                    fields.iter().map(|(f, _, _)| format!(", __KlShow::__show(&self.{})", rid(f))).collect();
+                format!("        format!(\"{}({})\"{})\n", owner, parts.join(", "), shows.concat())
+            }
+            _ => unreachable!("no generated method `{}`", method),
+        }
+    }
+
+    /// Objects whose class has `Show` print through their `as_str`.
+    fn class_show(&self, out: &mut String, cname: &str) {
+        let _ = writeln!(
+            out,
+            "impl __KlShow for {} {{\n    fn __show(&self) -> String {{ self.borrow_mut().as_str() }}\n}}",
+            self.rty(&Type::Class(cname.to_string()))
+        );
+    }
+
     /// Every ancestor's methods under their own names, statics, and virtual methods that
     /// resolve to the most-derived body.
     fn class_methods(&self, out: &mut String, cname: &str, methods: &Bodies, inits: &HashMap<String, String>) {
@@ -549,7 +576,13 @@ impl Gen<'_> {
             names.sort();
             for mname in names {
                 let sig = &ainfo.methods[mname];
-                let body = methods.get(&(a.clone(), mname.clone())).map_or("", String::as_str);
+                let generated;
+                let body = if ainfo.generated.contains(mname) {
+                    generated = self.generated_body(a, mname);
+                    generated.as_str()
+                } else {
+                    methods.get(&(a.clone(), mname.clone())).map_or("", String::as_str)
+                };
                 let _ = writeln!(
                     out,
                     "    fn __{}__{}(&mut self{}){} {{\n{}    }}",

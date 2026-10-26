@@ -36,6 +36,25 @@ impl std::fmt::Display for Bound {
 /// The bounds of each type parameter that has some.
 pub type Bounds = HashMap<String, Vec<Bound>>;
 
+/// The built-in interfaces a class can list (`class Dog : Show`), and the method each one
+/// gives it; the compiler writes the method from the fields unless the class overrides it.
+pub const CAPABILITIES: &[(&str, &str)] = &[("Show", "as_str")];
+
+impl Bound {
+    /// The built-in interface named `name` that a class can list, if there is one.
+    pub fn capability(name: &str) -> Option<Bound> {
+        match name {
+            "Show" => Some(Bound::Show),
+            _ => None,
+        }
+    }
+
+    /// The method a built-in interface gives a class.
+    pub fn method(&self) -> Option<&'static str> {
+        CAPABILITIES.iter().find(|(n, _)| *n == self.to_string()).map(|(_, m)| *m)
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct ClassInfo {
     pub decl: ClassDecl,
@@ -55,6 +74,10 @@ pub struct ClassInfo {
     pub async_statics: HashSet<String>,
     pub init: Option<Signature>,
     pub children: Vec<String>,
+    /// Built-in interfaces listed after `:` (`class Dog : Show`).
+    pub capabilities: Vec<Bound>,
+    /// Methods the compiler writes for this class (from `capabilities`), not the user.
+    pub generated: HashSet<String>,
     /// Type parameters of a generic class (empty otherwise).
     pub tparams: Vec<String>,
     pub bounds: Bounds,
@@ -199,6 +222,10 @@ pub struct Model {
     pub struct_order: Vec<String>,
     /// Structs whose fields can all be printed and compared.
     pub plain_structs: HashSet<String>,
+    /// Enums and structs that can be printed: the plain ones, and those holding objects whose
+    /// class has `Show`.
+    pub show_enums: HashSet<String>,
+    pub show_structs: HashSet<String>,
     pub names: TypeNames,
 }
 
@@ -474,6 +501,89 @@ impl Model {
     /// Maps a generic class's type parameters to concrete arguments.
     pub fn bindings(&self, class: &str, args: &[Type]) -> HashMap<String, Type> {
         self.classes[class].tparams.iter().cloned().zip(args.iter().cloned()).collect()
+    }
+
+    /// Whether class `c` (or a base class) lists the built-in interface `b`.
+    pub fn class_has(&self, c: &str, b: &Bound) -> bool {
+        self.classes.contains_key(c) && self.ancestors(c).iter().any(|a| self.classes[a].capabilities.contains(b))
+    }
+
+    /// The built-in interface whose method `method` class `c` gets, if any.
+    pub fn capability_of(&self, c: &str, method: &str) -> Option<Bound> {
+        CAPABILITIES
+            .iter()
+            .filter(|(_, m)| *m == method)
+            .filter_map(|(n, _)| Bound::capability(n))
+            .find(|b| self.class_has(c, b))
+    }
+
+    /// The signature of the method the built-in interface `b` gives class `c`.
+    pub fn capability_signature(&self, _c: &str, b: &Bound) -> Signature {
+        match b {
+            Bound::Show => Signature { params: vec![], ret: Type::Str },
+            _ => unreachable!("only built-in interfaces give methods"),
+        }
+    }
+
+    /// Values that can be printed: what `is_plain_with` allows, and objects whose class has
+    /// `Show` (also inside arrays, optionals, maps, tuples and results).
+    pub fn showable_with(&self, t: &Type, param: &dyn Fn(&str) -> bool) -> bool {
+        let show = |t: &Type| self.showable_with(t, param);
+        match t {
+            Type::Class(c) => self.class_has(c, &Bound::Show),
+            Type::Array(i) | Type::Optional(i) => show(i),
+            Type::Map(k, v) => self.is_plain_with(k, param) && show(v),
+            Type::Tuple(parts) => parts.iter().all(show),
+            Type::Result(t, e) => (**t == Type::Void || show(t)) && show(e),
+            Type::Struct(st, args) => {
+                (self.plain_structs.contains(st) || self.show_structs.contains(st)) && args.iter().all(show)
+            }
+            Type::Enum(e, args) => {
+                (self.plain_enums.contains(e) || self.show_enums.contains(e)) && args.iter().all(show)
+            }
+            other => self.is_plain_with(other, param),
+        }
+    }
+
+    /// Can a value of type `t` lead to an object of class `c`, directly or through the
+    /// fields of the objects and structs it holds? A generated `as_str` for `c` would then
+    /// print forever.
+    pub fn reaches_class(&self, t: &Type, c: &str, seen: &mut HashSet<String>) -> bool {
+        match t {
+            Type::Array(i) | Type::Optional(i) => self.reaches_class(i, c, seen),
+            Type::Map(_, v) => self.reaches_class(v, c, seen),
+            Type::Tuple(parts) => parts.iter().any(|p| self.reaches_class(p, c, seen)),
+            Type::Result(a, e) => self.reaches_class(a, c, seen) || self.reaches_class(e, c, seen),
+            Type::Struct(st, args) => {
+                if !seen.insert(format!("struct {}", st)) {
+                    return false;
+                }
+                let map = self.struct_bindings(st, args);
+                self.structs[st].fields.iter().any(|(_, ft)| self.reaches_class(&subst(ft, &map), c, seen))
+            }
+            Type::Class(d) => {
+                // A `d` field can hold a `c` when `c` is `d` or derives from it, and the reverse.
+                if self.is_subclass(c, d) || self.is_subclass(d, c) {
+                    return true;
+                }
+                if !seen.insert(d.clone()) {
+                    return false;
+                }
+                let mut classes = vec![d.clone()];
+                let mut i = 0;
+                while i < classes.len() {
+                    classes.extend(self.classes[&classes[i]].children.iter().cloned());
+                    i += 1;
+                }
+                classes.iter().any(|x| self.all_fields(x).iter().any(|(_, ft, _)| self.reaches_class(ft, c, seen)))
+            }
+            Type::Interface(i, _) => {
+                let implementers: Vec<String> =
+                    self.class_order.iter().filter(|x| self.all_interfaces(x).contains(i)).cloned().collect();
+                implementers.into_iter().any(|x| self.reaches_class(&Type::Class(x), c, seen))
+            }
+            _ => false,
+        }
     }
 
     /// Values that can be printed and compared with `==`.
