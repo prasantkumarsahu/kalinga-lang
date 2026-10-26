@@ -608,12 +608,18 @@ impl Parser {
         self.skip_newlines();
         let mut methods = Vec::new();
         while !self.check(&Tok::RBrace) {
-            let mpos = self.expect(Tok::Fn, "`fn` (interfaces only contain method signatures)")?;
+            let mpos = self.expect(Tok::Fn, "`fn` (interfaces contain methods)")?;
             let (mname, _) = self.ident("method name")?;
             let params = self.params()?;
             let ret = self.ret_type()?;
-            methods.push(MethodSig { name: mname, params, ret, pos: mpos });
-            self.end_of_statement()?;
+            if self.check(&Tok::LBrace) {
+                let body = self.block()?;
+                methods.push(MethodSig { name: mname, params, ret, body: Some(body), pos: mpos });
+                self.skip_newlines();
+            } else {
+                methods.push(MethodSig { name: mname, params, ret, body: None, pos: mpos });
+                self.end_of_statement()?;
+            }
         }
         self.expect(Tok::RBrace, "`}`")?;
         Ok(InterfaceDecl { name, tparams, bases, base_args, methods, pos })

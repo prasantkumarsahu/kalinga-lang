@@ -233,16 +233,7 @@ impl<'a> Resolver<'a> {
         }
         for i in &mut prog.interfaces {
             i.name = self.final_name(&unit_of(i.pos), &i.name);
-            for (b, p) in &mut i.bases {
-                *b = self.resolve(b, *p)?;
-            }
-            self.base_args(&mut i.base_args, &i.tparams)?;
-            for m in &mut i.methods {
-                for p in &mut m.params {
-                    self.ty(&mut p.ty, &i.tparams)?;
-                }
-                self.ty(&mut m.ret, &i.tparams)?;
-            }
+            self.interface(i)?;
         }
         for e in &mut prog.enums {
             e.name = self.final_name(&unit_of(e.pos), &e.name);
@@ -306,6 +297,28 @@ impl<'a> Resolver<'a> {
         for d in decls {
             self.ty(&mut d.ty, &[])?;
             self.expr(&mut d.value, &mut Scope(vec![HashSet::new()]))?;
+        }
+        Ok(())
+    }
+
+    /// An interface's supers, method signatures and default bodies.
+    fn interface(&self, i: &mut InterfaceDecl) -> Result<()> {
+        for (b, p) in &mut i.bases {
+            *b = self.resolve(b, *p)?;
+        }
+        self.base_args(&mut i.base_args, &i.tparams)?;
+        for m in &mut i.methods {
+            for p in &mut m.params {
+                self.ty(&mut p.ty, &i.tparams)?;
+            }
+            self.ty(&mut m.ret, &i.tparams)?;
+            if let Some(body) = &mut m.body {
+                let mut sc = Scope(vec![HashSet::new()]);
+                for p in &m.params {
+                    sc.add(&p.name);
+                }
+                self.block(body, &mut sc)?;
+            }
         }
         Ok(())
     }

@@ -80,6 +80,8 @@ pub struct InterfaceInfo {
     pub supers: Vec<String>,
     /// The type arguments of each generic super-interface (in terms of `tparams`).
     pub super_args: HashMap<String, Vec<Type>>,
+    /// Methods declared here with a default body.
+    pub defaults: HashSet<String>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -379,6 +381,22 @@ impl Model {
             }
         }
         None
+    }
+
+    /// A method `class` gets from a default body in one of its interfaces (when neither it nor
+    /// an ancestor defines the method): (the interface that declares it, the signature with
+    /// the class's type arguments filled in).
+    pub fn default_method(&self, class: &str, method: &str) -> Option<(String, Signature)> {
+        if self.find_method(class, method).is_some() {
+            return None;
+        }
+        self.all_interfaces(class).into_iter().find_map(|i| {
+            if !self.interfaces[&i].defaults.contains(method) {
+                return None;
+            }
+            let args = self.class_iface_args(class, &i).unwrap_or_default();
+            self.interface_method_of(&i, &args, method).map(|sig| (i, sig))
+        })
     }
 
     /// The type arguments with which `class` (or an ancestor) implements `target`.

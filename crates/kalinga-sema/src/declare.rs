@@ -233,7 +233,8 @@ impl Model {
                     super_args.insert(b.clone(), targs);
                 }
             }
-            let info = InterfaceInfo { tparams: i.tparams.clone(), methods, supers, super_args };
+            let defaults = i.methods.iter().filter(|m| m.body.is_some()).map(|m| m.name.clone()).collect();
+            let info = InterfaceInfo { tparams: i.tparams.clone(), methods, supers, super_args, defaults };
             self.interfaces.insert(i.name.clone(), info);
             self.interface_order.push(i.name.clone());
         }
@@ -477,6 +478,23 @@ impl Model {
     /// implemented with the same signature, and not `private`.
     fn check_conformance(&self, name: &str) -> Result<()> {
         let info = &self.classes[name];
+        // The same default from two unrelated interfaces: the class must choose.
+        let mut defaults: HashMap<&str, String> = HashMap::new();
+        for i in self.all_interfaces(name) {
+            for m in &self.interfaces[&i].defaults {
+                if self.find_method(name, m).is_none()
+                    && let Some(other) = defaults.insert(m, i.clone())
+                {
+                    return err(
+                        format!(
+                            "`{}` gets a default `{}` from both `{}` and `{}`; write `override fn {}`",
+                            name, m, other, i, m
+                        ),
+                        info.decl.pos,
+                    );
+                }
+            }
+        }
         for direct in &info.interfaces {
             let dargs = info.interface_args.get(direct).cloned().unwrap_or_default();
             for iname in self.iface_closure(direct) {
@@ -485,6 +503,7 @@ impl Model {
                 for (mname, isig) in &self.interfaces[&iname].methods {
                     let isig = &subst_sig(isig, &map);
                     match self.find_method(name, mname) {
+                        None if self.interfaces[&iname].defaults.contains(mname) => {}
                         None => {
                             return err(
                                 format!("`{}` does not implement `{}.{}{}`", name, iname, mname, isig.describe()),

@@ -163,6 +163,7 @@ extern fn NAME(PARAM, ...) [-> TYPE] [= "rust::path" | = rust { RUST CODE }]
 
 interface NAME[<T, ...>] [: INTERFACE[<TYPE, ...>], ...] {
     fn NAME(PARAM, ...) [-> TYPE]
+    fn NAME(PARAM, ...) [-> TYPE] { ... }            a default; classes may override it
 }
 
 enum NAME[<T, ...>] {
@@ -270,7 +271,7 @@ member      = { modifier } IDENT ":" type [ "=" expr ]
             | const | "static" "var" IDENT ":" type "=" expr
             | { modifier } "fn" IDENT params [ "->" type ] ( block | (* abstract *) ) ;
 modifier    = "private" | "static" | "abstract" | "override" | "async" ;
-interface   = "interface" IDENT [ tparams ] [ ":" base_ref { "," base_ref } ] "{" { "fn" IDENT params [ "->" type ] } "}" ;
+interface   = "interface" IDENT [ tparams ] [ ":" base_ref { "," base_ref } ] "{" { "fn" IDENT params [ "->" type ] [ block ] } "}" ;
 enum        = "enum" IDENT [ tparams ] "{" variant { [ "," ] variant } "}" ;
 variant     = IDENT [ params ] ;
 type        = base [ "?" ] ;

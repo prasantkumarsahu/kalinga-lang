@@ -108,6 +108,8 @@ pub struct MethodSig {
     pub name: String,
     pub params: Vec<Param>,
     pub ret: TypeExpr,
+    /// A default body: classes implementing the interface get it unless they override it.
+    pub body: Option<Vec<Stmt>>,
     pub pos: Span,
 }
 

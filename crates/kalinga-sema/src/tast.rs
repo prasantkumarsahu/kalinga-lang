@@ -532,6 +532,8 @@ pub struct TypedProgram {
     pub field_defaults: HashMap<(String, String), TExpr>,
     /// (struct, method) → body.
     pub struct_methods: HashMap<(String, String), TBody>,
+    /// (interface, method) → its default body.
+    pub iface_methods: HashMap<(String, String), TBody>,
     /// (type, name) → initial value of a `const` or `static var`; the type is empty for
     /// top-level constants.
     pub static_values: HashMap<(String, String), TExpr>,

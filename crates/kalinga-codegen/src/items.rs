@@ -145,13 +145,17 @@ impl Gen<'_> {
         let bound = if supers.is_empty() { String::new() } else { format!(": {}", supers.join(" + ")) };
         let _ = writeln!(out, "trait {}{}{} {{", iname, self.generic_params(&info.tparams, None), bound);
         for (mname, sig) in &info.methods {
-            let _ = writeln!(
-                out,
-                "    fn {}(&mut self{}){};",
-                rid(mname),
-                self.comma_params(sig),
-                self.ret_suffix(&sig.ret)
-            );
+            let head =
+                format!("    fn {}(&mut self{}){}", rid(mname), self.comma_params(sig), self.ret_suffix(&sig.ret));
+            // A default body is the trait's default method.
+            match self.t.iface_methods.get(&(iname.to_string(), mname.clone())) {
+                Some(b) => {
+                    let _ = writeln!(out, "{} {{\n{}    }}", head, self.body(b, 2));
+                }
+                None => {
+                    let _ = writeln!(out, "{};", head);
+                }
+            }
         }
         let targets = self.m.class_order.iter().filter(|c| self.m.all_interfaces(c).contains(&iname.to_string()));
         for target in targets.filter(|c| self.is_cast_target(c)) {
@@ -622,7 +626,10 @@ impl Gen<'_> {
             let args = self.m.class_iface_args(cname, &iname).unwrap_or_default();
             let _ = writeln!(out, "impl {} for {} {{", self.iface_path(&iname, &args), cname);
             let map = self.m.iface_bindings(&iname, &args);
-            for (mname, sig) in &self.m.interfaces[&iname].methods {
+            // Methods the class does not define keep the interface's default.
+            let defined =
+                self.m.interfaces[&iname].methods.iter().filter(|(m, _)| self.m.find_method(cname, m).is_some());
+            for (mname, sig) in defined {
                 forward(out, mname, &subst_sig(sig, &map));
             }
             for target in

@@ -167,7 +167,9 @@ a compile error (or a wrong result) if missed.
   an enum or a struct need a default (`= Square()`, `= fn() {}`) or must be optional
   (`Square?`), even when `init` sets them.
 - `class Dog : Animal, Named` extends at most one class and any number of interfaces. A
-  method coming from a base class or an interface must be marked `override fn`. A subclass
+  method coming from a base class or an interface must be marked `override fn`. Interface
+  methods may have a default body (`fn greet() -> str { return "hi {self.name()}" }`), which
+  classes get unless they override it. A subclass
   `init` calls `super(args)` first when the base has an `init`.
 - `private` members, `static fn` (called `Type.f()`), `const NAME: T = v` and
   `static var name: T = v` members (used as `Type.NAME`). There are no global variables.

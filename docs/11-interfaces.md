@@ -323,9 +323,67 @@ milk;eggs;
 - A `Store<int>` and a `Store<str>` are different types.
 - Bounds can name a generic interface: `fn bump<S: Store<int>>(s: S)`.
 
+## Default methods
+
+An interface method can have a body. Every class that implements the interface gets it, and
+can replace it with `override fn`:
+
+```kalinga
+interface Named {
+    fn name() -> str
+
+    fn greet() -> str {
+        return "Hello, {self.name()}"
+    }
+
+    fn shout() -> str {
+        return self.greet().upper()
+    }
+}
+
+class Dog : Named {
+    override fn name() -> str {
+        return "Rex"
+    }
+}
+
+class Cat : Named {
+    override fn name() -> str {
+        return "Tom"
+    }
+
+    override fn greet() -> str {
+        return "Meow from {self.name()}"
+    }
+}
+
+fn main() {
+    println(Dog().greet())
+    println(Cat().shout())
+    let all: [Named] = [Dog(), Cat()]
+    for n in all {
+        println(n.greet())
+    }
+}
+```
+
+```text
+Hello, Rex
+MEOW FROM TOM
+Hello, Rex
+Meow from Tom
+```
+
+- Inside a default method, `self` is the interface value: it can call the interface's
+  methods (and those of interfaces it extends), which run the class's versions — `Cat`'s
+  `shout` uses `Cat`'s own `greet`. It cannot read fields or pass `self` on.
+- A class only writes the methods without a default (and those it wants to change).
+- When two interfaces of one class give the same method a default, the class must choose
+  by writing `override fn` for it.
+
 ## Limits in this version
 
-- Interfaces contain only methods: no fields, no default method bodies.
+- Interfaces contain only methods: no fields.
 - Generic classes cannot implement interfaces, and interface methods cannot have their
   own type parameters.
 - Two interfaces listed by one class should not declare methods with the same name.
