@@ -629,12 +629,28 @@ impl Parser {
         let pos = self.expect(Tok::Struct, "`struct`")?;
         let (name, _) = self.ident("struct name")?;
         let (tparams, bounds) = self.tparams()?;
-        if self.check(&Tok::Colon) {
-            return err("structs cannot extend classes or implement interfaces (use a class for that)", self.pos());
+        // `struct Version : Ord`: only the built-in `Show`, `Eq` and `Ord` (checked later).
+        let mut bases = vec![];
+        if self.eat(&Tok::Colon) {
+            loop {
+                bases.push(self.ident("`Show`, `Eq` or `Ord`")?);
+                if !self.eat(&Tok::Comma) {
+                    break;
+                }
+            }
         }
         self.expect(Tok::LBrace, "`{` to start struct body")?;
-        let mut s =
-            StructDecl { name, tparams, bounds, fields: vec![], methods: vec![], ops: vec![], statics: vec![], pos };
+        let mut s = StructDecl {
+            name,
+            tparams,
+            bounds,
+            bases,
+            fields: vec![],
+            methods: vec![],
+            ops: vec![],
+            statics: vec![],
+            pos,
+        };
         self.skip_newlines();
         while !self.check(&Tok::RBrace) {
             let mpos = self.pos();
@@ -686,11 +702,10 @@ impl Parser {
                     self.end_of_statement()?;
                 }
                 Tok::Fn => {
-                    if mods.is_abstract || mods.is_override {
-                        return err(
-                            "struct methods cannot be `abstract` or `override` (structs have no inheritance)",
-                            mpos,
-                        );
+                    // `override` is checked later: it marks `as_str`, `equals` and `compare` of
+                    // a struct that lists `Show`, `Eq` or `Ord`.
+                    if mods.is_abstract {
+                        return err("struct methods cannot be `abstract` (structs have no inheritance)", mpos);
                     }
                     if mods.is_mut && mods.is_static {
                         return err("a `static fn` has no `self`, so it cannot be `mut`", mpos);

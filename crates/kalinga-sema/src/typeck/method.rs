@@ -356,7 +356,7 @@ impl Checker<'_> {
                 if !args.is_empty() {
                     return err("`sort` takes no arguments (use `sort_by(fn(a, b) => ...)` for a custom order)", pos);
                 }
-                if !(matches!(*elem, Type::Int | Type::Str | Type::Bool | Type::Float) || self.ordered_param(&elem)) {
+                if !self.ordered(&elem) {
                     let hint = bound_hint(&elem, "Ord");
                     let what = if hint.is_empty() { "; use `sort_by`".to_string() } else { hint };
                     return err(

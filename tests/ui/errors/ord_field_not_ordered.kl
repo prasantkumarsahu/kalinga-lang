@@ -1,0 +1,7 @@
+class Team : Ord {
+    name: str = "A"
+    members: [str] = []
+}
+
+fn main() {
+}

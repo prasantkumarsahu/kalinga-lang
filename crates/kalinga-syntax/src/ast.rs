@@ -145,6 +145,8 @@ pub struct StructDecl {
     /// Type parameters: `struct Grid<T>`.
     pub tparams: Vec<String>,
     pub bounds: Vec<BoundDecl>,
+    /// The built-in interfaces listed after `:` (`struct Version : Ord`).
+    pub bases: Vec<(String, Span)>,
     pub fields: Vec<FieldDecl>,
     pub methods: Vec<FnDecl>,
     pub ops: Vec<OpDecl>,

@@ -1,0 +1,21 @@
+true
+true
+true
+true
+true
+true
+false
+true
+true
+true
+true
+true
+0
+[Version(major: 0, minor: 9), Version(major: 1, minor: 2), Version(major: 1, minor: 10)]
+Version(major: 1, minor: 10)
+true
+[Job(title: ship, priority: 9), Job(title: eat, priority: 5), Job(title: sleep, priority: 1)]
+true
+1
+2
+pear

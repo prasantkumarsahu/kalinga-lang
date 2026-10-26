@@ -342,7 +342,7 @@ impl Checker<'_> {
                 Ok(Type::Bool)
             }
             Lt | Le | Gt | Ge => {
-                if lt != rt || !(matches!(lt, Type::Int | Type::Float | Type::Str) || self.ordered_param(lt)) {
+                if lt != rt || *lt == Type::Bool || !self.ordered(lt) {
                     let hint = if lt == rt { bound_hint(lt, "Ord") } else { String::new() };
                     return err(format!("cannot compare `{}` with `{}` using `{}`{}", lt, rt, op.rust(), hint), pos);
                 }

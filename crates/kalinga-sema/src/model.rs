@@ -38,13 +38,15 @@ pub type Bounds = HashMap<String, Vec<Bound>>;
 
 /// The built-in interfaces a class can list (`class Dog : Show`), and the method each one
 /// gives it; the compiler writes the method from the fields unless the class overrides it.
-pub const CAPABILITIES: &[(&str, &str)] = &[("Show", "as_str")];
+pub const CAPABILITIES: &[(&str, &str)] = &[("Show", "as_str"), ("Eq", "equals"), ("Ord", "compare")];
 
 impl Bound {
     /// The built-in interface named `name` that a class can list, if there is one.
     pub fn capability(name: &str) -> Option<Bound> {
         match name {
             "Show" => Some(Bound::Show),
+            "Eq" => Some(Bound::Eq),
+            "Ord" => Some(Bound::Ord),
             _ => None,
         }
     }
@@ -156,6 +158,10 @@ pub struct StructInfo {
     pub private_fields: HashSet<String>,
     pub methods: HashMap<String, StructMethod>,
     pub ops: Vec<StructOp>,
+    /// Built-in interfaces listed after `:` (`struct Version : Ord`).
+    pub capabilities: Vec<Bound>,
+    /// Methods the compiler writes from the fields (`compare` for `Ord`), not the user.
+    pub generated: HashSet<String>,
     /// `const` and `static var` members, in declaration order.
     pub static_values: Vec<(String, StaticInfo)>,
 }
@@ -226,6 +232,10 @@ pub struct Model {
     /// class has `Show`.
     pub show_enums: HashSet<String>,
     pub show_structs: HashSet<String>,
+    /// Enums and structs that can be compared with `==`: the plain ones, and those holding
+    /// objects whose class has `Eq`.
+    pub eq_enums: HashSet<String>,
+    pub eq_structs: HashSet<String>,
     pub names: TypeNames,
 }
 
@@ -504,8 +514,34 @@ impl Model {
     }
 
     /// Whether class `c` (or a base class) lists the built-in interface `b`.
+    /// `Ord` includes `Eq`.
     pub fn class_has(&self, c: &str, b: &Bound) -> bool {
-        self.classes.contains_key(c) && self.ancestors(c).iter().any(|a| self.classes[a].capabilities.contains(b))
+        self.capability_root(c, b).is_some()
+    }
+
+    /// Whether struct `st` lists the built-in interface `b` (`Ord` includes `Eq`).
+    pub fn struct_has(&self, st: &str, b: &Bound) -> bool {
+        self.structs
+            .get(st)
+            .is_some_and(|s| s.capabilities.contains(b) || (*b == Bound::Eq && s.capabilities.contains(&Bound::Ord)))
+    }
+
+    /// Whether struct `st` lists `b` and writes its method itself (`override fn equals`).
+    pub fn struct_writes(&self, st: &str, b: &Bound) -> bool {
+        self.struct_has(st, b) && b.method().is_some_and(|m| !self.structs[st].generated.contains(m))
+    }
+
+    /// The first class from the root down to `c` that lists `b` (or `Ord`, for `Eq`): the
+    /// type of the `other` parameter of its `equals` / `compare`.
+    pub fn capability_root(&self, c: &str, b: &Bound) -> Option<String> {
+        if !self.classes.contains_key(c) {
+            return None;
+        }
+        let lists = |a: &String| {
+            let caps = &self.classes[a].capabilities;
+            caps.contains(b) || (*b == Bound::Eq && caps.contains(&Bound::Ord))
+        };
+        self.ancestors(c).into_iter().rev().find(lists)
     }
 
     /// The built-in interface whose method `method` class `c` gets, if any.
@@ -518,10 +554,44 @@ impl Model {
     }
 
     /// The signature of the method the built-in interface `b` gives class `c`.
-    pub fn capability_signature(&self, _c: &str, b: &Bound) -> Signature {
+    pub fn capability_signature(&self, c: &str, b: &Bound) -> Signature {
+        let other = || vec![("other".to_string(), Type::Class(self.capability_root(c, b).unwrap_or(c.to_string())))];
         match b {
             Bound::Show => Signature { params: vec![], ret: Type::Str },
-            _ => unreachable!("only built-in interfaces give methods"),
+            Bound::Eq => Signature { params: other(), ret: Type::Bool },
+            Bound::Ord => Signature { params: other(), ret: Type::Int },
+            Bound::Interface(..) => unreachable!("only built-in interfaces give methods"),
+        }
+    }
+
+    /// Values that can be compared with `==`: what `is_plain_with` allows, and objects whose
+    /// class has `Eq` (also inside arrays, optionals, maps, tuples, results, structs, enums).
+    pub fn comparable_with(&self, t: &Type, param: &dyn Fn(&str) -> bool) -> bool {
+        let cmp = |t: &Type| self.comparable_with(t, param);
+        match t {
+            Type::Class(c) => self.class_has(c, &Bound::Eq),
+            Type::Array(i) | Type::Optional(i) => cmp(i),
+            Type::Map(k, v) => self.is_plain_with(k, param) && cmp(v),
+            Type::Tuple(parts) => parts.iter().all(cmp),
+            Type::Result(t, e) => (**t == Type::Void || cmp(t)) && cmp(e),
+            Type::Struct(st, args) => {
+                (self.plain_structs.contains(st) || self.eq_structs.contains(st) || self.struct_has(st, &Bound::Eq))
+                    && args.iter().all(cmp)
+            }
+            Type::Enum(e, args) => (self.plain_enums.contains(e) || self.eq_enums.contains(e)) && args.iter().all(cmp),
+            other => self.is_plain_with(other, param),
+        }
+    }
+
+    /// Values that can be ordered with `<` and `sort`: numbers, strings, booleans and objects
+    /// whose class has `Ord`.
+    pub fn ordered_with(&self, t: &Type, param: &dyn Fn(&str) -> bool) -> bool {
+        match t {
+            Type::Int | Type::Float | Type::Str | Type::Bool => true,
+            Type::Class(c) => self.class_has(c, &Bound::Ord),
+            Type::Struct(st, _) => self.struct_has(st, &Bound::Ord),
+            Type::Param(p) => param(p),
+            _ => false,
         }
     }
 
@@ -536,7 +606,8 @@ impl Model {
             Type::Tuple(parts) => parts.iter().all(show),
             Type::Result(t, e) => (**t == Type::Void || show(t)) && show(e),
             Type::Struct(st, args) => {
-                (self.plain_structs.contains(st) || self.show_structs.contains(st)) && args.iter().all(show)
+                (self.plain_structs.contains(st) || self.show_structs.contains(st) || self.struct_has(st, &Bound::Show))
+                    && args.iter().all(show)
             }
             Type::Enum(e, args) => {
                 (self.plain_enums.contains(e) || self.show_enums.contains(e)) && args.iter().all(show)

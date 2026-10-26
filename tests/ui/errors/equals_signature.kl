@@ -1,0 +1,8 @@
+class Dog : Eq {
+    override fn equals(other: Dog) -> int {
+        return 1
+    }
+}
+
+fn main() {
+}

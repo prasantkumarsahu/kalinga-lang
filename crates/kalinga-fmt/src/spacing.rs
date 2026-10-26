@@ -49,9 +49,10 @@ enum Role {
 /// The line's text with standard spacing.
 pub fn render(line: &[Item]) -> String {
     let mut roles = roles(line);
-    // `class Dog : Animal, Show` and `interface Pet : Named`, but not the `:` of a bound
+    // `class Dog : Animal, Show`, `interface Pet : Named` and `struct V : Ord`, but not the `:` of a bound
     // inside `class Box<T: Show>`.
-    let header = matches!(line.first().and_then(Item::token), Some(Tok::Class | Tok::Abstract | Tok::Interface));
+    let header =
+        matches!(line.first().and_then(Item::token), Some(Tok::Class | Tok::Abstract | Tok::Interface | Tok::Struct));
     let mut depth = 0;
     let base_colon = line.iter().position(|i| {
         match i.token() {

@@ -513,12 +513,13 @@ impl Checker<'_> {
 
     /// Can `t` values be compared with `==`? A type parameter can with `Eq` or `Ord`.
     fn comparable(&self, t: &Type) -> bool {
-        self.m.is_plain_with(t, &|p| self.param_has(p, |b| matches!(b, Bound::Eq | Bound::Ord)))
+        self.m.comparable_with(t, &|p| self.param_has(p, |b| matches!(b, Bound::Eq | Bound::Ord)))
     }
 
-    /// Is `t` a type parameter with an `Ord` bound?
-    fn ordered_param(&self, t: &Type) -> bool {
-        matches!(t, Type::Param(p) if self.param_has(p, |b| *b == Bound::Ord))
+    /// Can `t` values be ordered (`<`, `sort`)? Numbers, strings, booleans, objects whose
+    /// class has `Ord`, and type parameters with an `Ord` bound.
+    fn ordered(&self, t: &Type) -> bool {
+        self.m.ordered_with(t, &|p| self.param_has(p, |b| *b == Bound::Ord))
     }
 
     /// Does the type argument `t` meet the bound `b`?
@@ -526,7 +527,7 @@ impl Checker<'_> {
         match b {
             Bound::Show => self.showable(t),
             Bound::Eq => self.comparable(t),
-            Bound::Ord => matches!(t, Type::Int | Type::Float | Type::Str | Type::Bool) || self.ordered_param(t),
+            Bound::Ord => self.ordered(t),
             Bound::Interface(i, args) => self.assignable(t, &Type::Interface(i.clone(), args.clone())),
         }
     }

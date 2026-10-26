@@ -1,0 +1,8 @@
+class Dog : Eq {
+    age: int = 1
+}
+
+fn main() {
+    var dogs = [Dog(), Dog()]
+    dogs.sort()
+}

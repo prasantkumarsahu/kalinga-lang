@@ -1,0 +1,7 @@
+class Dog {
+    name: str = "Rex"
+}
+
+fn main() {
+    println(Dog() == Dog())
+}

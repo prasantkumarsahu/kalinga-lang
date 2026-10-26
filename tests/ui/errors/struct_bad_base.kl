@@ -1,0 +1,10 @@
+interface Named {
+    fn name() -> str
+}
+
+struct Point : Named {
+    x: int
+}
+
+fn main() {
+}

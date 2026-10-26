@@ -27,8 +27,23 @@ impl Gen<'_> {
             TExprKind::Neg(v) => format!("(-{})", self.expr(v)),
             TExprKind::Not(v) => format!("(!{})", self.expr(v)),
             TExprKind::Binary(op, l, r) => {
-                if l.ty == Type::Str && *op == kalinga_syntax::ast::BinOp::Add {
+                use kalinga_syntax::ast::BinOp;
+                if l.ty == Type::Str && *op == BinOp::Add {
                     format!("format!(\"{{}}{{}}\", {}, {})", self.expr(l), self.expr(r))
+                } else if matches!(op, BinOp::Eq | BinOp::Ne) && !self.m.is_plain(&l.ty) {
+                    // Values that may hold objects compare through `__KlEq` (and `equals`).
+                    let not = if *op == BinOp::Ne { "!" } else { "" };
+                    format!("{}__KlEq::__eq(&{}, &{})", not, self.expr(l), self.expr(r))
+                } else if matches!(op, BinOp::Lt | BinOp::Le | BinOp::Gt | BinOp::Ge)
+                    && matches!(l.ty, Type::Class(_) | Type::Param(_) | Type::Struct(..))
+                {
+                    let test = match op {
+                        BinOp::Lt => "is_lt",
+                        BinOp::Le => "is_le",
+                        BinOp::Gt => "is_gt",
+                        _ => "is_ge",
+                    };
+                    format!("__KlOrd::__cmp(&{}, &{}).{}()", self.expr(l), self.expr(r), test)
                 } else {
                     format!("({} {} {})", self.expr(l), op.rust(), self.expr(r))
                 }
@@ -310,9 +325,9 @@ impl Gen<'_> {
                 Type::Array(elem) if **elem == Type::Float => {
                     format!("{{ {}{}.sort_by(|a, b| a.total_cmp(b)); }}", pre, p)
                 }
-                // A type parameter with an `Ord` bound is only `PartialOrd` in Rust.
-                Type::Array(elem) if matches!(**elem, Type::Param(_)) => {
-                    format!("{{ {}{}.sort_by(|a, b| a.partial_cmp(b).unwrap()); }}", pre, p)
+                // Objects and type parameters order through `__KlOrd` (and `compare`).
+                Type::Array(elem) if matches!(**elem, Type::Param(_) | Type::Class(_) | Type::Struct(..)) => {
+                    format!("{{ {}{}.sort_by(|a, b| __KlOrd::__cmp(a, b)); }}", pre, p)
                 }
                 _ => format!("{{ {}{}.sort(); }}", pre, p),
             },
@@ -337,9 +352,10 @@ impl Gen<'_> {
         let at = self.place_of(e.pos);
         match (op, args) {
             (Builtin::AssertEq, [value, expected]) => format!(
-                "{{ let __l = {}; let __r = {}; if __l != __r {{ __kl_fail(format!(\"{{}}: got {{}}, expected {{}}\", {:?}, __KlShow::__show(&__l), __KlShow::__show(&__r))); }} }}",
+                "{{ let __l = {}; let __r = {}; if {} {{ __kl_fail(format!(\"{{}}: got {{}}, expected {{}}\", {:?}, __KlShow::__show(&__l), __KlShow::__show(&__r))); }} }}",
                 self.expr(value),
                 self.expr(expected),
+                if self.m.is_plain(&value.ty) { "__l != __r" } else { "!__KlEq::__eq(&__l, &__r)" },
                 format!("assert_eq failed at {}", at)
             ),
             (_, [cond, message]) => format!(
@@ -477,6 +493,9 @@ impl Gen<'_> {
                 r
             )),
             Find => wrap(format!("{{ let __f = {}; {}.iter().find(|__e| __f((*__e).clone())).cloned() }}", a(0), r)),
+            Contains if !self.m.is_plain(&args[0].ty) => {
+                wrap(format!("{{ let __v = {}; {}.iter().any(|__e| __KlEq::__eq(__e, &__v)) }}", a(0), r))
+            }
             Contains => wrap(format!("{}.contains(&{})", r, a(0))),
             MapGet => wrap(format!("{}.get(&{}).cloned()", r, a(0))),
             MapHas => wrap(format!("{}.contains_key(&{})", r, a(0))),

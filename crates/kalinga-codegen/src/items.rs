@@ -113,8 +113,8 @@ impl Gen<'_> {
     }
 
     /// `<T: Clone + 'static, U: ...>` for a Rust generic item (empty when not generic), with
-    /// the Rust traits for each bound: `Show` is `__KlShow`, `Eq` is `PartialEq`, `Ord` is
-    /// `PartialOrd`, an interface `I` is `__Has_I`.
+    /// the Rust traits for each bound: `Show` is `__KlShow`, `Eq` is `__KlEq`, `Ord` is
+    /// `__KlEq + __KlOrd`, an interface `I` is `__Has_I`.
     fn generic_params(&self, tparams: &[String], bounds: Option<&Bounds>) -> String {
         if tparams.is_empty() {
             return String::new();
@@ -124,8 +124,8 @@ impl Gen<'_> {
             for bound in bounds.and_then(|bs| bs.get(t)).into_iter().flatten() {
                 b += &match bound {
                     Bound::Show => " + __KlShow".to_string(),
-                    Bound::Eq => " + PartialEq".to_string(),
-                    Bound::Ord => " + PartialOrd".to_string(),
+                    Bound::Eq => " + __KlEq".to_string(),
+                    Bound::Ord => " + __KlEq + __KlOrd".to_string(),
                     Bound::Interface(i, args) => format!(" + __Has_{}", self.iface_path(i, args)),
                 };
             }
@@ -236,6 +236,9 @@ impl Gen<'_> {
             }
         }
         out.push_str("}\n");
+        if self.m.eq_enums.contains(name) {
+            self.enum_eq(out, name, &self_ty);
+        }
         if !self.m.show_enums.contains(name) {
             return;
         }
@@ -306,7 +309,9 @@ impl Gen<'_> {
         let self_ty =
             if info.tparams.is_empty() { name.to_string() } else { format!("{}<{}>", name, info.tparams.join(", ")) };
         let _ = writeln!(out, "\n// ===== struct {} =====", name);
-        let _ = writeln!(out, "#[derive(Clone{})]", if plain { ", PartialEq" } else { "" });
+        // A struct with its own `equals` compares through it, not field by field.
+        let own_eq = self.m.struct_writes(name, &Bound::Eq);
+        let _ = writeln!(out, "#[derive(Clone{})]", if plain && !own_eq { ", PartialEq" } else { "" });
         let _ = writeln!(out, "struct {} {{", self_ty);
         for (f, t) in &info.fields {
             let _ = writeln!(out, "    {}: {},", rid(f), self.rty(t));
@@ -342,6 +347,7 @@ impl Gen<'_> {
                 );
             }
         }
+        self.struct_generated(out, name, &self_ty);
         for o in &info.ops {
             let Some(b) = self.t.struct_ops.get(&(name.to_string(), o.index)) else { continue };
             let _ = writeln!(
@@ -354,9 +360,120 @@ impl Gen<'_> {
             );
         }
         out.push_str("}\n");
-        if self.m.show_structs.contains(name) {
+        self.struct_compare(out, name, &self_ty, plain && own_eq);
+        if self.m.struct_has(name, &Bound::Show) {
+            let _ = writeln!(
+                out,
+                "impl __KlShow for {} {{\n    fn __show(&self) -> String {{ self.as_str() }}\n}}",
+                self_ty
+            );
+        } else if self.m.show_structs.contains(name) {
             self.struct_show(out, name, &self_ty);
         }
+        if self.m.struct_writes(name, &Bound::Eq) {
+            // `__KlEq` comes from `struct_compare`.
+        } else if self.m.eq_structs.contains(name) || self.m.struct_has(name, &Bound::Eq) {
+            let info = &self.m.structs[name];
+            let eqs: Vec<String> =
+                info.fields.iter().map(|(f, _)| format!(" && __KlEq::__eq(&self.{0}, &o.{0})", rid(f))).collect();
+            let _ = writeln!(
+                out,
+                "impl{} __KlEq for {} {{\n    fn __eq(&self, o: &Self) -> bool {{ true{} }}\n}}",
+                trait_params(&info.tparams, "__KlEq"),
+                self_ty,
+                eqs.concat()
+            );
+        }
+    }
+
+    /// The methods the compiler writes for a struct that lists `Show`, `Eq` or `Ord`.
+    fn struct_generated(&self, out: &mut String, name: &str, self_ty: &str) {
+        let info = &self.m.structs[name];
+        let mut generated: Vec<&String> = info.generated.iter().collect();
+        generated.sort();
+        for g in generated {
+            let fields = &info.fields;
+            let (sig, body) = match g.as_str() {
+                "as_str" => {
+                    let parts: Vec<String> = fields.iter().map(|(f, _)| format!("{}: {{}}", f)).collect();
+                    let shows: Vec<String> =
+                        fields.iter().map(|(f, _)| format!(", __KlShow::__show(&self.{})", rid(f))).collect();
+                    ("-> String", format!("format!(\"{}({})\"{})", name, parts.join(", "), shows.concat()))
+                }
+                "equals" => {
+                    let eqs: Vec<String> = fields
+                        .iter()
+                        .map(|(f, _)| format!(" && __KlEq::__eq(&self.{0}, &other.{0})", rid(f)))
+                        .collect();
+                    ("-> bool", format!("true{}", eqs.concat()))
+                }
+                _ => {
+                    let cmps: Vec<String> = fields
+                        .iter()
+                        .map(|(f, _)| format!(".then_with(|| __KlOrd::__cmp(&self.{0}, &other.{0}))", rid(f)))
+                        .collect();
+                    ("-> i64", format!("std::cmp::Ordering::Equal{} as i64", cmps.concat()))
+                }
+            };
+            let other = if g == "as_str" { String::new() } else { format!(", other: {}", self_ty) };
+            let _ = writeln!(out, "    fn {}(&self{}) {} {{\n        {}\n    }}", g, other, sig, body);
+        }
+    }
+
+    /// A struct listing `Eq` / `Ord` with its own `equals`, or listing `Ord`: `PartialEq`
+    /// (when `==` on it is plain Rust), `__KlEq` and `__KlOrd` through those methods.
+    fn struct_compare(&self, out: &mut String, name: &str, self_ty: &str, partial_eq: bool) {
+        if partial_eq {
+            let _ = writeln!(
+                out,
+                "impl PartialEq for {} {{\n    fn eq(&self, o: &Self) -> bool {{ self.equals(o.clone()) }}\n}}",
+                self_ty
+            );
+        }
+        if self.m.struct_writes(name, &Bound::Eq) {
+            let _ = writeln!(
+                out,
+                "impl __KlEq for {} {{\n    fn __eq(&self, o: &Self) -> bool {{ self.equals(o.clone()) }}\n}}",
+                self_ty
+            );
+        }
+        if self.m.struct_has(name, &Bound::Ord) {
+            let _ = writeln!(
+                out,
+                "impl __KlOrd for {} {{\n    fn __cmp(&self, o: &Self) -> std::cmp::Ordering {{ self.compare(o.clone()).cmp(&0) }}\n}}",
+                self_ty
+            );
+        }
+    }
+
+    /// `==` for an enum whose payloads can all be compared: same variant, equal payloads.
+    fn enum_eq(&self, out: &mut String, name: &str, self_ty: &str) {
+        let info = &self.m.enums[name];
+        let _ = writeln!(
+            out,
+            "impl{} __KlEq for {} {{\n    fn __eq(&self, o: &Self) -> bool {{\n        match (self, o) {{",
+            trait_params(&info.tparams, "__KlEq"),
+            self_ty
+        );
+        for (v, fields) in &info.variants {
+            if fields.is_empty() {
+                let _ = writeln!(out, "            ({0}::{1}, {0}::{1}) => true,", name, v);
+            } else {
+                let a: Vec<String> = (0..fields.len()).map(|i| format!("__a{}", i)).collect();
+                let b: Vec<String> = (0..fields.len()).map(|i| format!("__b{}", i)).collect();
+                let eqs: Vec<String> = (0..fields.len()).map(|i| format!("__KlEq::__eq(__a{0}, __b{0})", i)).collect();
+                let _ = writeln!(
+                    out,
+                    "            ({0}::{1}({2}), {0}::{1}({3})) => {4},",
+                    name,
+                    v,
+                    a.join(", "),
+                    b.join(", "),
+                    eqs.join(" && ")
+                );
+            }
+        }
+        out.push_str("            _ => false,\n        }\n    }\n}\n");
     }
 
     fn struct_show(&self, out: &mut String, name: &str, self_ty: &str) {
@@ -481,6 +598,7 @@ impl Gen<'_> {
             if self.m.class_has(cname, &Bound::Show) {
                 self.class_show(out, cname);
             }
+            self.class_compare(out, cname);
         }
     }
 
@@ -550,7 +668,69 @@ impl Gen<'_> {
                     fields.iter().map(|(f, _, _)| format!(", __KlShow::__show(&self.{})", rid(f))).collect();
                 format!("        format!(\"{}({})\"{})\n", owner, parts.join(", "), shows.concat())
             }
+            "equals" | "compare" => {
+                // `other` is the class that lists `Eq` / `Ord`; with subclasses it is a trait
+                // object, read through its getters.
+                let Type::Class(root) = &self.m.classes[owner].methods[method].params[0].1 else {
+                    unreachable!("`{}` takes an object", method)
+                };
+                let read = |f: &str| {
+                    if self.m.has_subclasses(root) { format!("__o.__get_{}()", f) } else { format!("__o.{}", rid(f)) }
+                };
+                let same = "std::ptr::eq(self as *const Self as *const u8, other.as_ptr() as *const u8)";
+                if method == "equals" {
+                    let eqs: Vec<String> = self
+                        .m
+                        .all_fields(root)
+                        .iter()
+                        .map(|(f, _, _)| format!(" && __KlEq::__eq(&self.{}, &{})", rid(f), read(f)))
+                        .collect();
+                    format!(
+                        "        if {} {{ return true; }}\n        let __o = other.borrow();\n        true{}\n",
+                        same,
+                        eqs.concat()
+                    )
+                } else {
+                    let cmps: Vec<String> = self
+                        .m
+                        .all_fields(root)
+                        .iter()
+                        .map(|(f, _, _)| format!(".then_with(|| __KlOrd::__cmp(&self.{}, &{}))", rid(f), read(f)))
+                        .collect();
+                    format!(
+                        "        if {} {{ return 0; }}\n        let __o = other.borrow();\n        std::cmp::Ordering::Equal{} as i64\n",
+                        same,
+                        cmps.concat()
+                    )
+                }
+            }
             _ => unreachable!("no generated method `{}`", method),
+        }
+    }
+
+    /// Objects whose class has `Eq` / `Ord` compare through `equals` / `compare` (the same
+    /// object is always equal to itself, without calling them).
+    fn class_compare(&self, out: &mut String, cname: &str) {
+        let ty = self.rty(&Type::Class(cname.to_string()));
+        let arg = |b: &Bound| {
+            let root = self.m.capability_root(cname, b).expect("a class with the interface");
+            self.convert("o.clone()".into(), &Type::Class(cname.to_string()), &Type::Class(root))
+        };
+        if self.m.class_has(cname, &Bound::Eq) {
+            let _ = writeln!(
+                out,
+                "impl __KlEq for {} {{\n    fn __eq(&self, o: &Self) -> bool {{ Rc::ptr_eq(self, o) || self.borrow_mut().equals({}) }}\n}}",
+                ty,
+                arg(&Bound::Eq)
+            );
+        }
+        if self.m.class_has(cname, &Bound::Ord) {
+            let _ = writeln!(
+                out,
+                "impl __KlOrd for {} {{\n    fn __cmp(&self, o: &Self) -> std::cmp::Ordering {{\n        if Rc::ptr_eq(self, o) {{ std::cmp::Ordering::Equal }} else {{ self.borrow_mut().compare({}).cmp(&0) }}\n    }}\n}}",
+                ty,
+                arg(&Bound::Ord)
+            );
         }
     }
 
@@ -673,6 +853,16 @@ impl Gen<'_> {
             out.push_str("}\n");
         }
     }
+}
+
+/// `<T: Clone + 'static + Trait, ...>` for an impl of `Trait` on a generic type (empty when
+/// not generic).
+fn trait_params(tparams: &[String], tr: &str) -> String {
+    if tparams.is_empty() {
+        return String::new();
+    }
+    let b: Vec<String> = tparams.iter().map(|t| format!("{}: Clone + 'static + {}", t, tr)).collect();
+    format!("<{}>", b.join(", "))
 }
 
 /// The value a field starts with when it declares no default.

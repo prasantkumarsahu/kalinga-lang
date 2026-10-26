@@ -1,0 +1,3 @@
+tests/ui/errors/eq_missing.kl:6:19: error: `Dog` values cannot be compared with `==`; add `: Eq` to `Dog`
+6 |     println(Dog() == Dog())
+  |                   ^^
