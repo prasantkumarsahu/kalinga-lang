@@ -16,6 +16,8 @@ pub enum Tok {
     InterpStr(Vec<StrPart>),
     /// Raw Rust code of `= rust { ... }` (without the outer braces).
     RustBlock(String),
+    /// Raw JavaScript code of `= js { ... }` (without the outer braces).
+    JsBlock(String),
     Ident(String),
 
     // keywords
@@ -148,6 +150,7 @@ impl Tok {
             Tok::Float(n) => format!("number `{}`", n),
             Tok::Str(_) | Tok::InterpStr(_) => "string".to_string(),
             Tok::RustBlock(_) => "Rust block".to_string(),
+            Tok::JsBlock(_) => "JavaScript block".to_string(),
             Tok::Ident(s) => format!("`{}`", s),
             Tok::Newline => "end of line".to_string(),
             Tok::Eof => "end of file".to_string(),

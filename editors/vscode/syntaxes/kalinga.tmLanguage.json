@@ -17,6 +17,9 @@
       "include": "#rust-block"
     },
     {
+      "include": "#js-block"
+    },
+    {
       "include": "#declarations"
     },
     {
@@ -364,6 +367,45 @@
         },
         {
           "include": "source.rust"
+        }
+      ]
+    },
+    "js-block": {
+      "comment": "`extern fn f() -> int = js { ... }`: an inline JavaScript body (web builds)",
+      "begin": "(?<==)\\s*(js)\\s*(\\{)",
+      "beginCaptures": {
+        "1": {
+          "name": "storage.modifier.kalinga"
+        },
+        "2": {
+          "name": "punctuation.section.embedded.begin.kalinga"
+        }
+      },
+      "end": "\\}",
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.section.embedded.end.kalinga"
+        }
+      },
+      "contentName": "meta.embedded.block.javascript",
+      "patterns": [
+        {
+          "include": "#js-braces"
+        },
+        {
+          "include": "source.js"
+        }
+      ]
+    },
+    "js-braces": {
+      "begin": "\\{",
+      "end": "\\}",
+      "patterns": [
+        {
+          "include": "#js-braces"
+        },
+        {
+          "include": "source.js"
         }
       ]
     },

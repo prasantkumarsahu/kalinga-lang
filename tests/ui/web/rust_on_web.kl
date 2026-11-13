@@ -1,0 +1,6 @@
+// ui: web
+extern fn twice(x: int) -> int = rust { x * 2 }
+
+fn main() {
+    println(twice(2))
+}

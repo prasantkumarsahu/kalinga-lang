@@ -13,6 +13,7 @@ The pieces:
 | `use crate "rand" = "0.8"` | use a crates.io library (the build switches to `cargo`) |
 | `extern fn name(params) -> T` | a Rust function Kalinga can call |
 | `extern fn name(params) -> T = rust { ... }` | the same, with the Rust body written inline |
+| `extern fn name(params) -> T = js { ... }` | a JavaScript body, for web builds (see below) |
 | `extern type Name` | a Rust type Kalinga can hold and pass around |
 
 ## Calling a Rust function
@@ -222,6 +223,28 @@ The rest of the game is written in plain Kalinga against `window.kl`. This is ex
 `std/game` is made: `game.kl` declares friendly classes and `extern fn`s, and
 `game_glue.rs` calls macroquad. A utkal package can carry its own glue the same way.
 
+## JavaScript bodies (web builds)
+
+A web build (`kalinga run --web`, `kalinga build --web`) compiles to JavaScript instead of
+Rust, so Rust code cannot run there. An `extern fn` for the web gets a JavaScript body
+instead, with `= js { ... }`:
+
+```kalinga
+extern fn shout(s: str) -> str = js { return s.toUpperCase() + "!"; }
+
+extern fn parse_hex(s: str) -> Result<int, str> = js {
+    const n = parseInt(s, 16);
+    return Number.isNaN(n) ? $kl.err(`not hex: ${s}`) : $kl.ok(n);
+}
+```
+
+The parameters are JavaScript variables with the same names. Values cross like this:
+`int` and `float` are numbers, `str` is a string, `bool` a boolean, arrays are arrays, an
+optional is the value or `null`, and a `void` function returns nothing. A `Result` is built
+with `$kl.ok(value)` and `$kl.err(error)`. A `js { }` body runs only in a web build, and a
+web build has no Rust: there, `use rust`, `use crate` and `extern fn`s without a `js { }`
+body are errors, as are threads, channels, `Shared`, `input()`, `std/fs` and `std/game`.
+
 ## Shipping
 
 On Windows, programs are linked with the C runtime built in (`+crt-static`), so a built
@@ -234,6 +257,8 @@ programs that use crates as well.
   into Kalinga except through function values passed to it.
 - Crates come from crates.io (no git or path crates yet).
 - `extern fn`s cannot be generic.
+- A web build (`--web`) runs JavaScript, not Rust: there an `extern fn` needs a `js { ... }`
+  body, and `use rust` / `use crate` are errors.
 
 ---
 

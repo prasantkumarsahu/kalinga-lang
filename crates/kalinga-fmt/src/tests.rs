@@ -103,6 +103,13 @@ fn rust_bodies_and_operators_stay() {
 }
 
 #[test]
+fn js_bodies_stay() {
+    let input = "extern fn sum(xs: [int]) -> int = js {\n  let t = 0; // \"}\"\n  for (const x of xs) { t += x; }\n  return t;\n}\nfn main() {}\n";
+    let expected = "extern fn sum(xs: [int]) -> int = js {\n  let t = 0; // \"}\"\n  for (const x of xs) { t += x; }\n  return t;\n}\n\nfn main() {}\n";
+    check(input, expected);
+}
+
+#[test]
 fn strings_keep_their_text() {
     check(
         "fn main() {\n    println(\"a  {x+1}  \\n\",   \"{{}}\")\n}\n",

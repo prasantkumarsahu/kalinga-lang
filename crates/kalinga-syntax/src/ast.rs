@@ -199,6 +199,8 @@ pub struct ExternFn {
     pub path: Option<String>,
     /// `= rust { ... }`: an inline Rust body.
     pub body: Option<String>,
+    /// `= js { ... }`: an inline JavaScript body, for web builds.
+    pub js: Option<String>,
     pub pos: Span,
 }
 

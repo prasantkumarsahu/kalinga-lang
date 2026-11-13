@@ -1,0 +1,3 @@
+tests/ui/errors/js_extern_native.kl:1:1: error: `extern fn now_ms` has a `js { ... }` body, which runs only in a web build (`kalinga run --web`)
+1 | extern fn now_ms() -> float = js { return Date.now(); }
+  | ^^^^^^

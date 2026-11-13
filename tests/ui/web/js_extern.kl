@@ -1,0 +1,24 @@
+// ui: web
+// `extern fn ... = js { ... }`: the body is JavaScript, with the parameters as variables.
+
+extern fn shout(s: str) -> str = js { return s.toUpperCase() + "!"; }
+
+extern fn sum(xs: [int]) -> int = js {
+    // Braces in strings and comments do not end the body: "}" '}' `}` /* } */
+    let total = 0;
+    for (const x of xs) { total += x; }
+    return total;
+}
+
+extern fn parse_hex(s: str) -> Result<int, str> = js {
+    const n = parseInt(s, 16);
+    return Number.isNaN(n) ? $kl.err(`not hex: ${s}`) : $kl.ok(n);
+}
+
+extern fn maybe(n: int) -> int? = js { return n > 0 ? n : null; }
+
+fn main() {
+    println(shout("hi"), sum([1, 2, 3]))
+    println(parse_hex("ff"), parse_hex("zz"))
+    println(maybe(3), maybe(-1))
+}

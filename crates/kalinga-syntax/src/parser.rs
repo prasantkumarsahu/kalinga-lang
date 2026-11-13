@@ -319,7 +319,8 @@ impl Parser {
         Ok(features)
     }
 
-    /// `extern fn name(...) -> T [= "rust::path" | = rust { ... }]` or `extern type Name`.
+    /// `extern fn name(...) -> T [= "rust::path" | = rust { ... } | = js { ... }]` or
+    /// `extern type Name`.
     fn extern_decl(&mut self, prog: &mut Program) -> Result<()> {
         let pos = self.advance().pos;
         if self.check(&Tok::Fn) {
@@ -327,20 +328,24 @@ impl Parser {
             let (name, _) = self.ident("function name")?;
             let params = self.params()?;
             let ret = self.ret_type()?;
-            let (mut path, mut body) = (None, None);
+            let (mut path, mut body, mut js) = (None, None, None);
             if self.eat(&Tok::Assign) {
                 match self.advance().tok {
                     Tok::Str(p) => path = Some(p),
                     Tok::RustBlock(b) => body = Some(b),
+                    Tok::JsBlock(b) => js = Some(b),
                     other => {
                         return err(
-                            format!("expected a Rust path in quotes or `rust {{ ... }}`, found {}", other.describe()),
+                            format!(
+                                "expected a Rust path in quotes, `rust {{ ... }}` or `js {{ ... }}`, found {}",
+                                other.describe()
+                            ),
                             pos,
                         );
                     }
                 }
             }
-            prog.extern_fns.push(ExternFn { name, params, ret, path, body, pos });
+            prog.extern_fns.push(ExternFn { name, params, ret, path, body, js, pos });
         } else if self.peek() == &Tok::Ident("type".into()) {
             self.advance();
             let (name, npos) = self.ident("type name")?;

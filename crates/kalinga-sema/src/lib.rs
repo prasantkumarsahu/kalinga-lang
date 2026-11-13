@@ -15,6 +15,7 @@ pub mod tast;
 pub mod typeck;
 pub mod types;
 pub mod warnings;
+pub mod web;
 
 pub use model::*;
 pub use types::*;

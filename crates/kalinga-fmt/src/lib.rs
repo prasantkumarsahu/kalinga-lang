@@ -157,9 +157,9 @@ impl Formatter {
         self.out.push((format!("{}{}", "    ".repeat(indent), code), trailing));
         self.continues = line.iter().rev().find_map(Item::token).is_some_and(continues_expression);
         // A top-level declaration taking several lines ends here: a line that closes it,
-        // or a Rust body over several lines.
+        // or a Rust or JavaScript body over several lines.
         let last = line.iter().rev().find_map(Item::token);
-        let multiline_rust = matches!(last, Some(Tok::RustBlock(body)) if body.contains('\n'));
+        let multiline_rust = matches!(last, Some(Tok::RustBlock(body) | Tok::JsBlock(body)) if body.contains('\n'));
         self.closed_item = self.open.is_empty() && (leading_closers > 0 || multiline_rust);
         self.opened = matches!(last, Some(Tok::LBrace | Tok::LParen | Tok::LBracket | Tok::HashBracket));
     }

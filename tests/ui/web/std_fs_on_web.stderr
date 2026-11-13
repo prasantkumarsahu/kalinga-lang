@@ -1,0 +1,3 @@
+tests/ui/web/std_fs_on_web.kl:2:1: error: `std/fs` is not available in a web build
+2 | import "std/fs"
+  | ^^^^^^
