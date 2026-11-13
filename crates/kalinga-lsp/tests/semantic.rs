@@ -60,7 +60,7 @@ class User {
     }
 
     fn greet(other: str) -> str {
-        return self.name + other
+        return "{self.name} {other}"
     }
 }
 

@@ -97,17 +97,17 @@
         },
         {
           "name": "meta.interpolation.kalinga",
-          "contentName": "source.kalinga.embedded",
+          "contentName": "meta.embedded.line.kalinga",
           "begin": "\\{",
           "end": "\\}",
           "beginCaptures": {
             "0": {
-              "name": "punctuation.section.interpolation.begin.kalinga"
+              "name": "punctuation.section.embedded.begin.kalinga"
             }
           },
           "endCaptures": {
             "0": {
-              "name": "punctuation.section.interpolation.end.kalinga"
+              "name": "punctuation.section.embedded.end.kalinga"
             }
           },
           "patterns": [
