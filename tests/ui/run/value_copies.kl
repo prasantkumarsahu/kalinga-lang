@@ -1,0 +1,89 @@
+struct P {
+    var x: int
+    var y: int
+    mut fn bump() {
+        self.x += 1
+    }
+}
+
+class Bag {
+    var items: [int] = []
+    fn add(v: int) {
+        self.items.push(v)
+    }
+}
+
+fn first_even(xs: [int]) -> int? {
+    for x in xs {
+        if x % 2 == 0 {
+            return x
+        }
+    }
+    return none
+}
+
+fn double_first(xs: [int]) -> int? {
+    v = first_even(xs)?
+    return v * 2
+}
+
+fn parse_sum(a: str, b: str) -> Result<int, str> {
+    x = a.parse_int()
+    y = b.parse_int()
+    if x == none || y == none {
+        return Err("bad number")
+    }
+    if x = x {
+        if y = y {
+            return Ok(x + y)
+        }
+    }
+    return Err("none")
+}
+
+fn main() {
+    var a = [1, 2, 3]
+    var b = a
+    b.push(4)
+    println(a, b)
+    var p = P(1, 2)
+    var q = p
+    q.bump()
+    println(p.x, q.x)
+    var ps = [P(0, 0), P(5, 5)]
+    ps[1].bump()
+    ps[0].x = 9
+    println(ps[0].x, ps[1].x)
+    var m = {"b": 2, "a": 1}
+    m["c"] = 3
+    m["a"] += 10
+    println(m)
+    bx = Bag()
+    bx2 = bx
+    bx2.add(7)
+    println(bx.items)
+    println(double_first([1, 3, 4]), double_first([1, 3]))
+    println(parse_sum("1", "2"), parse_sum("x", "2"))
+    var n = 0
+    inc = fn() { n += 1 }
+    inc()
+    inc()
+    println(n)
+    var k = 5
+    get = fn() -> int { return k }
+    k = 6
+    println(get())
+    println(7 / 2, -7 / 2, -7 % 3, 7.0 / 2.0, 1.0)
+    var t = (1, "two")
+    println(t, t.1)
+    var grid = [[1, 2], [3, 4]]
+    grid[1][0] = 30
+    println(grid)
+    for i, c in "héllo" {
+        if i == 1 {
+            println(c)
+        }
+    }
+    words = "a,b,c".split(",")
+    println(words, words.join("-"), len("héllo"))
+}
