@@ -29,7 +29,8 @@ Everything here is new; code written for 0.6.1 compiles and does the same thing.
   read-only `let` or `var`, property, method, class, struct, interface, enum, variant,
   constant, built-in), and the grammar colours plain variables and parameters before it
   answers.
-- Code inside a string's `{...}` is coloured as code (braces marked, names coloured), and
+- Code inside a string's `{...}` is coloured as code (braces marked, names and bracket
+  pairs coloured), and
   hover, go-to-definition and rename find names there instead of a later name with the
   same spelling.
 
