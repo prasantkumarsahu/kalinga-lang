@@ -124,8 +124,13 @@ a compile error (or a wrong result) if missed.
   does not end the line. There is no `printf`, `console.log` or `puts`.
 - Interpolation is `"{expr}"` (not `${}` or `\(...)`); write `{{` and `}}` for braces.
 - `+` joins two `str`s only: `"n = " + str(n)`, or better `"n = {n}"`.
-- Objects (class instances) cannot be printed or put into strings; print a field or a
-  method's result. Structs and enums print when their contents do (`Point(x: 1, y: 2)`).
+- Objects (class instances) print only when their class lists `Show`
+  (`class Dog : Show`), which generates `as_str() -> str` (`Dog(name: Rex, age: 3)`);
+  `override fn as_str() -> str` customises it. Otherwise print a field or a method's result.
+  Structs and enums print when their contents do (`Point(x: 1, y: 2)`).
+- `==` on objects needs `: Eq` (generated `equals(other: Dog) -> bool`), and `<` / `sort`
+  need `: Ord` (generated `compare(other: Dog) -> int`); both can be overridden. Structs may
+  list `Show`, `Eq`, `Ord` too (`struct Version : Ord`).
 
 **Variables and types**
 - `let` is immutable, `var` is mutable; types follow a colon: `var total: float = 0.0`.
@@ -171,6 +176,10 @@ a compile error (or a wrong result) if missed.
   methods may have a default body (`fn greet() -> str { return "hi {self.name()}" }`), which
   classes get unless they override it. A subclass
   `init` calls `super(args)` first when the base has an `init`.
+- `private(set) balance: int` is readable anywhere but changed only inside its class or
+  struct.
+- `#[deprecated("use g")]` on the line before a declaration makes each use a warning (the
+  program still builds). It is the only attribute.
 - `private` members, `static fn` (called `Type.f()`), `const NAME: T = v` and
   `static var name: T = v` members (used as `Type.NAME`). There are no global variables.
 - Classes are references (shared); `struct`s are values, copied on assignment, with

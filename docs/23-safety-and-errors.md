@@ -63,6 +63,13 @@ Common compile errors and what to do:
 | `` `f` has no parameter `x` `` / `named arguments follow the parameter order` | A misspelt or reordered named argument | Use the parameter's name, in order |
 | `constants are written `const NAME: Type = value`` | 0.4's `static NAME: T = v` | `kalinga fix` rewrites it |
 
+### Warnings
+
+A warning points at something that still works but should change, such as using code
+marked `#[deprecated]` (see [Functions](04-functions.md#deprecating-a-function)). Warnings
+are printed like errors, with `warning:`, but the program still builds and runs, and
+`kalinga check` still succeeds. They are shown only when there are no errors.
+
 ## Runtime errors
 
 Some problems can only be detected while the program runs. Kalinga stops the program

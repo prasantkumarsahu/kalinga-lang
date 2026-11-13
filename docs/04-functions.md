@@ -272,6 +272,38 @@ Ravi is 25
 - There are no global variables to change; use a `const` for a fixed value and a
   `static var` member for shared state (see [Classes](09-classes.md#constants-and-static-variables)).
 
+## Deprecating a function
+
+`#[deprecated]` on the line before a function marks it as on its way out: it still works,
+but every use is a warning, with the message if one is given. The program still builds and
+runs. It also works on classes, structs, interfaces, enums, constants, fields and methods:
+
+```kalinga
+#[deprecated("use `greet` instead")]
+fn hello() -> str {
+    return "hello"
+}
+
+fn greet() -> str {
+    return "hi"
+}
+
+fn main() {
+    println(hello())
+}
+```
+
+```console
+$ kalinga run main.kl
+main.kl:11:13: warning: `hello` is deprecated: use `greet` instead
+11 |     println(hello())
+   |             ^^^^^
+hello
+```
+
+Editors show the use struck through. A `///` doc comment goes above the `#[...]` line.
+`deprecated` is the only attribute so far; others are an error.
+
 ---
 
 Previous: [3. Control Flow](03-control-flow.md) · Next: [5. Arrays and Strings](05-arrays-and-strings.md)

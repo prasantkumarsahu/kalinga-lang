@@ -1,5 +1,34 @@
 # Changelog
 
+## Unreleased
+
+Everything here is new; code written for 0.6.1 compiles and does the same thing.
+
+### Language
+- **Default methods in interfaces**: an interface method may have a body; classes get it
+  unless they write `override fn`. See [Interfaces](docs/11-interfaces.md#default-methods).
+- **Printing objects**: `class Dog : Show` gives objects a printed form generated from the
+  fields (`Dog(name: Rex, age: 3)`), used by `println`, `str`, `"{...}"` and `T: Show`;
+  `override fn as_str() -> str` changes it. See [Classes](docs/09-classes.md#printing-objects-show).
+- **Comparing objects**: `: Eq` gives `==` / `contains` / `assert_eq` through a generated
+  `equals(other)`, `: Ord` gives `<` / `sort` through `compare(other)`; both can be
+  overridden. See [Classes](docs/09-classes.md#comparing-objects-eq-and-ord).
+- **Structs** may list `Show`, `Eq` and `Ord` (`struct Version : Ord`). See
+  [Structs](docs/14-structs-and-operators.md#show-eq-and-ord).
+- **`private(set)` fields**: readable everywhere, changed only inside their class or struct.
+- **Attributes and warnings**: `#[deprecated("use g")]` before a declaration makes every
+  use a warning; warnings do not stop the build. See
+  [Functions](docs/04-functions.md#deprecating-a-function).
+- A program's own type named `Show`, `Eq` or `Ord` still means that type after `:`.
+
+### Editor (VS Code extension)
+- Uses of deprecated code are struck-through warnings; hover shows the deprecation note
+  and `private(set)`. Completion lists generated `as_str`, `equals`, `compare` and
+  interface default methods. `#[...]` and `private(set)` are highlighted.
+
+### Fixes
+- Completion no longer crashes on a `match` header broken over lines.
+
 ## 0.6.1
 
 Fixes only: no new syntax, nothing that changes what working code does.

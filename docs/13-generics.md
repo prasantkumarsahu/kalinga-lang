@@ -167,9 +167,9 @@ the generic code may do with it:
 
 | Bound | Allows | Types that have it |
 |---|---|---|
-| `Show` | printing: `println(x)`, `str(x)`, `"{x}"` | numbers, `bool`, `str`, and arrays, maps, optionals, plain structs and enums of them |
-| `Eq` | `==`, `!=`, `contains`, `assert_eq` (with `Show`) | the same |
-| `Ord` | `<`, `<=`, `>`, `>=`, `sort` (and `==`) | `int`, `float`, `str`, `bool` |
+| `Show` | printing: `println(x)`, `str(x)`, `"{x}"` | numbers, `bool`, `str`, classes and structs with `: Show`, and arrays, maps, optionals, structs and enums of them |
+| `Eq` | `==`, `!=`, `contains`, `assert_eq` (with `Show`) | the same, with classes and structs that have `: Eq` (or `: Ord`) |
+| `Ord` | `<`, `<=`, `>`, `>=`, `sort` (and `==`) | `int`, `float`, `str`, `bool`, classes and structs with `: Ord` |
 | an interface | calling its methods, passing the value where the interface is expected | classes that implement it, and the interface itself |
 
 ```kalinga

@@ -227,6 +227,167 @@ error: field `balance` is private to `Account`
 
 Subclasses cannot use their base class's private members either.
 
+### Read-only from outside: `private(set)`
+
+A `private(set)` field can be read from anywhere, but only the class's own methods can
+change it (assign it, `+=` it, or change it in place, as with `push`). It saves writing a
+getter:
+
+```kalinga
+class Account {
+    owner: str
+    private(set) balance: int = 0
+    private(set) history: [int] = []
+
+    init(owner: str) {
+        self.owner = owner
+    }
+
+    fn deposit(amount: int) {
+        self.balance += amount
+        self.history.push(amount)
+    }
+}
+
+fn main() {
+    let a = Account("Ravi")
+    a.deposit(50)
+    a.deposit(25)
+    println("{a.owner}: {a.balance} {a.history}")
+}
+```
+
+```text
+Ravi: 75 [50, 25]
+```
+
+Changing it from outside is a compile error, and so is changing it from a subclass:
+
+```text
+error: `balance` can only be changed inside `Account` (it is `private(set)`)
+```
+
+Struct fields can be `private(set)` too; only the struct's own `mut fn` methods change them.
+
+## Printing objects: `Show`
+
+Objects cannot be printed until their class says how. List the built-in interface `Show`
+after `:` and the class gets an `as_str() -> str` method, written by the compiler from its
+fields. `println`, `str(...)`, `"{...}"` and `assert_eq` then use it, also for arrays,
+optionals and maps of the objects, and for structs and enums holding them:
+
+```kalinga
+class Dog : Show {
+    name: str
+    age: int
+
+    init(name: str, age: int) {
+        self.name = name
+        self.age = age
+    }
+}
+
+class Point : Show {
+    x: int
+    y: int
+
+    init(x: int, y: int) {
+        self.x = x
+        self.y = y
+    }
+
+    override fn as_str() -> str {
+        return "({self.x}, {self.y})"
+    }
+}
+
+fn main() {
+    let rex = Dog("Rex", 3)
+    println(rex)
+    println("my dog: {rex}")
+    println([Point(1, 2), Point(3, 4)])
+}
+```
+
+```text
+Dog(name: Rex, age: 3)
+my dog: Dog(name: Rex, age: 3)
+[(1, 2), (3, 4)]
+```
+
+- The generated text is the class name and every field (base class fields first), each
+  shown as `println` would show it.
+- `override fn as_str() -> str` replaces it. A subclass inherits `Show`; without its own
+  `as_str` it gets a generated one with its own name and fields, and an override may call
+  `super.as_str()`.
+- Every field must be printable for the generated `as_str` (objects need `Show` too), and a
+  class whose fields can lead back to an object of the same class (a linked list, a tree)
+  must write its own `as_str`, since the generated one could never finish.
+- Inside the class's own methods, print `self.as_str()`, not `self`: printing `self` while
+  one of its methods runs uses the object twice (see
+  [re-entrant objects](23-safety-and-errors.md#re-entrant-objects)).
+- A program that declares its own type named `Show`, `Eq` or `Ord` keeps meaning that
+  type after `:`.
+
+## Comparing objects: `Eq` and `Ord`
+
+`==` on objects is a compile error until the class lists `Eq`; then it gets
+`equals(other) -> bool`, which compares every field. With `Ord` it also gets
+`compare(other) -> int` (negative, zero or positive), comparing the fields in order, and
+works with `<`, `<=`, `>`, `>=` and `sort`. `Ord` includes `Eq`. Either method can be
+overridden:
+
+```kalinga
+class Version : Show, Ord {
+    major: int
+    minor: int
+
+    init(major: int, minor: int) {
+        self.major = major
+        self.minor = minor
+    }
+}
+
+class User : Eq {
+    id: int
+    name: str
+
+    init(id: int, name: str) {
+        self.id = id
+        self.name = name
+    }
+
+    // The same user whatever the name.
+    override fn equals(other: User) -> bool {
+        return self.id == other.id
+    }
+}
+
+fn main() {
+    println(Version(1, 2) == Version(1, 2))
+    println(Version(1, 2) < Version(1, 10))
+    var versions = [Version(1, 10), Version(0, 9), Version(1, 2)]
+    versions.sort()
+    println(versions)
+    println(User(1, "Ann") == User(1, "Annie"))
+    println([User(2, "Bo")].contains(User(2, "Bob")))
+}
+```
+
+```text
+true
+true
+[Version(major: 0, minor: 9), Version(major: 1, minor: 2), Version(major: 1, minor: 10)]
+true
+true
+```
+
+- `==`, `!=`, `contains`, `assert_eq` and `<T: Eq>` use `equals`; `<`, `sort` and
+  `<T: Ord>` use `compare`. The same object is always equal to itself.
+- `other` has the type of the class that lists `Eq` / `Ord`; subclasses inherit its
+  `equals` and `compare`, and may override them with the same signature.
+- The generated methods need fields that can be compared (`Eq`) or ordered (`Ord`).
+
 ## Static methods
 
 A `static fn` belongs to the class itself, not to an object. It has no `self` and is
@@ -399,7 +560,10 @@ stored inline, and supports operators.
 ## Rules at a glance
 
 - Class names start with an uppercase letter.
-- Fields and methods are public unless marked `private`.
+- Fields and methods are public unless marked `private`; `private(set)` fields are
+  readable everywhere and changed only inside the class.
+- `: Show`, `: Eq` and `: Ord` make objects printable and comparable (`as_str`, `equals`,
+  `compare`, generated from the fields unless overridden).
 - `static fn` methods are called as `ClassName.method(...)` and have no `self`.
 - A field and a method may share a name; the `()` decides which is meant.
 - Two fields, or two methods, with the same name in one class are an error.

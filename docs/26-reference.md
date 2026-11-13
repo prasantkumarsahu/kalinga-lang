@@ -15,7 +15,8 @@ chapters linked from the [docs index](README.md).
 | Element | Form |
 |---|---|
 | Line comment | `// ...` |
-| Doc comment | `/// ...` directly above a declaration; Markdown; shown by editors |
+| Doc comment | `/// ...` directly above a declaration (or its attributes); Markdown; shown by editors |
+| Attribute | `#[name]` or `#[name("text")]` on the line before a declaration; only `#[deprecated]` / `#[deprecated("message")]` exists |
 | Block comment | `/* ... */` (not nested) |
 | Identifier | letter or `_`, then letters, digits, `_`; must not start with `__` |
 | Integer | `123`, `1_000_000` (64-bit; `_` ignored) |
@@ -136,8 +137,8 @@ import "FILE.kl"                                     a file, relative to this on
 import "std/MODULE"                                  a standard module
 import "PACKAGE[/FILE]" [as ALIAS]                   a utkal package; ALIAS.Name
 
-[abstract] class NAME[<T, ...>] [: BASE_OR_INTERFACE, ...] {
-    [private] FIELD: TYPE [= EXPR]
+[abstract] class NAME[<T, ...>] [: BASE_OR_INTERFACE, ...] {   also Show, Eq, Ord
+    [private | private(set)] FIELD: TYPE [= EXPR]       private(set): changed only inside
     const NAME: TYPE = EXPR                          a constant, used as Class.NAME
     static var NAME: TYPE = EXPR                     one variable for the class, Class.NAME
     init(PARAM, ...) { ... }                         at most one
@@ -145,16 +146,23 @@ import "PACKAGE[/FILE]" [as ALIAS]                   a utkal package; ALIAS.Name
     [private] static async fn NAME(PARAM, ...) [-> TYPE] { ... }
     [private] override fn NAME(PARAM, ...) [-> TYPE] { ... }   from a base class or interface
     abstract fn NAME(PARAM, ...) [-> TYPE]           abstract classes only
+    override fn as_str() -> str { ... }              with Show (else generated from fields)
+    override fn equals(other: C) -> bool { ... }     with Eq or Ord (else generated)
+    override fn compare(other: C) -> int { ... }     with Ord (else generated)
 }
 
-struct NAME[<T, ...>] {
-    [private] FIELD: TYPE [= EXPR]
+struct NAME[<T, ...>] [: Show | Eq | Ord, ...] {      only these built-in interfaces
+    [private | private(set)] FIELD: TYPE [= EXPR]
     const NAME: TYPE = EXPR                          a constant, used as Struct.NAME
     static var NAME: TYPE = EXPR                     one variable for the struct, Struct.NAME
     [private] [static] fn NAME(PARAM, ...) [-> TYPE] { ... }
     [private] mut fn NAME(PARAM, ...) [-> TYPE] { ... }     may change `self`
     op OPERATOR(PARAM) -> TYPE { ... }               + - * / %; `op -()` is unary minus
+    override fn as_str / equals / compare            as for classes
 }
+
+#[deprecated("MESSAGE")]                             before any declaration or member:
+fn NAME(...) { ... }                                 each use is a warning
 
 use rust "FILE.rs"
 use crate "NAME" = "VERSION" [features ["FEATURE", ...]]
@@ -245,17 +253,20 @@ Library functions: `Math.*`, `Random.*` and `Time.*` (chapter 15), `Time.wait(s)
 | `[1, 2]`, `["a"]` | `[1, 2]`, `[a]` |
 | an `int?` holding `none` / `5` | `none` / `5` |
 | `Ok(3)`, `Err("no")` | `Ok(3)`, `Err(no)` |
+| an object whose class has `: Show` | its `as_str()`: `Dog(name: Rex, age: 3)` unless overridden |
+| an object without `Show` | not printable (compile error) |
 
 ## Grammar (EBNF)
 
 ```text
-program     = { import | use | extern | function | test | class | struct | interface | enum | const } ;
+program     = { import | use | extern | { attribute } ( function | class | struct | interface | enum | const ) | test } ;
+attribute   = "#[" IDENT [ "(" [ STRING { "," STRING } ] ")" ] "]" ;   (* before items and members *)
 test        = "test" "fn" IDENT "(" ")" block ;
 const       = "const" IDENT ":" type "=" expr ;
 import      = "import" STRING [ "as" IDENT ] ;
 use         = "use" ( "rust" STRING | "crate" STRING "=" STRING [ "features" "[" STRING { "," STRING } "]" ] ) ;
 extern      = "extern" ( "type" IDENT | "fn" IDENT params [ "->" type ] [ "=" ( STRING | "rust" RUST_BLOCK ) ] ) ;
-struct      = "struct" IDENT [ tparams ] "{" { { modifier } IDENT ":" type [ "=" expr ]
+struct      = "struct" IDENT [ tparams ] [ ":" IDENT { "," IDENT } ] "{" { { modifier } IDENT ":" type [ "=" expr ]
             | const | "static" "var" IDENT ":" type "=" expr
             | [ "mut" ] { modifier } "fn" IDENT params [ "->" type ] block
             | "op" ( "+" | "-" | "*" | "/" | "%" ) params "->" type block } "}" ;
@@ -270,7 +281,7 @@ member      = { modifier } IDENT ":" type [ "=" expr ]
             | "init" params block
             | const | "static" "var" IDENT ":" type "=" expr
             | { modifier } "fn" IDENT params [ "->" type ] ( block | (* abstract *) ) ;
-modifier    = "private" | "static" | "abstract" | "override" | "async" ;
+modifier    = "private" | "private" "(" "set" ")" | "static" | "abstract" | "override" | "async" ;
 interface   = "interface" IDENT [ tparams ] [ ":" base_ref { "," base_ref } ] "{" { "fn" IDENT params [ "->" type ] [ block ] } "}" ;
 enum        = "enum" IDENT [ tparams ] "{" variant { [ "," ] variant } "}" ;
 variant     = IDENT [ params ] ;
@@ -319,7 +330,9 @@ Inheritance with generic classes (and generic classes implementing interfaces), 
 parameters on interface methods, operators on classes, mutable global variables (use a
 `static var` member), `async` instance methods, `await` inside lambdas, sharing objects
 between threads, a package registry, tuples in `match` patterns, exceptions
-(`try`/`catch`; use `Result`).
+(`try`/`catch`; use `Result`), `Show` / `Eq` / `Ord` on generic classes and structs,
+`Show` / `Eq` / `Ord` as value types (`[Show]`; use a bound `<T: Show>`), attributes other
+than `#[deprecated]`.
 
 ---
 
