@@ -176,8 +176,9 @@ fn spaced(a: &Item, ra: Role, b: &Item, rb: Role) -> bool {
     if rb == Role::Spaced {
         return true;
     }
-    let tight_after = matches!(ta, Tok::LParen | Tok::LBracket | Tok::Dot | Tok::DotDot | Tok::DotDotEq)
-        || matches!(ra, Role::Unary | Role::GenericOpen | Role::MapOpen);
+    let tight_after =
+        matches!(ta, Tok::LParen | Tok::LBracket | Tok::HashBracket | Tok::Dot | Tok::DotDot | Tok::DotDotEq)
+            || matches!(ra, Role::Unary | Role::GenericOpen | Role::MapOpen);
     let tight_before =
         matches!(tb, Tok::RParen | Tok::RBracket | Tok::Comma | Tok::Dot | Tok::Question | Tok::Colon | Tok::Semi)
             || matches!(tb, Tok::DotDot | Tok::DotDotEq)

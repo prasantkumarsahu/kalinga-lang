@@ -4,7 +4,8 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::rc::Rc;
 
-use lsp_types::{Diagnostic, DiagnosticSeverity, Position, Range, Url};
+use kalinga_syntax::error::Severity;
+use lsp_types::{Diagnostic, DiagnosticSeverity, DiagnosticTag, Position, Range, Url};
 
 use crate::snapshot::Snapshot;
 use crate::text;
@@ -130,9 +131,12 @@ impl World {
                     }
                     import_line(root, base)
                 };
+                let warning = d.severity == Severity::Warning;
                 Diagnostic {
                     range,
-                    severity: Some(DiagnosticSeverity::ERROR),
+                    severity: Some(if warning { DiagnosticSeverity::WARNING } else { DiagnosticSeverity::ERROR }),
+                    // The only warnings so far are uses of deprecated code: shown struck through.
+                    tags: warning.then(|| vec![DiagnosticTag::DEPRECATED]),
                     source: Some("kalinga".into()),
                     message,
                     ..Diagnostic::default()

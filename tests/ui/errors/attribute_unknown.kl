@@ -1,0 +1,6 @@
+#[depricated]
+fn old() {
+}
+
+fn main() {
+}

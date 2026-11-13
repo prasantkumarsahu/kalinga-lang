@@ -31,6 +31,7 @@ impl Model {
         let mut rules = vec![];
         let declared = (|| {
             let mut m = Model::empty(type_names(prog)?);
+            m.declare_attributes(prog)?;
             m.declare_enums(prog)?;
             m.declare_structs(prog)?;
             m.check_value_types(prog)?;
@@ -80,6 +81,7 @@ impl Model {
             structs: HashMap::new(),
             struct_order: vec![],
             plain_structs: HashSet::new(),
+            deprecated: HashMap::new(),
             show_enums: HashSet::new(),
             show_structs: HashSet::new(),
             eq_enums: HashSet::new(),
@@ -215,6 +217,56 @@ impl Model {
                 break;
             }
         }
+    }
+
+    /// Checks every `#[...]` (only `deprecated`, with at most one message, exists) and
+    /// records what is deprecated.
+    fn declare_attributes(&mut self, prog: &Program) -> Result<()> {
+        use crate::index::Symbol;
+        let member = |owner: &str, name: &str| Symbol::Member { owner: owner.to_string(), name: name.to_string() };
+        let mut marked: Vec<(Symbol, &[Attribute])> = vec![];
+        for f in &prog.functions {
+            marked.push((Symbol::Function(f.name.clone()), &f.attrs));
+        }
+        for c in &prog.consts {
+            marked.push((Symbol::Const(c.name.clone()), &c.attrs));
+        }
+        for e in &prog.enums {
+            marked.push((Symbol::Type(e.name.clone()), &e.attrs));
+        }
+        for i in &prog.interfaces {
+            marked.push((Symbol::Type(i.name.clone()), &i.attrs));
+            marked.extend(i.methods.iter().map(|m| (member(&i.name, &m.name), m.attrs.as_slice())));
+        }
+        for c in &prog.classes {
+            marked.push((Symbol::Type(c.name.clone()), &c.attrs));
+            marked.extend(c.fields.iter().map(|f| (member(&c.name, &f.name), f.attrs.as_slice())));
+            marked.extend(c.methods.iter().map(|f| (member(&c.name, &f.name), f.attrs.as_slice())));
+            marked.extend(c.statics.iter().map(|f| (member(&c.name, &f.name), f.attrs.as_slice())));
+        }
+        for s in &prog.structs {
+            marked.push((Symbol::Type(s.name.clone()), &s.attrs));
+            marked.extend(s.fields.iter().map(|f| (member(&s.name, &f.name), f.attrs.as_slice())));
+            marked.extend(s.methods.iter().map(|f| (member(&s.name, &f.name), f.attrs.as_slice())));
+            marked.extend(s.statics.iter().map(|f| (member(&s.name, &f.name), f.attrs.as_slice())));
+        }
+        for (symbol, attrs) in marked {
+            let mut seen = HashSet::new();
+            for a in attrs {
+                if a.name != "deprecated" {
+                    let what = format!("unknown attribute `{}`", a.name);
+                    return crate::suggest::unknown(what, a.pos, &a.name, ["deprecated"]);
+                }
+                if !seen.insert(a.name.as_str()) {
+                    return err(format!("`#[{}]` is written twice", a.name), a.pos);
+                }
+                if a.args.len() > 1 {
+                    return err("`#[deprecated]` takes at most one message: `#[deprecated(\"use g\")]`", a.pos);
+                }
+                self.deprecated.insert(symbol.clone(), a.args.first().cloned());
+            }
+        }
+        Ok(())
     }
 
     /// Like `find_plain_types`, for printing only: enums and structs can also hold objects

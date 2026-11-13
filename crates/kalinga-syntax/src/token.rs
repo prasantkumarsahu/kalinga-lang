@@ -61,6 +61,8 @@ pub enum Tok {
     RBrace,
     LBracket,
     RBracket,
+    /// `#[`, which starts an attribute: `#[deprecated("use g")]`.
+    HashBracket,
     Comma,
     Dot,
     DotDot,
@@ -195,6 +197,7 @@ impl Tok {
             Tok::LBrace => "{",
             Tok::RBrace => "}",
             Tok::LBracket => "[",
+            Tok::HashBracket => "#[",
             Tok::RBracket => "]",
             Tok::Comma => ",",
             Tok::Dot => ".",

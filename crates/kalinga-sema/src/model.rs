@@ -241,6 +241,8 @@ pub struct Model {
     pub eq_enums: HashSet<String>,
     pub eq_structs: HashSet<String>,
     pub names: TypeNames,
+    /// Declarations marked `#[deprecated]`, with the message, if any.
+    pub deprecated: HashMap<crate::index::Symbol, Option<String>>,
 }
 
 pub const BUILTINS: &[&str] =

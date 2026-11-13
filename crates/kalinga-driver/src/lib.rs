@@ -152,6 +152,8 @@ pub fn analyze(file: &str, source: &str, open: &HashMap<PathBuf, String>) -> Ana
     if let Some(model) = model {
         let (typed, index) = kalinga_sema::typeck::analyze(&program, &model);
         out.diagnostics.extend(typed.err().unwrap_or_default());
+        let warnings = kalinga_sema::warnings::warnings(&program, &model, &index);
+        out.diagnostics.extend(warnings.into_iter().map(|(d, name)| on_name(&out.sources, d, &name)));
         out.index = index;
         out.model = Some(model);
     }
@@ -364,10 +366,15 @@ fn compile(file: &str, source: &str, purpose: Purpose) -> Result<(String, Native
         Ok(m) => m,
         Err(d) => return Err(DriverError::compile(map, d)),
     };
-    let typed = match kalinga_sema::typeck::check(&program, &model) {
+    let (typed, index) = kalinga_sema::typeck::analyze(&program, &model);
+    let typed = match typed {
         Ok(t) => t,
         Err(ds) => return Err(DriverError::compile_all(map, ds)),
     };
+    // Warnings do not stop the build; they are shown only when there are no errors.
+    for (d, name) in kalinga_sema::warnings::warnings(&program, &model, &index) {
+        eprintln!("{}", map.render(&on_name(&map, d, &name)));
+    }
     let files: Vec<String> = map.files.iter().map(|(name, _)| name.clone()).collect();
     let target = kalinga_codegen::Target { tests: purpose == Purpose::Tests, files: &files };
     let rust = kalinga_codegen::generate(&program, &model, &typed, &target);
@@ -377,6 +384,28 @@ fn compile(file: &str, source: &str, purpose: Purpose) -> Result<(String, Native
         main_thread: program.main_thread,
     };
     Ok((rust, native))
+}
+
+/// `d` moved onto the first `name` at or after where it points (a use is recorded where its
+/// expression starts: `dog.bark()` starts at `dog`).
+fn on_name(map: &SourceMap, mut d: Diagnostic, name: &str) -> Diagnostic {
+    if d.span.line == 0 || d.span.file as usize >= map.len() {
+        return d;
+    }
+    let (_, text) = map.file(d.span.file);
+    let Some(line) = text.lines().nth(d.span.line - 1) else { return d };
+    let chars: Vec<char> = line.chars().collect();
+    let want: Vec<char> = name.chars().collect();
+    let ident = |c: &char| c.is_alphanumeric() || *c == '_';
+    for i in d.span.col.saturating_sub(1)..chars.len() {
+        let whole = (i == 0 || !ident(&chars[i - 1])) && !chars.get(i + want.len()).is_some_and(ident);
+        if chars[i..].starts_with(&want) && whole {
+            d.span.col = i + 1;
+            d.span.len = want.len();
+            break;
+        }
+    }
+    d
 }
 
 fn stem(path: &Path) -> String {

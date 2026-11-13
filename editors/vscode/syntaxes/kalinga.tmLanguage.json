@@ -8,6 +8,9 @@
       "include": "#comments"
     },
     {
+      "include": "#attributes"
+    },
+    {
       "include": "#strings"
     },
     {
@@ -36,6 +39,30 @@
     }
   ],
   "repository": {
+    "attributes": {
+      "comment": "`#[deprecated(\"use g\")]` before a declaration",
+      "begin": "(#\\[)\\s*([A-Za-z_][A-Za-z0-9_]*)",
+      "beginCaptures": {
+        "1": {
+          "name": "punctuation.definition.annotation.kalinga"
+        },
+        "2": {
+          "name": "entity.name.function.decorator.kalinga"
+        }
+      },
+      "end": "\\]",
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.definition.annotation.kalinga"
+        }
+      },
+      "name": "meta.annotation.kalinga",
+      "patterns": [
+        {
+          "include": "#strings"
+        }
+      ]
+    },
     "comments": {
       "patterns": [
         {

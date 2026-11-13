@@ -4,13 +4,13 @@ use crate::token::{StrPart, Tok, Token};
 
 /// Parses a file's tokens; all syntax errors are reported, one per declaration.
 pub fn parse(tokens: Vec<Token>) -> std::result::Result<Program, Vec<Diagnostic>> {
-    Parser { tokens, i: 0 }.program()
+    Parser { tokens, i: 0, pending: vec![] }.program()
 }
 
 /// Parses the expression inside a `{...}` string interpolation.
 fn parse_embedded(code: &str, at: Span) -> Result<Expr> {
     let tokens = crate::lexer::lex_at(code, at)?;
-    let mut p = Parser { tokens, i: 0 };
+    let mut p = Parser { tokens, i: 0, pending: vec![] };
     let e = p.expr()?;
     p.skip_newlines();
     if !p.check(&Tok::Eof) {
@@ -34,6 +34,8 @@ struct Mods {
 struct Parser {
     tokens: Vec<Token>,
     i: usize,
+    /// Attributes read before the declaration being parsed, which takes them.
+    pending: Vec<Attribute>,
 }
 
 impl Parser {
@@ -114,8 +116,9 @@ impl Parser {
         let mut errors = vec![];
         self.skip_newlines();
         while !self.check(&Tok::Eof) {
-            if let Err(e) = self.item(&mut prog) {
+            if let Err(e) = self.item(&mut prog).and_then(|()| self.no_pending()) {
                 errors.push(e);
+                self.pending.clear();
                 self.skip_to_next_item();
             }
             self.skip_newlines();
@@ -132,6 +135,7 @@ impl Parser {
             let starts_item = matches!(
                 self.peek(),
                 Tok::Fn
+                    | Tok::HashBracket
                     | Tok::Async
                     | Tok::Class
                     | Tok::Abstract
@@ -151,8 +155,51 @@ impl Parser {
         }
     }
 
+    /// `#[name]` / `#[name("text", ...)]` lines, kept for the declaration that follows.
+    fn attributes(&mut self) -> Result<()> {
+        self.no_pending()?;
+        while self.check(&Tok::HashBracket) {
+            self.advance();
+            let (name, pos) = self.ident("an attribute name, like `deprecated`")?;
+            let mut args = vec![];
+            if self.eat(&Tok::LParen) {
+                while !self.check(&Tok::RParen) {
+                    match self.advance().tok {
+                        Tok::Str(s) => args.push(s),
+                        other => {
+                            return err(
+                                format!("attribute arguments are plain strings in quotes, found {}", other.describe()),
+                                pos,
+                            );
+                        }
+                    }
+                    if !self.eat(&Tok::Comma) {
+                        break;
+                    }
+                }
+                self.expect(Tok::RParen, "`)`")?;
+            }
+            self.expect(Tok::RBracket, "`]` to close the attribute")?;
+            self.skip_newlines();
+            self.pending.push(Attribute { name, args, pos });
+        }
+        Ok(())
+    }
+
+    /// Attributes not taken by a declaration: they were written before something else.
+    fn no_pending(&self) -> Result<()> {
+        match self.pending.first() {
+            Some(a) => err(
+                "an attribute goes right before a `fn`, `class`, `struct`, `interface`, `enum`, `const` or field",
+                a.pos,
+            ),
+            None => Ok(()),
+        }
+    }
+
     /// One top-level declaration.
     fn item(&mut self, prog: &mut Program) -> Result<()> {
+        self.attributes()?;
         match self.peek() {
             Tok::Fn => prog.functions.push(self.function(Mods::default())?),
             Tok::Async => {
@@ -324,6 +371,7 @@ impl Parser {
         if mods.is_private_set {
             return err("`private(set)` is only for fields; write `private fn` for a private method", self.pos());
         }
+        let attrs = std::mem::take(&mut self.pending);
         let pos = self.expect(Tok::Fn, "`fn`")?;
         let (name, _) = self.ident("function name")?;
         let (tparams, bounds) = self.tparams()?;
@@ -340,6 +388,7 @@ impl Parser {
         };
         Ok(FnDecl {
             name,
+            attrs,
             tparams,
             bounds,
             params,
@@ -510,6 +559,7 @@ impl Parser {
     }
 
     fn class(&mut self, is_abstract: bool) -> Result<ClassDecl> {
+        let attrs = std::mem::take(&mut self.pending);
         let pos = self.expect(Tok::Class, "`class`")?;
         let (name, _) = self.ident("class name")?;
         let (tparams, bounds) = self.tparams()?;
@@ -517,6 +567,7 @@ impl Parser {
         self.expect(Tok::LBrace, "`{` to start class body")?;
         let mut class = ClassDecl {
             name,
+            attrs,
             tparams,
             bounds,
             bases,
@@ -530,6 +581,7 @@ impl Parser {
         };
         self.skip_newlines();
         while !self.check(&Tok::RBrace) {
+            self.attributes()?;
             let mpos = self.pos();
             let mods = self.modifiers()?;
             if let Some(st) = self.static_member(&mods, mpos)? {
@@ -547,6 +599,7 @@ impl Parser {
                     let default = if self.eat(&Tok::Assign) { Some(self.expr()?) } else { None };
                     class.fields.push(FieldDecl {
                         name: fname,
+                        attrs: std::mem::take(&mut self.pending),
                         ty,
                         default,
                         is_private: mods.is_private,
@@ -580,6 +633,7 @@ impl Parser {
                 }
             }
         }
+        self.no_pending()?;
         self.expect(Tok::RBrace, "`}`")?;
         Ok(class)
     }
@@ -609,6 +663,7 @@ impl Parser {
     /// The rest of `const NAME: Type = value` / `static var name: Type = value`, after
     /// `const` / `var`.
     fn static_decl(&mut self, mutable: bool, pos: Span) -> Result<StaticDecl> {
+        let attrs = std::mem::take(&mut self.pending);
         let (kw, what) = if mutable { ("static var", "variable") } else { ("const", "constant") };
         let (name, _) = self.ident(&format!("a {} name after `{}`", what, kw))?;
         if !self.eat(&Tok::Colon) {
@@ -620,10 +675,11 @@ impl Parser {
         }
         let value = self.expr()?;
         self.end_of_statement()?;
-        Ok(StaticDecl { name, ty, value, mutable, pos })
+        Ok(StaticDecl { name, attrs, ty, value, mutable, pos })
     }
 
     fn interface(&mut self) -> Result<InterfaceDecl> {
+        let attrs = std::mem::take(&mut self.pending);
         let pos = self.expect(Tok::Interface, "`interface`")?;
         let (name, _) = self.ident("interface name")?;
         let tpos = self.pos();
@@ -636,21 +692,24 @@ impl Parser {
         self.skip_newlines();
         let mut methods = Vec::new();
         while !self.check(&Tok::RBrace) {
+            self.attributes()?;
+            let attrs = std::mem::take(&mut self.pending);
             let mpos = self.expect(Tok::Fn, "`fn` (interfaces contain methods)")?;
             let (mname, _) = self.ident("method name")?;
             let params = self.params()?;
             let ret = self.ret_type()?;
             if self.check(&Tok::LBrace) {
                 let body = self.block()?;
-                methods.push(MethodSig { name: mname, params, ret, body: Some(body), pos: mpos });
+                methods.push(MethodSig { name: mname, attrs, params, ret, body: Some(body), pos: mpos });
                 self.skip_newlines();
             } else {
-                methods.push(MethodSig { name: mname, params, ret, body: None, pos: mpos });
+                methods.push(MethodSig { name: mname, attrs, params, ret, body: None, pos: mpos });
                 self.end_of_statement()?;
             }
         }
+        self.no_pending()?;
         self.expect(Tok::RBrace, "`}`")?;
-        Ok(InterfaceDecl { name, tparams, bases, base_args, methods, pos })
+        Ok(InterfaceDecl { name, attrs, tparams, bases, base_args, methods, pos })
     }
 
     /// `op +(other: T) -> T { ... }` in a struct body, if the member is one.
@@ -676,6 +735,7 @@ impl Parser {
     }
 
     fn struct_decl(&mut self) -> Result<StructDecl> {
+        let attrs = std::mem::take(&mut self.pending);
         let pos = self.expect(Tok::Struct, "`struct`")?;
         let (name, _) = self.ident("struct name")?;
         let (tparams, bounds) = self.tparams()?;
@@ -692,6 +752,7 @@ impl Parser {
         self.expect(Tok::LBrace, "`{` to start struct body")?;
         let mut s = StructDecl {
             name,
+            attrs,
             tparams,
             bounds,
             bases,
@@ -703,6 +764,7 @@ impl Parser {
         };
         self.skip_newlines();
         while !self.check(&Tok::RBrace) {
+            self.attributes()?;
             let mpos = self.pos();
             if let Some(o) = self.struct_op(mpos)? {
                 s.ops.push(o);
@@ -732,6 +794,7 @@ impl Parser {
                     let default = if self.eat(&Tok::Assign) { Some(self.expr()?) } else { None };
                     s.fields.push(FieldDecl {
                         name: fname,
+                        attrs: std::mem::take(&mut self.pending),
                         ty,
                         default,
                         is_private: mods.is_private,
@@ -766,11 +829,13 @@ impl Parser {
                 }
             }
         }
+        self.no_pending()?;
         self.expect(Tok::RBrace, "`}`")?;
         Ok(s)
     }
 
     fn enum_decl(&mut self) -> Result<EnumDecl> {
+        let attrs = std::mem::take(&mut self.pending);
         let pos = self.expect(Tok::Enum, "`enum`")?;
         let (name, _) = self.ident("enum name")?;
         let (tparams, bounds) = self.tparams()?;
@@ -788,7 +853,7 @@ impl Parser {
             }
         }
         self.expect(Tok::RBrace, "`}`")?;
-        Ok(EnumDecl { name, tparams, bounds, variants, pos })
+        Ok(EnumDecl { name, attrs, tparams, bounds, variants, pos })
     }
 
     fn pattern(&mut self) -> Result<Pattern> {

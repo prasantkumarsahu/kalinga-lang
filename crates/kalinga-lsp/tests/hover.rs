@@ -127,3 +127,24 @@ fn private_set_fields_say_so() {
     let (text, _) = hover(src, "balance", 1).expect("a hover");
     assert!(text.contains("private(set) balance: int"), "{}", text);
 }
+
+const DEPRECATED: &str = "/// Says hello.\n#[deprecated(\"use greet\")]\nfn hello() -> str {\n    return \"hi\"\n}\nfn main() {\n    println(hello())\n}\n";
+
+#[test]
+fn deprecated_declarations_say_so_and_keep_their_docs() {
+    let (text, _) = hover(DEPRECATED, "hello", 1).expect("a hover");
+    assert!(text.contains("**Deprecated:** use greet"), "{}", text);
+    assert!(text.contains("Says hello."), "{}", text);
+}
+
+#[test]
+fn uses_of_deprecated_code_are_struck_through_warnings() {
+    let dir = temp_dir("deprecated_warning");
+    let (mut world, uri) = open(&dir, DEPRECATED);
+    let ds = world.diagnostics(&uri);
+    assert_eq!(ds.len(), 1, "{:?}", ds);
+    assert_eq!(ds[0].severity, Some(lsp_types::DiagnosticSeverity::WARNING));
+    assert_eq!(ds[0].tags, Some(vec![lsp_types::DiagnosticTag::DEPRECATED]));
+    assert_eq!((ds[0].range.start.line, ds[0].range.start.character), (6, 12));
+    assert!(ds[0].message.contains("`hello` is deprecated: use greet"), "{}", ds[0].message);
+}

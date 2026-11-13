@@ -177,9 +177,11 @@ impl Snapshot {
     pub fn docs(&self, start: Span) -> Option<String> {
         let source = self.source(start.file);
         let lines: Vec<&str> = source.lines().take(start.line.saturating_sub(1)).collect();
+        // `/// docs` may come before `#[...]` lines.
         let doc: Vec<&str> = lines
             .iter()
             .rev()
+            .skip_while(|l| l.trim_start().starts_with("#["))
             .take_while(|l| l.trim_start().starts_with("///"))
             .map(|l| {
                 let text = l.trim_start().trim_start_matches("///");

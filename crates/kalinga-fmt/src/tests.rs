@@ -126,3 +126,11 @@ fn struct_bases_and_private_set() {
         "struct Version : Ord, Show {\n    private(set) major: int\n}\n",
     );
 }
+
+#[test]
+fn attributes() {
+    check(
+        "#[ deprecated( \"use g\" ) ]\nfn f() {}\nclass A {\n#[deprecated]\nx: int = 1\n}\n",
+        "#[deprecated(\"use g\")]\nfn f() {}\nclass A {\n    #[deprecated]\n    x: int = 1\n}\n",
+    );
+}

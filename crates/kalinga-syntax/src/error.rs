@@ -51,6 +51,12 @@ impl Diagnostic {
         Diagnostic { severity: Severity::Error, message: message.into(), span, help: None }
     }
 
+    /// A problem that does not stop the program from building, like using something
+    /// marked `#[deprecated]`.
+    pub fn warning(message: impl Into<String>, span: Span) -> Self {
+        Diagnostic { severity: Severity::Warning, message: message.into(), span, help: None }
+    }
+
     pub fn with_help(mut self, help: impl Into<String>) -> Self {
         self.help = Some(help.into());
         self

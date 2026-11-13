@@ -1,0 +1,48 @@
+// `#[deprecated]` marks code that still works but should no longer be used: every use is
+// a warning, and the program still builds and runs.
+
+#[deprecated("use `greet` instead")]
+fn hello() -> str {
+    return "hello"
+}
+
+fn greet() -> str {
+    return "hi"
+}
+
+class Dog {
+    #[deprecated]
+    legs: int = 4
+
+    #[deprecated("use `speak`")]
+    fn bark() -> str {
+        return "woof"
+    }
+
+    fn speak() -> str {
+        return "woof!"
+    }
+}
+
+#[deprecated("use `Size`")]
+struct OldSize {
+    w: int
+}
+
+#[deprecated]
+const LIMIT: int = 3
+
+fn width(s: OldSize) -> int {
+    return s.w
+}
+
+fn main() {
+    println(hello())
+    println(greet())
+    let d = Dog()
+    println(d.bark())
+    println(d.legs)
+    println(d.speak())
+    let s = OldSize(2)
+    println(width(s) + LIMIT)
+}

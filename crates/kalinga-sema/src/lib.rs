@@ -14,6 +14,7 @@ pub mod suggest;
 pub mod tast;
 pub mod typeck;
 pub mod types;
+pub mod warnings;
 
 pub use model::*;
 pub use types::*;
