@@ -16,6 +16,7 @@ mod describe;
 pub mod formatting;
 pub mod hover;
 pub mod navigation;
+pub mod semantic;
 mod server;
 pub mod signature;
 mod snapshot;

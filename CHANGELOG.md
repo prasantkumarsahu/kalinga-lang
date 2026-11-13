@@ -25,6 +25,10 @@ Everything here is new; code written for 0.6.1 compiles and does the same thing.
 - Uses of deprecated code are struck-through warnings; hover shows the deprecation note
   and `private(set)`. Completion lists generated `as_str`, `equals`, `compare` and
   interface default methods. `#[...]` and `private(set)` are highlighted.
+- Semantic highlighting: the language server colours each name by what it is (parameter,
+  read-only `let` or `var`, property, method, class, struct, interface, enum, variant,
+  constant, built-in), and the grammar colours plain variables and parameters before it
+  answers.
 
 ### Fixes
 - Completion no longer crashes on a `match` header broken over lines.

@@ -151,6 +151,7 @@
     ],
     "configurationDefaults": {
       "[kalinga]": {
+        "editor.semanticHighlighting.enabled": true,
         "editor.quickSuggestions": {
           "other": "on",
           "comments": "off",

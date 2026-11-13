@@ -32,10 +32,16 @@
       "include": "#calls"
     },
     {
+      "include": "#parameters"
+    },
+    {
       "include": "#numbers"
     },
     {
       "include": "#operators"
+    },
+    {
+      "include": "#identifiers"
     }
   ],
   "repository": {
@@ -265,6 +271,15 @@
         }
       ]
     },
+    "parameters": {
+      "comment": "`name: Type` after `(` or `,`: a parameter (or a named argument)",
+      "match": "(?<=\\(|,)\\s*([a-z_][A-Za-z0-9_]*)\\s*(?=:(?!:))",
+      "captures": {
+        "1": {
+          "name": "variable.parameter.kalinga"
+        }
+      }
+    },
     "numbers": {
       "patterns": [
         {
@@ -348,6 +363,11 @@
           "include": "source.rust"
         }
       ]
+    },
+    "identifiers": {
+      "comment": "any other name: a variable (the language server refines it)",
+      "name": "variable.other.readwrite.kalinga",
+      "match": "\\b[a-z_][A-Za-z0-9_]*\\b"
     }
   }
 }
