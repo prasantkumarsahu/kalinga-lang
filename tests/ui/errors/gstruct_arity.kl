@@ -1,2 +1,2 @@
 struct B<T> { v: T }
-fn main() { let b: B = B(1) }
+fn main() { b: B = B(1) }

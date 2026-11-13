@@ -59,7 +59,7 @@ fn square(n: int) -> int {
 }
 
 fn main() {
-    let name = "Kalinga"
+    name = "Kalinga"
     var total = 0
 
     for i in 1..4 {

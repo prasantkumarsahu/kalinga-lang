@@ -14,17 +14,17 @@ extern fn reactive_disposed()
 /// One signal, computed value or effect in the graph.
 class ReactiveNode {
     /// An effect's code (computed values work themselves out in `Computed.get`).
-    run: fn() = fn() {}
-    is_effect: bool = false
+    var run: fn() = fn() {}
+    var is_effect: bool = false
     /// A computed value whose inputs changed since it was last worked out.
-    dirty: bool = true
-    alive: bool = true
+    var dirty: bool = true
+    var alive: bool = true
     /// The nodes this one read the last time it ran.
-    deps: [int] = []
+    var deps: [int] = []
     /// The nodes that read this one.
-    subs: [int] = []
+    var subs: [int] = []
     /// The scope that owns this node (-1: none).
-    scope: int = -1
+    var scope: int = -1
 }
 
 /// The graph every reactive value is part of.
@@ -41,7 +41,7 @@ class ReactiveGraph {
     static var pending: [int] = []
 
     static fn add(is_effect: bool) -> int {
-        let n = ReactiveNode()
+        n = ReactiveNode()
         n.is_effect = is_effect
         n.scope = ReactiveGraph.scope
         ReactiveGraph.nodes.push(n)
@@ -51,11 +51,11 @@ class ReactiveGraph {
     /// `id` is read: the node running now depends on it.
     static fn read(id: int) {
         ReactiveGraph.check(id)
-        let c = ReactiveGraph.current
+        c = ReactiveGraph.current
         if c < 0 || c == id {
             return
         }
-        let reader = ReactiveGraph.nodes[c]
+        reader = ReactiveGraph.nodes[c]
         if !reader.deps.contains(id) {
             reader.deps.push(id)
             ReactiveGraph.nodes[id].subs.push(c)
@@ -78,7 +78,7 @@ class ReactiveGraph {
     }
 
     static fn mark(id: int) {
-        let n = ReactiveGraph.nodes[id]
+        n = ReactiveGraph.nodes[id]
         if !n.alive {
             return
         }
@@ -103,7 +103,7 @@ class ReactiveGraph {
             return
         }
         while len(ReactiveGraph.pending) > 0 {
-            let id = ReactiveGraph.pending[0]
+            id = ReactiveGraph.pending[0]
             ReactiveGraph.pending = ReactiveGraph.pending[1..]
             ReactiveGraph.run_effect(id)
         }
@@ -112,14 +112,14 @@ class ReactiveGraph {
     /// Starts running node `id`: forgets what it read last time. Returns the node that was
     /// running before, to give to `leave`.
     static fn enter(id: int) -> int {
-        let n = ReactiveGraph.nodes[id]
+        n = ReactiveGraph.nodes[id]
         for d in n.deps {
-            let dep = ReactiveGraph.nodes[d]
+            dep = ReactiveGraph.nodes[d]
             dep.subs = dep.subs.filter(fn(s) => s != id)
         }
         n.deps = []
         n.dirty = false
-        let before = ReactiveGraph.current
+        before = ReactiveGraph.current
         ReactiveGraph.current = id
         return before
     }
@@ -129,25 +129,25 @@ class ReactiveGraph {
     }
 
     static fn run_effect(id: int) {
-        let n = ReactiveGraph.nodes[id]
+        n = ReactiveGraph.nodes[id]
         if !n.alive {
             return
         }
-        let before = ReactiveGraph.enter(id)
+        before = ReactiveGraph.enter(id)
         n.run()
         ReactiveGraph.leave(before)
     }
 
     /// Frees node `id`: it leaves the graph and lets go of its code.
     static fn dispose(id: int) {
-        let n = ReactiveGraph.nodes[id]
+        n = ReactiveGraph.nodes[id]
         if !n.alive {
             return
         }
         ReactiveGraph.enter(id)
         ReactiveGraph.leave(ReactiveGraph.current)
         for s in n.subs {
-            let sub = ReactiveGraph.nodes[s]
+            sub = ReactiveGraph.nodes[s]
             sub.deps = sub.deps.filter(fn(d) => d != id)
         }
         n.subs = []
@@ -158,7 +158,7 @@ class ReactiveGraph {
 
 /// Where a signal keeps its value.
 class SignalCell<T> {
-    value: T
+    var value: T
 
     init(value: T) {
         self.value = value
@@ -203,8 +203,8 @@ fn signal<T>(value: T) -> Signal<T> {
 /// Where a computed value keeps its function and its last value.
 class ComputedCell<T> {
     // The function, in an array: a field of type `fn() -> T` would need a default.
-    f: [fn() -> T] = []
-    value: T
+    var f: [fn() -> T] = []
+    var value: T
 }
 
 /// A value worked out from others: `let total = computed(fn() => a.get() + b.get())`.
@@ -217,9 +217,9 @@ struct Computed<T> {
     fn get() -> T {
         ReactiveGraph.read(self.id)
         if ReactiveGraph.nodes[self.id].dirty {
-            let f = self.cell.f[0]
-            let before = ReactiveGraph.enter(self.id)
-            let v = f()
+            f = self.cell.f[0]
+            before = ReactiveGraph.enter(self.id)
+            v = f()
             ReactiveGraph.leave(before)
             self.cell.value = v
         }
@@ -229,7 +229,7 @@ struct Computed<T> {
 
 /// A new computed value worked out by `f`.
 fn computed<T>(f: fn() -> T) -> Computed<T> {
-    let cell = ComputedCell<T>()
+    cell = ComputedCell<T>()
     cell.f.push(f)
     return Computed(cell, ReactiveGraph.add(false))
 }
@@ -247,7 +247,7 @@ struct Effect {
 /// Runs `run` now, and again whenever a value it read changes:
 /// `effect(fn() { println("count is {count.get()}") })`.
 fn effect(run: fn()) -> Effect {
-    let id = ReactiveGraph.add(true)
+    id = ReactiveGraph.add(true)
     ReactiveGraph.nodes[id].run = run
     ReactiveGraph.run_effect(id)
     return Effect(id)
@@ -259,7 +259,7 @@ struct Scope {
 
     /// Runs `f`; the reactive values it makes belong to this scope.
     fn run(f: fn()) {
-        let before = ReactiveGraph.scope
+        before = ReactiveGraph.scope
         ReactiveGraph.scope = self.id
         f()
         ReactiveGraph.scope = before

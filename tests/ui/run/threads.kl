@@ -13,8 +13,8 @@ fn work(n: int) -> int {
 
 fn main() {
     // 1. Spawn and join
-    let base = 10
-    let tasks = [Thread.spawn(fn() => work(100000) + base), Thread.spawn(fn() -> int {
+    base = 10
+    tasks = [Thread.spawn(fn() => work(100000) + base), Thread.spawn(fn() -> int {
         var s = 0
         for i in 1..101 { s += i }
         return s
@@ -24,12 +24,12 @@ fn main() {
     println("joined:", results[1], results[0] == work(100000) + 10)
 
     // 2. Producer / consumer
-    let jobs: Channel<Job> = Channel()
-    let done = Channel<int>()
-    let worker = Thread.spawn(fn() -> int {
+    jobs: Channel<Job> = Channel()
+    done = Channel<int>()
+    worker = Thread.spawn(fn() -> int {
         var count = 0
         while true {
-            if let j = jobs.receive() {
+            if j = jobs.receive() {
                 done.send(j.id * j.size)
                 count += 1
             } else {
@@ -42,12 +42,12 @@ fn main() {
     println("worker handled", worker.join(), "jobs")
     var total = 0
     while true {
-        if let v = done.try_receive() { total += v } else { break }
+        if v = done.try_receive() { total += v } else { break }
     }
     println("total", total)
 
     // 3. Shared counter
-    let counter = Shared(0)
+    counter = Shared(0)
     var hs: [Task<void>] = []
     for i in 0..8 {
         hs.push(Thread.spawn(fn() {
@@ -58,11 +58,11 @@ fn main() {
     println("counter", counter.get())
 
     // 4. par_map
-    let sizes = [200000, 200000, 200000, 200000, 200000, 200000, 200000, 200000]
-    let t0 = Time.now()
-    let seq = sizes.map(fn(n) => work(n))
-    let t1 = Time.now()
-    let par = sizes.par_map(fn(n) => work(n))
-    let t2 = Time.now()
+    sizes = [200000, 200000, 200000, 200000, 200000, 200000, 200000, 200000]
+    t0 = Time.now()
+    seq = sizes.map(fn(n) => work(n))
+    t1 = Time.now()
+    par = sizes.par_map(fn(n) => work(n))
+    t2 = Time.now()
     println("par_map equal:", seq == par, "cores:", Thread.cores() >= 1)
 }

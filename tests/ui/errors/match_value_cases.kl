@@ -1,9 +1,9 @@
 fn main() {
-    let x = match 3 { 1 => "a", 2 => "b" }
+    x = match 3 { 1 => "a", 2 => "b" }
 }
 
 fn other() {
-    let y = if true {
+    y = if true {
         println(1)
     } else {
         2

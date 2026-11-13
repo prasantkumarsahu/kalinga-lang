@@ -1,1 +1,1 @@
-fn main() { let x: int = "hi" }
+fn main() { x: int = "hi" }

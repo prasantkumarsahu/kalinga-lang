@@ -69,14 +69,14 @@ fn old() -> int {
     return 1
 }
 
-const LIMIT: int = 3
+LIMIT: int = 3
 
 fn main() {
-    let user = User("Ann")
+    user = User("Ann")
     var total = len(user.greet("Bo")) + old() + LIMIT
-    let double = fn(n: int) -> int { return n * 2 }
+    double = fn(n: int) -> int { return n * 2 }
     total += double(Point(1).x)
-    let c = Color.Red
+    c = Color.Red
     println("{total} {User.count} {c}")
 }
 "#;

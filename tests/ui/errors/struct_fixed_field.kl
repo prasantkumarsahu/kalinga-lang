@@ -1,0 +1,9 @@
+struct P {
+    x: int
+
+    mut fn grow() {
+        self.x += 1
+    }
+}
+
+fn main() {}

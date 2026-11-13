@@ -67,7 +67,7 @@ fn has(items: &[lsp_types::CompletionItem], name: &str) -> bool {
 
 #[test]
 fn members_of_a_class_variable_include_inherited_fields_and_methods() {
-    let items = at("    let d = Dog(\"Rex\")\n    d.|", "");
+    let items = at("    d = Dog(\"Rex\")\n    d.|", "");
     for name in ["name", "legs", "tags", "owner", "speak", "show", "fetch"] {
         assert!(has(&items, name), "{} in {:?}", name, labels(&items));
     }
@@ -75,25 +75,25 @@ fn members_of_a_class_variable_include_inherited_fields_and_methods() {
 
 #[test]
 fn method_items_carry_signature_and_doc_comment() {
-    let items = at("    let a = Animal(\"x\")\n    a.|", "");
+    let items = at("    a = Animal(\"x\")\n    a.|", "");
     let speak = find(&items, "speak");
     assert_eq!(speak.detail.as_deref(), Some("Animal.speak() -> str"));
     assert_eq!(docs(speak).as_deref(), Some("What the animal says."));
-    let fetch = at("    let d = Dog(\"x\")\n    d.|", "");
+    let fetch = at("    d = Dog(\"x\")\n    d.|", "");
     assert_eq!(find(&fetch, "fetch").insert_text.as_deref(), Some("fetch(${1:item}, ${2:times})"));
 }
 
 #[test]
 fn annotated_variables_parameters_and_chains_resolve() {
-    assert!(has(&at("    let p: Person = Person(\"a\")\n    p.pets[0].|", ""), "speak"));
-    assert!(has(&at("    let p = Person(\"a\")\n    p.name.|", ""), "upper"));
+    assert!(has(&at("    p: Person = Person(\"a\")\n    p.pets[0].|", ""), "speak"));
+    assert!(has(&at("    p = Person(\"a\")\n    p.name.|", ""), "upper"));
     assert!(has(&at("    var xs = [1, 2]\n    xs.|", ""), "push"));
-    assert!(has(&at("    let s: Show = Dog(\"x\")\n    s.|", ""), "show"));
+    assert!(has(&at("    s: Show = Dog(\"x\")\n    s.|", ""), "show"));
 }
 
 #[test]
 fn partial_member_name_still_completes() {
-    assert!(has(&at("    let d = Dog(\"Rex\")\n    d.sp|", ""), "speak"));
+    assert!(has(&at("    d = Dog(\"Rex\")\n    d.sp|", ""), "speak"));
 }
 
 #[test]
@@ -110,14 +110,14 @@ fn self_and_super_inside_methods() {
 
 #[test]
 fn for_loop_and_if_let_variables_get_element_types() {
-    assert!(has(&at("    let p = Person(\"a\")\n    for a in p.pets {\n        a.|\n    }", ""), "speak"));
-    assert!(has(&at("    let d = Dog(\"a\")\n    if let o = d.owner {\n        o.|\n    }", ""), "pets"));
-    assert!(has(&at("    for i in 0..3 {\n        let s = str(i)\n        s.|\n    }", ""), "trim"));
+    assert!(has(&at("    p = Person(\"a\")\n    for a in p.pets {\n        a.|\n    }", ""), "speak"));
+    assert!(has(&at("    d = Dog(\"a\")\n    if o = d.owner {\n        o.|\n    }", ""), "pets"));
+    assert!(has(&at("    for i in 0..3 {\n        s = str(i)\n        s.|\n    }", ""), "trim"));
 }
 
 #[test]
 fn general_completion_lists_locals_functions_classes_builtins() {
-    let items = at("    let count = 3\n    |", "");
+    let items = at("    count = 3\n    |", "");
     for name in ["count", "helper", "Dog", "Person", "print", "len", "if", "while"] {
         assert!(has(&items, name), "{} in {:?}", name, labels(&items));
     }
@@ -127,12 +127,12 @@ fn general_completion_lists_locals_functions_classes_builtins() {
 
 #[test]
 fn out_of_scope_variables_are_not_offered() {
-    assert!(!has(&at("    if true {\n        let inner = 1\n    }\n    |", ""), "inner"));
+    assert!(!has(&at("    if true {\n        inner = 1\n    }\n    |", ""), "inner"));
 }
 
 #[test]
 fn type_positions_offer_types() {
-    let items = at("    let x: |", "");
+    let items = at("    x: |", "");
     for name in ["int", "str", "Animal", "Show"] {
         assert!(has(&items, name), "{}", name);
     }
@@ -206,15 +206,15 @@ fn at2(body: &str) -> Vec<lsp_types::CompletionItem> {
 
 #[test]
 fn enum_variants_after_enum_dot_and_static_methods_after_class_dot() {
-    let v = at2("    let s = Shape.|");
+    let v = at2("    s = Shape.|");
     assert_eq!(labels(&v), ["Circle", "Empty", "Rect"]);
     assert_eq!(find(&v, "Rect").insert_text.as_deref(), Some("Rect(${1:w}, ${2:h})"));
-    assert_eq!(labels(&at2("    let a = Animal.|")), ["create"]);
+    assert_eq!(labels(&at2("    a = Animal.|")), ["create"]);
 }
 
 #[test]
 fn private_members_are_hidden_outside_their_class() {
-    let outside = at2("    let d = Dog()\n    d.|");
+    let outside = at2("    d = Dog()\n    d.|");
     assert!(!has(&outside, "secret") && !has(&outside, "hidden"));
     assert!(has(&outside, "nick") && has(&outside, "sound") && has(&outside, "on_pet"));
     let src =
@@ -225,32 +225,32 @@ fn private_members_are_hidden_outside_their_class() {
 
 #[test]
 fn maps_generics_interface_inheritance_and_interpolation() {
-    assert!(has(&at2("    let d = Dog()\n    d.tags.|"), "keys"));
-    assert!(has(&at2("    let m = {\"a\": [1]}\n    m.|"), "values"));
-    let st = at2("    let s: Stack<str> = Stack()\n    s.peek|");
+    assert!(has(&at2("    d = Dog()\n    d.tags.|"), "keys"));
+    assert!(has(&at2("    m = {\"a\": [1]}\n    m.|"), "values"));
+    let st = at2("    s: Stack<str> = Stack()\n    s.peek|");
     assert!(has(&st, "peek"));
     assert_eq!(find(&st, "push").detail.as_deref(), Some("Stack.push(x: str)"));
-    assert!(has(&at2("    let p: Pet = Dog()\n    p.|"), "name"));
-    assert!(has(&at2("    let n = \"Asha\"\n    print(\"hi {n.|}\")"), "upper"));
+    assert!(has(&at2("    p: Pet = Dog()\n    p.|"), "name"));
+    assert!(has(&at2("    n = \"Asha\"\n    print(\"hi {n.|}\")"), "upper"));
 }
 
 #[test]
 fn match_arms_offer_variants_and_bind_payloads() {
-    let arms = at2("    let s = Shape.Empty\n    match s {\n        |\n    }");
+    let arms = at2("    s = Shape.Empty\n    match s {\n        |\n    }");
     assert_eq!(labels(&arms), ["Circle", "Empty", "Rect", "_"]);
     let bound =
-        at2("    let s = Shape.Empty\n    match s {\n        Circle(r) => print(r.|)\n        _ => print(1)\n    }");
+        at2("    s = Shape.Empty\n    match s {\n        Circle(r) => print(r.|)\n        _ => print(1)\n    }");
     assert!(bound.is_empty(), "float has no members: {:?}", labels(&bound));
     let scope = at2(
-        "    let s = Shape.Empty\n    match s {\n        Rect(w, h) => {\n            |\n        }\n        _ => print(1)\n    }",
+        "    s = Shape.Empty\n    match s {\n        Rect(w, h) => {\n            |\n        }\n        _ => print(1)\n    }",
     );
     assert!(has(&scope, "w") && has(&scope, "h"), "{:?}", labels(&scope));
 }
 
 #[test]
 fn lambda_parameters_get_element_types_from_map_and_filter() {
-    assert!(has(&at2("    let xs = [\"a\"]\n    let ys = xs.map(fn(s) => s.|)"), "upper"));
-    assert!(has(&at2("    let f = fn(n: int) => n\n    |"), "f"));
+    assert!(has(&at2("    xs = [\"a\"]\n    ys = xs.map(fn(s) => s.|)"), "upper"));
+    assert!(has(&at2("    f = fn(n: int) => n\n    |"), "f"));
 }
 
 #[test]
@@ -266,7 +266,7 @@ fn imported_declarations_are_offered() {
     let dir = temp_dir("imported");
     std::fs::write(dir.join("lib.kl"), "class Tool {\n    size: int\n}\nfn helper(n: int) -> int { return n }\n")
         .expect("write");
-    let src = "import \"lib.kl\"\nfn main() {\n    let t = Tool()\n    t.|\n}\n";
+    let src = "import \"lib.kl\"\nfn main() {\n    t = Tool()\n    t.|\n}\n";
     assert_eq!(labels(&complete_in(&dir, src)), ["size"]);
     let general = complete_in(&dir, &src.replace("t.|", "|"));
     assert!(has(&general, "helper"));
@@ -307,17 +307,17 @@ fn at3(body: &str) -> Vec<lsp_types::CompletionItem> {
 
 #[test]
 fn struct_members_statics_and_constructor() {
-    let members = at3("    let v = Vec2(1.0, 2.0)\n    v.|");
+    let members = at3("    v = Vec2(1.0, 2.0)\n    v.|");
     assert!(has(&members, "x") && has(&members, "length") && has(&members, "scale"));
     assert!(!has(&members, "hidden"), "private field hidden");
-    assert_eq!(labels(&at3("    let z = Vec2.|")), ["zero"]);
+    assert_eq!(labels(&at3("    z = Vec2.|")), ["zero"]);
     let all = at3("    |");
     assert_eq!(find(&all, "Vec2").insert_text.as_deref(), Some("Vec2(${1:x}, ${2:y}, ${3:hidden})"));
 }
 
 #[test]
 fn math_random_and_time() {
-    let math = at3("    let r = Math.|");
+    let math = at3("    r = Math.|");
     for n in ["PI", "sqrt", "lerp", "clamp", "atan2"] {
         assert!(has(&math, n), "{}", n);
     }
@@ -329,7 +329,7 @@ fn math_random_and_time() {
 fn extern_functions_and_types() {
     let all = at3("    |");
     assert!(has(&all, "mean") && has(&all, "matrix_new"));
-    assert!(has(&at3("    let m: |"), "Matrix"));
+    assert!(has(&at3("    m: |"), "Matrix"));
 }
 
 #[test]
@@ -346,25 +346,25 @@ fn struct_body_and_top_level_keywords() {
 #[test]
 fn threads_channels_shared_values_and_results() {
     assert_eq!(labels(&at3("    Thread.|")), ["cores", "spawn"]);
-    assert!(has(&at3("    let t = Thread.spawn(fn() => 1)\n    t.|"), "join"));
-    assert_eq!(labels(&at3("    let c = Channel<int>()\n    c.|")), ["close", "receive", "send", "try_receive"]);
-    assert!(has(&at3("    let s = Shared<int>(0)\n    s.|"), "update"));
-    assert!(has(&at3("    let xs = [1, 2]\n    xs.|"), "par_map"));
+    assert!(has(&at3("    t = Thread.spawn(fn() => 1)\n    t.|"), "join"));
+    assert_eq!(labels(&at3("    c = Channel<int>()\n    c.|")), ["close", "receive", "send", "try_receive"]);
+    assert!(has(&at3("    s = Shared<int>(0)\n    s.|"), "update"));
+    assert!(has(&at3("    xs = [1, 2]\n    xs.|"), "par_map"));
     let r = complete(
-        "fn parse(s: str) -> Result<int, str> {\n    return Ok(1)\n}\nfn main() {\n    let r = parse(\"1\")\n    r.|\n}\n",
+        "fn parse(s: str) -> Result<int, str> {\n    return Ok(1)\n}\nfn main() {\n    r = parse(\"1\")\n    r.|\n}\n",
     );
     assert_eq!(labels(&r), ["err", "is_err", "is_ok", "ok", "unwrap", "unwrap_or"]);
     let general = at3("    |");
     for k in ["Ok", "Err", "Channel", "Shared", "Thread", "Async", "await"] {
         assert!(has(&general, k), "{}", k);
     }
-    assert!(has(&at3("    let x: |"), "Result"));
+    assert!(has(&at3("    x: |"), "Result"));
 }
 
 #[test]
 fn async_functions() {
     let items =
-        complete("async fn load(n: int) -> int {\n    return n\n}\nfn main() {\n    let job = load(1)\n    job|\n}\n");
+        complete("async fn load(n: int) -> int {\n    return n\n}\nfn main() {\n    job = load(1)\n    job|\n}\n");
     assert_eq!(find(&items, "job").detail.as_deref(), Some("job: Async<int>"));
     assert!(has(&at3("    Async.|"), "all"));
     assert!(has(&at3("    Time.|"), "wait"));
@@ -386,7 +386,7 @@ fn import_as_namespaces() {
     std::fs::write(dir.join("geo/src/lib.kl"), lib).expect("write");
     let run = |body: &str| complete_in(&dir, &format!("import \"geo\" as g\nfn main() {{\n{}\n}}\n", body));
     assert_eq!(labels(&run("    g.|")), ["Point", "describe"]);
-    assert_eq!(labels(&run("    let p = g.Point(1, 2)\n    p.|")), ["sum", "x", "y"]);
+    assert_eq!(labels(&run("    p = g.Point(1, 2)\n    p.|")), ["sum", "x", "y"]);
     assert_eq!(labels(&run("    g.Point.|")), ["origin"]);
     let general = run("    |");
     assert!(has(&general, "g"));
@@ -456,15 +456,13 @@ fn generic_interface_values_show_their_type_arguments() {
 #[test]
 fn inside_string_interpolation() {
     let program = "class Dog {\n    name: str = \"Rex\"\n    fn bark() -> str { return \"woof\" }\n}\n";
-    let at = |body: &str| {
-        complete(&format!("{}fn main() {{\n    let dog = Dog()\n    let count = 3\n{}\n}}\n", program, body))
-    };
+    let at = |body: &str| complete(&format!("{}fn main() {{\n    dog = Dog()\n    count = 3\n{}\n}}\n", program, body));
     // Members after `.`, whether the `}` and the closing quote are written yet or not.
     for body in [
         "    println(\"hi {dog.|}\")",
         "    println(\"hi {dog.|\")",
         "    println(\"hi {dog.|",
-        "    let s = \"{dog.na|}\"",
+        "    s = \"{dog.na|}\"",
     ] {
         assert_eq!(labels(&at(body)), ["bark", "name"], "{}", body);
     }
@@ -483,14 +481,14 @@ fn trigger_characters_only_open_a_list_where_they_mean_one() {
     assert!(!at("fn main() {\n    println(\"hi {|}\")\n}\n", "{").is_empty(), "`{{` in a string");
     assert!(at("fn main() {|\n}\n", "{").is_empty(), "`{{` opening a block");
     assert!(!at("import \"|", "\"").is_empty(), "`\"` in an import");
-    assert!(at("fn main() {\n    let s = \"|\n}\n", "\"").is_empty(), "`\"` starting a string");
+    assert!(at("fn main() {\n    s = \"|\n}\n", "\"").is_empty(), "`\"` starting a string");
     assert!(!at("import \"std/|", "/").is_empty(), "`/` in an import path");
-    assert!(at("fn main() {\n    let x = 4 /|\n}\n", "/").is_empty(), "`/` dividing");
+    assert!(at("fn main() {\n    x = 4 /|\n}\n", "/").is_empty(), "`/` dividing");
 }
 
 #[test]
 fn classes_offer_the_default_methods_of_their_interfaces() {
-    let src = "interface Named {\n    fn name() -> str\n    fn greet() -> str {\n        return self.name()\n    }\n}\nclass Dog : Named {\n    override fn name() -> str {\n        return \"Rex\"\n    }\n}\nfn main() {\n    let d = Dog()\n    d.|\n}\n";
+    let src = "interface Named {\n    fn name() -> str\n    fn greet() -> str {\n        return self.name()\n    }\n}\nclass Dog : Named {\n    override fn name() -> str {\n        return \"Rex\"\n    }\n}\nfn main() {\n    d = Dog()\n    d.|\n}\n";
     let items = complete(src);
     assert_eq!(labels(&items), ["greet", "name"]);
     assert!(
@@ -502,7 +500,7 @@ fn classes_offer_the_default_methods_of_their_interfaces() {
 
 #[test]
 fn classes_with_show_offer_the_generated_as_str() {
-    let src = "class Dog : Show {\n    name: str = \"Rex\"\n}\nfn main() {\n    let d = Dog()\n    d.|\n}\n";
+    let src = "class Dog : Show {\n    name: str = \"Rex\"\n}\nfn main() {\n    d = Dog()\n    d.|\n}\n";
     let items = complete(src);
     assert_eq!(labels(&items), ["as_str", "name"]);
 }

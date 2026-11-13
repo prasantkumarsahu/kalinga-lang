@@ -3,23 +3,23 @@ fn main() {
     println(Math.floor(2.7), Math.ceil(2.1), Math.round(2.5), Math.clamp(15, 0, 10), Math.clamp(-0.5, 0.0, 1.0))
     println(Math.lerp(0, 10, 0.25), Math.sign(-4), int(Math.sin(Math.PI / 2.0) * 100.0), Math.hypot(3, 4), Math.atan2(1, 1) * 4.0 == Math.PI)
     Random.seed(42)
-    let a = Random.int(1, 7)
+    a = Random.int(1, 7)
     Random.seed(42)
     println(a == Random.int(1, 7))
     var ok = true
     for i in 0..10000 {
-        let r = Random.int(-3, 3)
-        let f = Random.float()
+        r = Random.int(-3, 3)
+        f = Random.float()
         if r < -3 || r >= 3 || f < 0.0 || f >= 1.0 { ok = false }
     }
     println("ranges ok:", ok)
     var deck = [1, 2, 3, 4, 5, 6]
     Random.shuffle(deck)
     deck.sort()
-    let empty: [int] = []
+    empty: [int] = []
     println(deck, Random.pick(deck) != none, Random.pick(empty))
-    let t0 = Time.now()
+    t0 = Time.now()
     Time.sleep(0.05)
-    let dt = Time.now() - t0
+    dt = Time.now() - t0
     println(dt >= 0.04 && dt < 1.0, Time.millis() > 1700000000000)
 }

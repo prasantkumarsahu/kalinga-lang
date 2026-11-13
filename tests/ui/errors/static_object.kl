@@ -1,0 +1,9 @@
+class E {
+    hp: int = 3
+}
+
+class G {
+    static BOSS: E = E()
+}
+
+fn main() {}

@@ -1,6 +1,6 @@
 // Errors in different functions are all reported, in source order.
 fn a() {
-    let x: int = "s"
+    x: int = "s"
 }
 
 class C {

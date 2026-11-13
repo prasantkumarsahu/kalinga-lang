@@ -66,8 +66,7 @@ pub fn context(text: &str, offset: usize, word_start: usize) -> Context {
             Some(Opener::Block) => Context::Expression,
         };
     }
-    let in_type_body = matches!(openers(&text[..line_start]).last(), Some(Opener::Class { .. } | Opener::Struct(_)));
-    if is_type_position(trimmed, in_type_body) {
+    if is_type_position(trimmed) {
         return Context::Type;
     }
     member_or_expression(before)
@@ -132,9 +131,9 @@ fn is_class_header(line: &str) -> bool {
     }
 }
 
-/// After `let x:`, `-> `, a parameter's `:`, a field's `:` in a type body, `as`, `is`, or
-/// inside type brackets.
-fn is_type_position(line: &str, in_type_body: bool) -> bool {
+/// After `x:` at the start of a line (a typed variable, field or value), `var x:`,
+/// `static X:`, `-> `, a parameter's `:`, `as`, `is`, or inside type brackets.
+fn is_type_position(line: &str) -> bool {
     let t = line.trim_end();
     if t.ends_with("->") || t.ends_with(" as") || t.ends_with(" is") {
         return true;
@@ -149,8 +148,9 @@ fn is_type_position(line: &str, in_type_body: bool) -> bool {
         return false;
     }
     let lead = lead.trim();
-    let after_keyword = ["let", "var", "const", "static var", "private"].iter().any(|k| lead.ends_with(k));
-    after_keyword || (lead.is_empty() && in_type_body) || in_parameter_list(lead)
+    // `name:` at the start of a line declares a field, a typed variable or a top-level value.
+    let after_keyword = ["var", "static", "private", "private(set)"].iter().any(|k| lead.ends_with(k));
+    after_keyword || lead.is_empty() || in_parameter_list(lead)
 }
 
 /// Is the text inside the parameter list of `fn name(`, `fn(` or `init(`?
@@ -249,7 +249,7 @@ mod tests {
     fn contexts() {
         assert_eq!(at("fn main() {\n    print(\"a.|\")\n}"), Context::Nothing);
         assert_eq!(at("fn main() {\n    // d.|\n}"), Context::Nothing);
-        assert_eq!(at("fn main() {\n    let x: |\n}"), Context::Type);
+        assert_eq!(at("fn main() {\n    x: |\n}"), Context::Type);
         assert_eq!(at("fn f(a: int, b: |"), Context::Type);
         assert_eq!(at("fn main() {\n    clamp(low: |"), Context::Expression);
         assert_eq!(at("class Cat : |"), Context::ClassHeader);

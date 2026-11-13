@@ -1,0 +1,49 @@
+// No keyword: a fixed variable. `var`: one that changes.
+fn pair() -> (int, str) {
+    return (7, "seven")
+}
+
+fn find(n: int) -> str? {
+    if n > 2 {
+        return "big"
+    }
+    return none
+}
+
+fn main() {
+    title = "Lives"
+    var lives = 3
+    lives += 1
+    (n, word) = pair()
+    ratio: float = 2
+    println(title, lives, n, word, ratio)
+
+    // An inner block changes the outer `var`; `x: T =` and `var` declare new ones.
+    var total = 0
+    for i in 1..4 {
+        total += i
+        lives: int = i * 10
+        println(lives)
+    }
+    println(total, lives)
+
+    // A lambda changes a `var` from outside.
+    var count = 0
+    bump = fn() {
+        count += 1
+    }
+    bump()
+    bump()
+    println(count)
+
+    // Unwrapping optionals.
+    if s = find(lives) {
+        println(s)
+    }
+    var queue = [1, 2, 3]
+    while x = queue.pop() {
+        println(x)
+    }
+    label = if s = find(1) { s } else { "small" }
+    println(label)
+}

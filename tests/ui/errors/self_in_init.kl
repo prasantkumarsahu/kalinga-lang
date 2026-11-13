@@ -1,6 +1,6 @@
 class D {
     init() {
-        let s = self
+        s = self
     }
 }
 fn main() {}

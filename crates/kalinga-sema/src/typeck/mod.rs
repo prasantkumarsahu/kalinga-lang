@@ -310,6 +310,16 @@ impl Checker<'_> {
                 cx.is_static = true;
                 match self.expr_to(&mut cx, &d.value, &ty) {
                     Ok(v) => {
+                        if let Err(at) = compile_time(&v) {
+                            let e = Diagnostic::error(
+                                format!("`{}` is set when the program is compiled, so this cannot be computed here", d.name),
+                                at,
+                            )
+                            .with_help(
+                                "use literals, other fixed values, arrays, maps, tuples, enum variants and struct values; for an object, write `static var name: Type? = none` and set it when the program runs",
+                            );
+                            errors.push(e);
+                        }
                         out.static_values.insert((owner.to_string(), d.name.clone()), v);
                     }
                     Err(e) => errors.push(e),
@@ -433,7 +443,7 @@ impl Checker<'_> {
             return err("`self` is not available in a `static fn`", pos);
         }
         if !cx.lambdas.is_empty() && cx.class.is_some() {
-            return err("`self` cannot be used inside a lambda; copy it first (`let me = self`) and use `me`", pos);
+            return err("`self` cannot be used inside a lambda; copy it first (`me = self`) and use `me`", pos);
         }
         if let Some(i) = &cx.iface {
             return err(format!("inside a default method of `{}`, `self` can only call `{}`'s methods", i, i), pos);
@@ -575,4 +585,31 @@ fn has_break(stmts: &[Stmt]) -> bool {
         StmtKind::Match { arms, .. } => arms.iter().any(|a| has_break(&a.body)),
         _ => false,
     })
+}
+
+/// Whether a `static` or top-level value is known at compile time: literals, other fixed
+/// values, operators on them, and arrays, maps, tuples, enum variants and struct values
+/// built from them. `Err` is the first part that is computed at run time.
+fn compile_time(e: &TExpr) -> std::result::Result<(), Span> {
+    let all = |xs: &[TExpr]| xs.iter().try_for_each(compile_time);
+    match &e.kind {
+        TExprKind::Int(_)
+        | TExprKind::Float(_)
+        | TExprKind::Str(_)
+        | TExprKind::Bool(_)
+        | TExprKind::None
+        | TExprKind::Static { .. }
+        | TExprKind::MathConst(_) => Ok(()),
+        TExprKind::Convert(x) | TExprKind::Neg(x) | TExprKind::Not(x) => compile_time(x),
+        TExprKind::Binary(_, a, b) => compile_time(a).and(compile_time(b)),
+        TExprKind::Array(xs) | TExprKind::Tuple(xs) => all(xs),
+        TExprKind::Map(kv) => kv.iter().try_for_each(|(k, v)| compile_time(k).and(compile_time(v))),
+        TExprKind::Interp(parts) => parts.iter().try_for_each(|p| match p {
+            TInterp::Lit(_) => Ok(()),
+            TInterp::Expr(x) => compile_time(x),
+        }),
+        TExprKind::Variant { args, .. } => all(args),
+        TExprKind::Call { callee: Callee::StructNew { .. }, args } => all(args),
+        _ => Err(e.pos),
+    }
 }

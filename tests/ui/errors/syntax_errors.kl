@@ -9,7 +9,7 @@ class C {
 }
 
 fn b() {
-    let = 2
+    = 2
 }
 
 fn main() {}

@@ -8,7 +8,8 @@ use kalinga_syntax::{lexer, parser};
 /// Type-checks a program; `Err` holds the messages.
 fn check(source: &str) -> Result<(), Vec<String>> {
     let tokens = lexer::lex(source, 0).map_err(|e| vec![e.message])?;
-    let prog = parser::parse(tokens).map_err(|es| es.into_iter().map(|e| e.message).collect::<Vec<_>>())?;
+    let mut prog = parser::parse(tokens).map_err(|es| es.into_iter().map(|e| e.message).collect::<Vec<_>>())?;
+    kalinga_sema::namespaces::apply(&mut prog, &Default::default()).map_err(|e| vec![e.message])?;
     let model = Model::build(&prog, true).map_err(|e| vec![e.message])?;
     typeck::check(&prog, &model).map(|_| ()).map_err(|es| es.into_iter().map(|e| e.message).collect())
 }
@@ -50,9 +51,9 @@ fn every_function_type_checks() {
             name => call(name, f.params),
         };
         let stmt = match f.name {
-            "Ok" | "Err" => format!("let r: Result<int, str> = {}", expr),
+            "Ok" | "Err" => format!("r: Result<int, str> = {}", expr),
             _ if f.ret == "void" => expr,
-            _ => format!("let r = {}", expr),
+            _ => format!("r = {}", expr),
         };
         let source = format!("{}\nfn main() {{\n    var items = [1]\n    {}\n}}\n", PRELUDE, stmt);
         if let Err(errors) = check(&source) {
@@ -79,9 +80,9 @@ fn every_method_type_checks() {
         // `join` needs an array of strings.
         let var = if (m.receiver, m.name) == ("[T]", "join") { "words" } else { var };
         let expr = format!("{}.{}", var, call(m.name, m.params));
-        let stmt = if m.ret == "void" { expr } else { format!("let r = {}", expr) };
+        let stmt = if m.ret == "void" { expr } else { format!("r = {}", expr) };
         let source = format!(
-            "{}\nfn main() {{\n    var items = [1]\n    let words = [\"w\"]\n    var map = {{\"k\": 1}}\n    let text = \"t\"\n    let result = res()\n    let task = Thread.spawn(fn() => 1)\n    let channel = Channel<int>()\n    let shared = Shared(1)\n    {}\n}}\n",
+            "{}\nfn main() {{\n    var items = [1]\n    words = [\"w\"]\n    var map = {{\"k\": 1}}\n    text = \"t\"\n    result = res()\n    task = Thread.spawn(fn() => 1)\n    channel = Channel<int>()\n    shared = Shared(1)\n    {}\n}}\n",
             PRELUDE, stmt
         );
         if let Err(errors) = check(&source) {
@@ -92,7 +93,7 @@ fn every_method_type_checks() {
 
 #[test]
 fn unknown_library_functions_are_rejected() {
-    let errors = check("fn main() {\n    let x = Math.nope(1.0)\n}\n").unwrap_err();
+    let errors = check("fn main() {\n    x = Math.nope(1.0)\n}\n").unwrap_err();
     assert_eq!(errors, vec!["`Math` has no function `nope`"]);
 }
 

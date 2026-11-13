@@ -10,7 +10,7 @@ Write the base class after `:`:
 ```kalinga
 class Animal {
     name: str
-    sound: str = "..."
+    var sound: str = "..."
 
     init(name: str) {
         self.name = name
@@ -33,7 +33,7 @@ class Dog : Animal {
 }
 
 fn main() {
-    let d = Dog("Rex")
+    d = Dog("Rex")
     println(d.speak()) // inherited from Animal
     println(d.fetch()) // defined in Dog
 }
@@ -74,7 +74,7 @@ class Blob : Shape {
 }
 
 fn main() {
-    let b = Blob("blobby")
+    b = Blob("blobby")
     println(b.label)
 }
 ```
@@ -207,7 +207,7 @@ fn introduce(a: Animal) {
 }
 
 fn main() {
-    let farm: [Animal] = [Cat("Tom"), Cow("Bella"), Animal("Generic")]
+    farm: [Animal] = [Cat("Tom"), Cow("Bella"), Animal("Generic")]
     for a in farm {
         introduce(a)
     }
@@ -248,9 +248,9 @@ class Dog : Animal {
 class Cat : Animal {}
 
 fn main() {
-    let pets: [Animal] = [Dog("Rex"), Cat("Tom")]
+    pets: [Animal] = [Dog("Rex"), Cat("Tom")]
     for p in pets {
-        if let d = p as Dog {
+        if d = p as Dog {
             println(d.fetch())
         } else {
             println(p.name, "is not a dog")
@@ -306,7 +306,7 @@ class Square : Shape {
 }
 
 fn main() {
-    let shapes: [Shape] = [Square(2.0), Square(3.0)]
+    shapes: [Shape] = [Square(2.0), Square(3.0)]
     for s in shapes {
         println(s.describe())
     }
@@ -351,7 +351,7 @@ class C : B {
 }
 
 fn main() {
-    let x: A = C()
+    x: A = C()
     println(x.who())
 }
 ```

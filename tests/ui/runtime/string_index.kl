@@ -1,4 +1,4 @@
 fn main() {
-    let s = "abc"
+    s = "abc"
     println(s[3])
 }

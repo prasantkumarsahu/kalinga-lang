@@ -34,7 +34,7 @@ fn describe(s: Show) -> str {
 
 fn main() {
     var count = 1
-    let d = Dog("rex")
+    d = Dog("rex")
     count += 1
     println(describe(d), d.show(), d.name, count)
 }
@@ -193,8 +193,7 @@ fn quick_fixes_for_override_and_missing_methods() {
 
 #[test]
 fn diagnostics_cover_every_class_rule_and_body() {
-    let src =
-        "interface I {\n    fn f()\n}\nclass A : I {\n}\nclass B : I {\n}\nfn main() {\n    let x: int = \"s\"\n}\n";
+    let src = "interface I {\n    fn f()\n}\nclass A : I {\n}\nclass B : I {\n}\nfn main() {\n    x: int = \"s\"\n}\n";
     let (mut world, uri) = open(&temp_dir("nav-diag"), src);
     let lines: Vec<u32> = world.diagnostics(&uri).iter().map(|d| d.range.start.line).collect();
     assert_eq!(lines, vec![3, 5, 8], "both classes and the body are reported at once");

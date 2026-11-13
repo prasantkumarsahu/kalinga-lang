@@ -2,7 +2,7 @@
 import "geometry.kl"
 
 fn main() {
-    let shapes: [Shape] = [Circle(1.0), Rect(2.0, 3.0), Rect.square(4.0)]
+    shapes: [Shape] = [Circle(1.0), Rect(2.0, 3.0), Rect.square(4.0)]
     for s in shapes {
         println(s.describe())
     }
@@ -16,7 +16,7 @@ fn main() {
     println("largest is the {largest.name}")
 
     for s in shapes {
-        if let r = s as Rect {
+        if r = s as Rect {
             println("a rect of {r.w} x {r.h}")
         }
     }

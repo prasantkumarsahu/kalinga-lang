@@ -1,1 +1,1 @@
-fn main() { let f = fn(x) => x }
+fn main() { f = fn(x) => x }

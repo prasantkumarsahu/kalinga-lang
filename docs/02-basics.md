@@ -54,8 +54,8 @@ A statement ends at the end of the line. Semicolons are allowed but never needed
 
 ```kalinga
 fn main() {
-    let a = 1
-    let b = 2; let c = 3
+    a = 1
+    b = 2; c = 3
     println(a + b + c)
 }
 ```
@@ -65,10 +65,10 @@ comma, or inside `(` `)` and `[` `]`, or when the next line starts with `.` (a m
 
 ```kalinga
 fn main() {
-    let total = 1 +
+    total = 1 +
         2 +
         3
-    let words = [
+    words = [
         "one",
         "two",
     ]
@@ -89,7 +89,7 @@ fn main() {
 
 ```kalinga
 fn main() {
-    let pi = 3.14159
+    pi = 3.14159
     var count = 0
     count = count + 1
     count += 1
@@ -105,13 +105,13 @@ Trying to change a `let` variable is a compile error:
 
 ```kalinga error
 fn main() {
-    let x = 1
+    x = 1
     x = 2
 }
 ```
 
 ```text
-main.kl:3:5: error: cannot change `x`: it was declared with `let` (use `var` for a mutable variable)
+main.kl:3:5: error: cannot change `x`: it is fixed (declare it `var x` to change it)
 3 |     x = 2
   |     ^
 ```
@@ -125,8 +125,8 @@ colon:
 
 ```kalinga
 fn main() {
-    let a = 10            // int, inferred
-    let b: float = 2.5    // float, written out
+    a = 10                // int, inferred
+    b: float = 2.5        // float, written out
     var names: [str] = [] // an empty array needs a type
     println(a, b, names)
 }
@@ -142,9 +142,9 @@ declare a new variable with the same name (shadowing); the same block may not:
 
 ```kalinga
 fn main() {
-    let x = 1
+    x = 1
     if true {
-        let x = "inner" // a different variable that hides the outer one
+        var x = "inner" // a different variable that hides the outer one
         println(x)
     }
     println(x)
@@ -169,9 +169,9 @@ inner
 written out, like a field's:
 
 ```kalinga
-const MAX_LIVES: int = 3
-const GRAVITY: float = 9.81
-const TITLE: str = "Space Rocks"
+MAX_LIVES: int = 3
+GRAVITY: float = 9.81
+TITLE: str = "Space Rocks"
 
 fn main() {
     println(TITLE, MAX_LIVES, GRAVITY * 2)
@@ -217,8 +217,8 @@ its own. Use `int()`, `float()` and `str()`:
 
 ```kalinga
 fn main() {
-    let n = 7
-    let f = 2.5
+    n = 7
+    f = 2.5
     println(float(n) * f)     // int → float
     println(int(f))           // float → int (drops the fraction)
     println("n is " + str(n)) // int → str
@@ -272,8 +272,8 @@ Kalinga
 
 ```kalinga
 fn main() {
-    let age = 20
-    let member = true
+    age = 20
+    member = true
     println(age >= 18 && member)
     println("apple" < "banana", [1, 2] == [1, 2])
 }

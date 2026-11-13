@@ -4,5 +4,5 @@ enum Maybe<T> {
 }
 
 fn main() {
-    let m = Maybe.Nothing
+    m = Maybe.Nothing
 }

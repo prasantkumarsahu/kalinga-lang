@@ -4,4 +4,4 @@ class Holder<T> {
         return self.value
     }
 }
-fn main() { let b: Holder<int, str> = Holder() }
+fn main() { b: Holder<int, str> = Holder() }

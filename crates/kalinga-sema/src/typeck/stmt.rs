@@ -1,7 +1,7 @@
 //! Statements: declarations, assignments, control flow and `match`.
 
 use kalinga_syntax::ast::*;
-use kalinga_syntax::error::{Result, Span, err};
+use kalinga_syntax::error::{Diagnostic, Result, Span, err};
 
 use super::{Checker, Ctx};
 use crate::model::EnumInfo;
@@ -39,7 +39,7 @@ impl Checker<'_> {
                 Ok(TStmt::If { cond, then, otherwise })
             }
             StmtKind::IfLet { name, value, then, otherwise } => {
-                let (value_t, inner) = self.optional_value(cx, value, "if let")?;
+                let (value_t, inner) = self.optional_value(cx, value, "if")?;
                 let then = cx.scoped(|cx| {
                     self.declare(cx, name, inner, false, s.pos)?;
                     self.block(cx, then)
@@ -54,7 +54,7 @@ impl Checker<'_> {
                 Ok(TStmt::While { cond, body })
             }
             StmtKind::WhileLet { name, value, body } => {
-                let (value, inner) = self.optional_value(cx, value, "while let")?;
+                let (value, inner) = self.optional_value(cx, value, "while")?;
                 let body = self.loop_body(cx, &[(name, inner)], body, s.pos)?;
                 Ok(TStmt::WhileLet { name: name.clone(), value, body })
             }
@@ -106,7 +106,7 @@ impl Checker<'_> {
         match value_t.ty {
             Type::Void => return err("cannot store the result of a function that returns nothing", value.pos),
             Type::NoneLit => {
-                return err("cannot infer the type of `none`; add a type, e.g. `let x: int? = none`", value.pos);
+                return err("cannot infer the type of `none`; add a type, e.g. `x: int? = none`", value.pos);
             }
             _ => {}
         }
@@ -127,7 +127,7 @@ impl Checker<'_> {
     fn let_tuple(&self, cx: &mut Ctx, names: &[(String, Span)], mutable: bool, value: &Expr) -> Result<TStmt> {
         let value_t = self.expr(cx, value, None)?;
         let Type::Tuple(parts) = value_t.ty.clone() else {
-            return err(format!("`let (...)` takes a tuple apart, but this is a `{}`", value_t.ty), value.pos);
+            return err(format!("`(a, b) = ...` takes a tuple apart, but this is a `{}`", value_t.ty), value.pos);
         };
         if parts.len() != names.len() {
             return err(
@@ -151,7 +151,11 @@ impl Checker<'_> {
                 let inner = (**i).clone();
                 Ok((value_t, inner))
             }
-            other => err(format!("`{}` needs an optional value (`T?`), found `{}`", what, other), value.pos),
+            other => Err(Diagnostic::error(
+                format!("`{} name = value` unwraps an optional (`T?`), but this is `{}`", what, other),
+                value.pos,
+            )
+            .with_help("to compare, write `==`")),
         }
     }
 

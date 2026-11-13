@@ -10,10 +10,10 @@ fn clean(dir: str) {
 }
 
 fn main() {
-    let dir = "target/ui-std-fs"
+    dir = "target/ui-std-fs"
     clean(dir)
     Dir.create(Path.join(dir, "inner")).unwrap()
-    let file = Path.join(dir, "notes.txt")
+    file = Path.join(dir, "notes.txt")
     File.write(file, "one\r\ntwo\n").unwrap()
     File.append(file, "three\n").unwrap()
     println(File.read_lines(file).unwrap())

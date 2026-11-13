@@ -60,11 +60,11 @@ fn work(n: int) -> int {
 }
 
 fn main() {
-    let a = Thread.spawn(fn() => work(1000))
-    let b = Thread.spawn(fn() => work(2000))
+    a = Thread.spawn(fn() => work(1000))
+    b = Thread.spawn(fn() => work(2000))
     println(a.join() == work(1000), b.join() == work(2000))
 
-    let counter = Shared(0)
+    counter = Shared(0)
     var tasks: [Task<void>] = []
     for i in 0..4 {
         tasks.push(Thread.spawn(fn() {
@@ -78,10 +78,10 @@ fn main() {
     }
     println("counter", counter.get())
 
-    let jobs = Channel<int>()
-    let worker = Thread.spawn(fn() -> int {
+    jobs = Channel<int>()
+    worker = Thread.spawn(fn() -> int {
         var sum = 0
-        while let j = jobs.receive() {
+        while j = jobs.receive() {
             sum += j
         }
         return sum
@@ -116,8 +116,8 @@ async fn delayed(name: str, seconds: float) -> str {
 }
 
 async fn main() {
-    let first = await delayed("one", 0.01)
-    let all = await Async.all([delayed("a", 0.02), delayed("b", 0.01)])
+    first = await delayed("one", 0.01)
+    all = await Async.all([delayed("a", 0.02), delayed("b", 0.01)])
     println(first, all)
 }
 ```
@@ -152,7 +152,7 @@ import "std/fs"
 
 fn save(path: str, lines: [str]) -> Result<int, str> {
     File.write(path, lines.join("\n"))?
-    let back = File.read_lines(path)?
+    back = File.read_lines(path)?
     return Ok(len(back))
 }
 
@@ -184,8 +184,8 @@ collector.
 import "std/reactive"
 
 fn main() {
-    let count = signal(1)
-    let doubled = computed(fn() => count.get() * 2)
+    count = signal(1)
+    doubled = computed(fn() => count.get() * 2)
     effect(fn() {
         println("count is {count.get()}, doubled is {doubled.get()}")
     })
@@ -194,7 +194,7 @@ fn main() {
         count.set(6)
         count.set(7)
     })
-    let page = scope()
+    page = scope()
     page.run(fn() {
         effect(fn() {
             println("page sees", count.get())

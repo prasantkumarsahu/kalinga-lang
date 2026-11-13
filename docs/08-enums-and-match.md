@@ -64,7 +64,7 @@ fn area(s: Shape) -> float {
 }
 
 fn main() {
-    let shapes = [Shape.Circle(1.0), Shape.Rect(2.0, 3.0), Shape.Empty]
+    shapes = [Shape.Circle(1.0), Shape.Rect(2.0, 3.0), Shape.Empty]
     for s in shapes {
         println(s, area(s))
     }
@@ -158,13 +158,13 @@ enum Dir {
 }
 
 fn main() {
-    let d = Dir.Left
-    let dx = match d { Left => -1, Right => 1, _ => 0 }
-    let name = match d {
+    d = Dir.Left
+    dx = match d { Left => -1, Right => 1, _ => 0 }
+    name = match d {
         Up => "up"
         Down => "down"
         Left => {
-            let arrow = "<-"
+            arrow = "<-"
             "left {arrow}"
         }
         Right => "right"
@@ -228,7 +228,7 @@ enum Owner {
 }
 
 fn main() {
-    let o = Owner.Person(User("Asha"))
+    o = Owner.Person(User("Asha"))
     match o {
         Person(u) => println("owned by", u.name)
         Nobody => println("free")
@@ -262,7 +262,7 @@ fn eval(e: Expr) -> int {
 }
 
 fn main() {
-    let e = Expr.Add(Expr.Num(2), Expr.Neg(Expr.Num(5)))
+    e = Expr.Add(Expr.Num(2), Expr.Neg(Expr.Num(5)))
     println(e)
     println(eval(e))
 }
@@ -296,7 +296,7 @@ fn total(t: Tree) -> int {
 }
 
 fn main() {
-    let t = Tree.Node([Tree.Leaf(1), Tree.Node([Tree.Leaf(2), Tree.Leaf(3)])])
+    t = Tree.Node([Tree.Leaf(1), Tree.Node([Tree.Leaf(2), Tree.Leaf(3)])])
     println(total(t))
 }
 ```

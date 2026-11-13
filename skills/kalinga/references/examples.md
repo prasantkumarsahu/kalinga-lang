@@ -29,7 +29,7 @@ abstract class Animal {
 }
 
 class Dog : Animal {
-    tricks: [str] = []
+    var tricks: [str] = []
 
     init(name: str) {
         super(name)
@@ -55,12 +55,12 @@ class Cat : Animal {
 }
 
 fn main() {
-    let rex = Dog("Rex")
+    rex = Dog("Rex")
     rex.learn("sit")
-    let pets: [Animal] = [rex, Cat("Tom")]
+    pets: [Animal] = [rex, Cat("Tom")]
     for p in pets {
         println(p.speak())
-        if let d = p as Dog {
+        if d = p as Dog {
             println("  knows", d.tricks)
         }
         println("  is a cat:", p is Cat)
@@ -84,8 +84,8 @@ Tom says meow
 
 ```kalinga
 struct Vec2 {
-    x: float
-    y: float
+    var x: float
+    var y: float
 
     fn length() -> float {
         return Math.sqrt(self.x * self.x + self.y * self.y)
@@ -106,7 +106,7 @@ struct Vec2 {
 }
 
 fn main() {
-    let a = Vec2(3, 4)
+    a = Vec2(3, 4)
     var b = a
     b.scale(2.0)
     println(a, b, a.length())
@@ -133,7 +133,7 @@ interface Store<T> {
 }
 
 class Counter : Store<int> {
-    n: int = 0
+    var n: int = 0
 
     override fn get() -> int {
         return self.n
@@ -145,7 +145,7 @@ class Counter : Store<int> {
 }
 
 class Stack<T> {
-    items: [T] = []
+    var items: [T] = []
 
     fn push(x: T) {
         self.items.push(x)
@@ -169,12 +169,12 @@ fn describe<T: Show>(xs: [T]) -> str {
 }
 
 fn main() {
-    let c = Counter()
+    c = Counter()
     bump(c, 5)
     bump(c, 2)
     println(c.get())
 
-    let s = Stack<str>()
+    s = Stack<str>()
     s.push("a")
     s.push("b")
     println(s.pop(), s.pop(), s.pop())
@@ -195,9 +195,9 @@ b a none
 
 ```kalinga
 class Account {
-    const LIMIT: int = 1000
+    static LIMIT: int = 1000
     static var opened: int = 0
-    private balance: int = 0
+    private var balance: int = 0
     owner: str
 
     init(owner: str) {
@@ -215,8 +215,8 @@ class Account {
 }
 
 fn main() {
-    let a = Account("Asha")
-    let b = Account("Ravi")
+    a = Account("Asha")
+    b = Account("Ravi")
     println(a.deposit(600), a.deposit(600), b.deposit(50))
     println(Account.opened, "accounts")
 }
@@ -233,11 +233,11 @@ Ok(600) Err(over the limit of 1000) Ok(50)
 fn count_words(text: str) -> {str: int} {
     var counts: {str: int} = {}
     for raw in text.lower().split(" ") {
-        let w = raw.trim()
+        w = raw.trim()
         if w == "" {
             continue
         }
-        if let n = counts.get(w) {
+        if n = counts.get(w) {
             counts[w] = n + 1
         } else {
             counts[w] = 1
@@ -247,14 +247,14 @@ fn count_words(text: str) -> {str: int} {
 }
 
 fn main() {
-    let counts = count_words("the cat and the hat  and THE bat")
+    counts = count_words("the cat and the hat  and THE bat")
     println(counts)
     var pairs: [(str, int)] = []
     for word, n in counts {
         pairs.push((word, n))
     }
     pairs.sort_by(fn(a, b) => a.1 > b.1)
-    let (top, times) = pairs[0]
+    (top, times) = pairs[0]
     println("most common:", top, times)
 }
 ```
@@ -271,7 +271,7 @@ most common: the 3
 ```kalinga
 class Button {
     label: str
-    handlers: [fn()] = []
+    var handlers: [fn()] = []
 
     init(label: str) {
         self.label = label
@@ -291,7 +291,7 @@ class Button {
 fn main() {
     var clicks = 0
     var log: [str] = []
-    let b = Button("ok")
+    b = Button("ok")
     b.on_click(fn() {
         clicks += 1
     })

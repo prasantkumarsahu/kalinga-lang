@@ -9,13 +9,13 @@ particles and other small pieces of data that games and numeric code use by the 
 
 ```kalinga
 struct Vec2 {
-    x: float
+    var x: float
     y: float
 }
 
 fn main() {
-    let a = Vec2(3.0, 4.0) // the fields, in order
-    var b = a              // a copy
+    a = Vec2(3.0, 4.0) // the fields, in order
+    var b = a          // a copy
     b.x = 10.0
     println(a, b, a == Vec2(3.0, 4.0))
 }
@@ -56,7 +56,7 @@ element, a field of an object):
 
 ```kalinga
 struct Counter {
-    n: int
+    var n: int
 
     fn doubled() -> int {
         return self.n * 2
@@ -140,8 +140,8 @@ struct Vec2 {
 
 fn main() {
     var pos = Vec2(0.0, 10.0)
-    let vel = Vec2(2.0, -1.0)
-    let dt = 0.5
+    vel = Vec2(2.0, -1.0)
+    dt = 0.5
     pos += vel * dt // compound assignment uses the operator too
     println(pos, -pos, pos * Vec2(1.0, 0.0))
 }
@@ -188,7 +188,7 @@ fn main() {
     vs.sort()
     println(vs)
     println(Version(2, 0) > Version(1, 9))
-    let m = Money(1250, "EUR")
+    m = Money(1250, "EUR")
     println("{m}, {m == Money(1250, "USD")}")
 }
 ```
@@ -220,14 +220,14 @@ struct Vec2 {
 }
 
 struct Ball {
-    pos: Vec2
-    vel: Vec2
+    var pos: Vec2
+    var vel: Vec2
 }
 
 fn main() {
-    let gravity = Vec2(0.0, -9.8)
+    gravity = Vec2(0.0, -9.8)
     var balls = [Ball(Vec2(0.0, 10.0), Vec2(1.0, 0.0)), Ball(Vec2(5.0, 2.0), Vec2(0.0, 6.0))]
-    let dt = 0.1
+    dt = 0.1
     for step in 0..10 {
         for i in 0..len(balls) {
             balls[i].vel += gravity * dt

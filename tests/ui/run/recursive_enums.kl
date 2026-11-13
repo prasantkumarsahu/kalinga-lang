@@ -41,7 +41,7 @@ fn main() {
     }
     println(sum(l))
     println(l)
-    let s = Shape.Both(Pair(Shape.Dot, Shape.Both(Pair(Shape.Dot, Shape.Maybe(none)))))
+    s = Shape.Both(Pair(Shape.Dot, Shape.Both(Pair(Shape.Dot, Shape.Maybe(none)))))
     println(size(s))
     println(s)
     match l {

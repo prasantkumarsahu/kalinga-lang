@@ -24,12 +24,12 @@ fn lookup(name: str) -> (bool, int?) {
 }
 
 fn main() {
-    let (lo, hi) = min_max([4, 9, 1, 7])
+    (lo, hi) = min_max([4, 9, 1, 7])
     println(lo, hi)
-    let r = min_max([3])
+    r = min_max([3])
     println(r, r.0, r.1)
 
-    let t = ("pi", 3.14, true)
+    t = ("pi", 3.14, true)
     println(t.0, t.1, t.2)
     println(swap((1, "one")))
 
@@ -38,7 +38,7 @@ fn main() {
     b = a * 2
     println(a, b)
 
-    let pairs: [(str, int)] = [("a", 1), ("b", 2)]
+    pairs: [(str, int)] = [("a", 1), ("b", 2)]
     for (name, n) in pairs {
         println(name, n)
     }
@@ -48,12 +48,12 @@ fn main() {
 
     println((1, "x") == (1, "x"), (1, "x") == (2, "x"))
     println(lookup("Asha"), lookup("Ravi"))
-    let nested = ((1, 2), (3, 4))
+    nested = ((1, 2), (3, 4))
     println(nested.1.0, nested.0.1)
 
     // A tuple part that a lambda changes is shared like any `var`.
     var (count, label) = (0, "clicks")
-    let click = fn() {
+    click = fn() {
         count += 1
     }
     click()

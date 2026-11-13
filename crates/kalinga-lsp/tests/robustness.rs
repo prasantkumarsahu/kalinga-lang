@@ -15,9 +15,9 @@ use lsp_types::*;
 
 /// Inserted at random places: the pieces of half-written code.
 const PIECES: &[&str] = &[
-    "{", "}", "(", ")", "[", "]", "\"", "'", "fn ", "class ", "let ", "if ", "match ", "..", "..=", "?", "//", "/*",
-    ".", ",", ":", "->", "=>", "=", "<", ">", "\n", "    ", "self.", "0", "1.5", "none", "async ", "await ",
-    "test fn ", "@", "\\", "é", "😀",
+    "{", "}", "(", ")", "[", "]", "\"", "'", "fn ", "class ", "", "if ", "match ", "..", "..=", "?", "//", "/*", ".",
+    ",", ":", "->", "=>", "=", "<", ">", "\n", "    ", "self.", "0", "1.5", "none", "async ", "await ", "test fn ",
+    "@", "\\", "é", "😀",
 ];
 
 /// xorshift64*: the same broken files on every run.

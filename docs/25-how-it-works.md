@@ -79,7 +79,7 @@ Take this program:
 
 ```kalinga
 class Shape {
-    area: float
+    var area: float
     fn grow(k: float) {
         self.area *= k
     }
@@ -92,7 +92,7 @@ class Sq : Shape {
 }
 
 fn main() {
-    let s: Shape = Sq(3.0)
+    s: Shape = Sq(3.0)
     println(s.area)
 }
 ```

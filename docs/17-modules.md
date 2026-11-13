@@ -75,7 +75,7 @@ executable:
 import "std/math2d"
 
 fn main() {
-    let a = Vec2(3.0, 4.0)
+    a = Vec2(3.0, 4.0)
     println(a.length(), a + Vec2(1.0, 1.0), Rect(0.0, 0.0, 10.0, 10.0).contains(a))
 }
 ```

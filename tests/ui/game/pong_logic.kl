@@ -2,16 +2,16 @@ import "../../../examples/pong/logic.kl"
 
 fn main() {
     // walls
-    let up = move_ball(Ball(Vec2(100.0, 5.0), Vec2(0.0, -300.0)), 0.1, 600.0)
+    up = move_ball(Ball(Vec2(100.0, 5.0), Vec2(0.0, -300.0)), 0.1, 600.0)
     println("bounced off top:", up.vel.y > 0.0, up.pos.y >= up.radius)
-    let down = move_ball(Ball(Vec2(100.0, 595.0), Vec2(0.0, 300.0)), 0.1, 600.0)
+    down = move_ball(Ball(Vec2(100.0, 595.0), Vec2(0.0, 300.0)), 0.1, 600.0)
     println("bounced off bottom:", down.vel.y < 0.0, down.pos.y <= 600.0 - down.radius)
 
     // paddles
-    let paddle = Rect(30.0, 250.0, 14.0, 100.0)
-    let center_hit = bounce_off(Ball(Vec2(40.0, 300.0), Vec2(-300.0, 0.0)), paddle, true)
+    paddle = Rect(30.0, 250.0, 14.0, 100.0)
+    center_hit = bounce_off(Ball(Vec2(40.0, 300.0), Vec2(-300.0, 0.0)), paddle, true)
     println("goes right:", center_hit.vel.x > 0.0, "straight:", Math.abs(center_hit.vel.y) < 0.001, "faster:", center_hit.vel.length() > 300.0)
-    let edge_hit = bounce_off(Ball(Vec2(40.0, 345.0), Vec2(-300.0, 0.0)), paddle, true)
+    edge_hit = bounce_off(Ball(Vec2(40.0, 345.0), Vec2(-300.0, 0.0)), paddle, true)
     println("edge hit is steep:", edge_hit.vel.y > 200.0, "outside paddle:", edge_hit.pos.x >= paddle.x + paddle.w)
 
     // computer paddle
@@ -21,6 +21,6 @@ fn main() {
 
     // serve
     Random.seed(5)
-    let s = serve(800.0, 600.0, false)
+    s = serve(800.0, 600.0, false)
     println("serve goes left from centre:", s.vel.x < 0.0, s.pos == Vec2(400.0, 300.0))
 }

@@ -9,5 +9,5 @@ class Ints : Store<int> {
 }
 
 fn main() {
-    let s: Store<str> = Ints()
+    s: Store<str> = Ints()
 }

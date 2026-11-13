@@ -1,0 +1,4 @@
+tests/ui/errors/static_call.kl:5:10: error: `X` is set when the program is compiled, so this cannot be computed here
+5 | X: int = f() + 1
+  |          ^
+  = help: use literals, other fixed values, arrays, maps, tuples, enum variants and struct values; for an object, write `static var name: Type? = none` and set it when the program runs

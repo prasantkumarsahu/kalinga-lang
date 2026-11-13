@@ -1,0 +1,7 @@
+// A misspelt name declares a new variable: the warning catches it.
+fn main() {
+    var total = 1
+    totl = total + 1
+    _skip = 2
+    println(total)
+}

@@ -29,7 +29,7 @@ A B C
 
 ```kalinga
 fn main() {
-    let ready = false
+    ready = false
     if ready {
         println("go")
     }
@@ -46,10 +46,10 @@ required:
 
 ```kalinga
 fn main() {
-    let score = 82
-    let grade = if score >= 90 { "A" } else if score >= 75 { "B" } else { "C" }
-    let bonus = if score > 80 {
-        let extra = score - 80
+    score = 82
+    grade = if score >= 90 { "A" } else if score >= 75 { "B" } else { "C" }
+    bonus = if score > 80 {
+        extra = score - 80
         extra * 10
     } else {
         0
@@ -93,7 +93,7 @@ the value inside (see [Optionals](07-optionals.md)):
 ```kalinga
 fn main() {
     var todo = ["wash", "cook", "shop"]
-    while let task = todo.pop() {
+    while task = todo.pop() {
         println("doing", task)
     }
 }
@@ -144,7 +144,7 @@ fn main() {
 
 ```kalinga
 fn main() {
-    let fruits = ["apple", "mango", "kiwi"]
+    fruits = ["apple", "mango", "kiwi"]
     for f in fruits {
         println(f.upper())
     }
@@ -164,7 +164,7 @@ With two names, the first is the position (from `0`) and the second the element:
 
 ```kalinga
 fn main() {
-    let podium = ["Asha", "Ravi", "Mira"]
+    podium = ["Asha", "Ravi", "Mira"]
     for i, name in podium {
         println(i + 1, name)
     }

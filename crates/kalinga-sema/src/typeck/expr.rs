@@ -188,7 +188,7 @@ impl Checker<'_> {
         let elem = match (expected, items.first()) {
             (Some(Type::Array(t)), _) => (**t).clone(),
             (_, Some(first)) => self.expr(cx, first, None)?.ty,
-            (_, None) => return err("cannot infer the type of `[]`; add a type, e.g. `let xs: [int] = []`", pos),
+            (_, None) => return err("cannot infer the type of `[]`; add a type, e.g. `xs: [int] = []`", pos),
         };
         let mut out = vec![];
         for it in items {
@@ -207,7 +207,7 @@ impl Checker<'_> {
         let (kt, vt) = match (expected, entries.first()) {
             (Some(Type::Map(k, v)), _) => ((**k).clone(), (**v).clone()),
             (_, Some((k, v))) => (self.expr(cx, k, None)?.ty, self.expr(cx, v, None)?.ty),
-            (_, None) => return err("cannot infer the type of `{}`; add a type, e.g. `let m: {str: int} = {}`", pos),
+            (_, None) => return err("cannot infer the type of `{}`; add a type, e.g. `m: {str: int} = {}`", pos),
         };
         if !is_map_key(&kt) {
             return err(format!("map keys must be `int`, `str` or `bool`, not `{}`", kt), pos);

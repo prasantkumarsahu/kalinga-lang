@@ -160,7 +160,7 @@ extern fn matrix_identity(n: int) -> Matrix
 extern fn matrix_trace(m: Matrix) -> float
 
 fn main() {
-    let m = matrix_identity(4)
+    var m = matrix_identity(4)
     println(matrix_trace(m))
 }
 ```

@@ -28,14 +28,14 @@ enum Pet {
 }
 
 fn main() {
-    let pets = [Pet.Real(Dog("Rex")), Pet.Imaginary("Nessie")]
+    pets = [Pet.Real(Dog("Rex")), Pet.Imaginary("Nessie")]
     for p in pets {
         match p {
             Real(a) => println(a.show())
             Imaginary(n) => println("{n} is imaginary")
         }
     }
-    let counts = {"dogs": 1, "cats": 0}
+    counts = {"dogs": 1, "cats": 0}
     println([3, 1, 2].map(fn(x) => x * 10), counts)
 }
 ```

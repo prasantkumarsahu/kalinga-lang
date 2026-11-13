@@ -5,13 +5,13 @@ import "logic.kl"
 class Pong : Game {
     width: float = 800.0
     height: float = 600.0
-    player: Rect = Rect(30.0, 250.0, 14.0, 100.0)
-    cpu: Rect = Rect(756.0, 250.0, 14.0, 100.0)
-    ball: Ball = serve(800.0, 600.0, true)
-    player_score: int
-    cpu_score: int
-    waiting: bool = true
-    winner: str = ""
+    var player: Rect = Rect(30.0, 250.0, 14.0, 100.0)
+    var cpu: Rect = Rect(756.0, 250.0, 14.0, 100.0)
+    var ball: Ball = serve(800.0, 600.0, true)
+    var player_score: int
+    var cpu_score: int
+    var waiting: bool = true
+    var winner: str = ""
 
     override fn update(input: Input, dt: float) {
         if input.key_pressed("escape") {
@@ -30,7 +30,7 @@ class Pong : Game {
         }
 
         // Player paddle
-        let speed = 420.0
+        speed = 420.0
         if input.key_down("w") || input.key_down("up") {
             self.player.y -= speed * dt
         }
@@ -95,7 +95,7 @@ class Pong : Game {
     }
 
     private fn centered(screen: Screen, text: str, y: float, size: float, c: Color) {
-        let w = screen.text_width(text, size)
+        w = screen.text_width(text, size)
         screen.text(text, Vec2((self.width - w) / 2.0, y), size, c)
     }
 }

@@ -7,7 +7,7 @@ A class groups data (**fields**) with the code that works on it (**methods**).
 ```kalinga
 class BankAccount {
     owner: str
-    balance: float = 0.0
+    var balance: float = 0.0
 
     init(owner: str) {
         self.owner = owner
@@ -31,7 +31,7 @@ class BankAccount {
 }
 
 fn main() {
-    let acct = BankAccount("Mira")
+    acct = BankAccount("Mira")
     acct.deposit(100.0)
     println(acct.withdraw(30.0), acct.withdraw(500.0))
     println(acct.summary())
@@ -68,7 +68,7 @@ class Point {
 }
 
 fn main() {
-    let p = Point(3, 4)
+    p = Point(3, 4)
     println(p.x, p.y)
 }
 ```
@@ -101,7 +101,7 @@ class Settings {
 }
 
 fn main() {
-    let s = Settings()
+    s = Settings()
     println(s.volume, s.muted, s.theme, s.tags)
 }
 ```
@@ -119,8 +119,8 @@ fields and to call other methods of the same object:
 
 ```kalinga
 class Counter {
-    count: int
-    step: int = 1
+    var count: int
+    var step: int = 1
 
     fn tick() {
         self.count += self.step
@@ -134,7 +134,7 @@ class Counter {
 }
 
 fn main() {
-    let c = Counter()
+    c = Counter()
     c.tick_many(5)
     c.step = 10
     c.tick()
@@ -152,8 +152,8 @@ everywhere except inside `init` (where the object is not finished yet):
 ```kalinga
 class Node {
     value: int
-    children: [Node]
-    parent: Node? = none
+    var children: [Node]
+    var parent: Node? = none
 
     init(value: int) {
         self.value = value
@@ -166,10 +166,10 @@ class Node {
 }
 
 fn main() {
-    let root = Node(1)
-    let kid = Node(2)
+    root = Node(1)
+    kid = Node(2)
     root.add(kid)
-    if let p = kid.parent {
+    if p = kid.parent {
         println("parent of", kid.value, "is", p.value)
     }
 }
@@ -186,7 +186,7 @@ Mark a field or method `private` to make it usable only inside the class's own m
 ```kalinga
 class Account {
     owner: str
-    private balance: int = 0
+    private var balance: int = 0
 
     init(owner: str) {
         self.owner = owner
@@ -208,7 +208,7 @@ class Account {
 }
 
 fn main() {
-    let a = Account("Ravi")
+    a = Account("Ravi")
     a.deposit(50)
     a.deposit(-10)
     println(a.balance_text())
@@ -236,8 +236,8 @@ getter:
 ```kalinga
 class Account {
     owner: str
-    private(set) balance: int = 0
-    private(set) history: [int] = []
+    private(set) var balance: int = 0
+    private(set) var history: [int] = []
 
     init(owner: str) {
         self.owner = owner
@@ -250,7 +250,7 @@ class Account {
 }
 
 fn main() {
-    let a = Account("Ravi")
+    a = Account("Ravi")
     a.deposit(50)
     a.deposit(25)
     println("{a.owner}: {a.balance} {a.history}")
@@ -302,7 +302,7 @@ class Point : Show {
 }
 
 fn main() {
-    let rex = Dog("Rex", 3)
+    rex = Dog("Rex", 3)
     println(rex)
     println("my dog: {rex}")
     println([Point(1, 2), Point(3, 4)])
@@ -411,7 +411,7 @@ class Temperature {
 }
 
 fn main() {
-    let t = Temperature.from_fahrenheit(212.0)
+    t = Temperature.from_fahrenheit(212.0)
     println(t.celsius, Temperature.freezing().celsius)
 }
 ```
@@ -433,7 +433,7 @@ A class or struct can hold values that belong to the type rather than to one obj
 
 ```kalinga
 class Enemy {
-    const MAX_HP: int = 30
+    static MAX_HP: int = 30
     static var alive: int = 0
 
     hp: int = Enemy.MAX_HP
@@ -444,9 +444,9 @@ class Enemy {
 }
 
 fn main() {
-    let a = Enemy()
-    let b = Enemy()
-    println(Enemy.alive, a.hp, Enemy.MAX_HP)
+    a = Enemy()
+    b = Enemy()
+    println(Enemy.alive, a.hp, b.hp)
 }
 ```
 
@@ -471,7 +471,7 @@ passing it shares the same object:
 
 ```kalinga
 class Lamp {
-    on: bool
+    var on: bool
 }
 
 fn switch_on(l: Lamp) {
@@ -479,8 +479,8 @@ fn switch_on(l: Lamp) {
 }
 
 fn main() {
-    let a = Lamp()
-    let b = a // b and a are the same lamp
+    a = Lamp()
+    b = a // b and a are the same lamp
     switch_on(b)
     println(a.on)
 }
@@ -499,7 +499,7 @@ A field of a class type needs a default value, or it must be optional:
 
 ```kalinga
 class Engine {
-    hp: int = 150
+    var hp: int = 150
 }
 
 class Car {
@@ -508,7 +508,7 @@ class Car {
 }
 
 fn main() {
-    let car = Car()
+    car = Car()
     car.engine.hp = 300
     println(car.engine.hp, car.trailer == none)
 }
@@ -523,7 +523,7 @@ Optional object fields make linked structures possible:
 ```kalinga
 class Node {
     value: int
-    next: Node? = none
+    var next: Node? = none
 
     init(value: int) {
         self.value = value
@@ -531,16 +531,16 @@ class Node {
 }
 
 fn main() {
-    let third = Node(3)
-    let second = Node(2)
+    third = Node(3)
+    second = Node(2)
     second.next = third
-    let head = Node(1)
+    head = Node(1)
     head.next = second
 
     var cur: Node? = head
     var total = 0
     while cur != none {
-        if let n = cur {
+        if n = cur {
             total += n.value
             cur = n.next
         }

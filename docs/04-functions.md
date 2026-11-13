@@ -127,7 +127,7 @@ How values are passed depends on the type:
 
 ```kalinga
 class Holder {
-    value: int
+    var value: int
 }
 
 fn fill(items: [int], b: Holder) {
@@ -137,8 +137,8 @@ fn fill(items: [int], b: Holder) {
 }
 
 fn main() {
-    let nums = [1, 2]
-    let b = Holder()
+    nums = [1, 2]
+    b = Holder()
     fill(nums, b)
     println(nums, b.value)
 }
@@ -194,7 +194,7 @@ How values are printed:
 
 ```kalinga
 fn main() {
-    let maybe: int? = none
+    maybe: int? = none
     println(42, 2.0, 0.25, true, "text", [1, 2, 3], maybe)
 }
 ```
@@ -209,8 +209,8 @@ Reading input:
 
 ```kalinga
 fn main() {
-    let name = input("Your name: ")
-    let age = int(input("Your age: "))
+    name = input("Your name: ")
+    age = int(input("Your age: "))
     println("Hello", name, "- next year you will be", age + 1)
 }
 ```
@@ -236,13 +236,13 @@ fn min_max(xs: [int]) -> (int, int) {
 }
 
 fn main() {
-    let (lo, hi) = min_max([4, 9, 1, 7])
+    (lo, hi) = min_max([4, 9, 1, 7])
     println(lo, hi)
 
-    let range = min_max([3, 8])
+    range = min_max([3, 8])
     println(range, range.0, range.1)
 
-    let people: [(str, int)] = [("Asha", 30), ("Ravi", 25)]
+    people: [(str, int)] = [("Asha", 30), ("Ravi", 25)]
     for (name, age) in people {
         println(name, "is", age)
     }

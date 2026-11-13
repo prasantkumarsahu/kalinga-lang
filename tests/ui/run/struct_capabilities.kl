@@ -24,8 +24,8 @@ struct Name : Ord {
 
     // Case-insensitive order.
     override fn compare(other: Name) -> int {
-        let a = self.text.lower()
-        let b = other.text.lower()
+        a = self.text.lower()
+        b = other.text.lower()
         if a < b {
             return -1
         }
@@ -52,7 +52,7 @@ fn main() {
     vs.sort()
     println(vs)
 
-    let m = Money(1250, "EUR")
+    m = Money(1250, "EUR")
     println(m)
     println("{m}!")
     println(m == Money(1250, "EUR"))

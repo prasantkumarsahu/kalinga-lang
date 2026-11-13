@@ -1,4 +1,4 @@
 fn main() {
-    let m = {"a": 1}
+    m = {"a": 1}
     println(m["b"])
 }

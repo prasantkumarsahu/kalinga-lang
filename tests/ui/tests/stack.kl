@@ -1,6 +1,6 @@
 // ui: test
 class Stack {
-    items: [int]
+    var items: [int]
     static var created: int = 0
 
     init() {
@@ -21,7 +21,7 @@ fn main() {
 }
 
 test fn push_then_pop() {
-    let s = Stack()
+    s = Stack()
     s.push(1)
     s.push(2)
     assert_eq(s.pop(), 2)
@@ -30,7 +30,7 @@ test fn push_then_pop() {
 }
 
 test fn statics_start_over() {
-    let s = Stack()
+    s = Stack()
     assert_eq(Stack.created, 1)
 }
 
@@ -39,11 +39,11 @@ test fn wrong_on_purpose() {
 }
 
 test fn fails_with_message() {
-    let s = Stack()
+    s = Stack()
     assert(s.pop() != none, "a new stack has nothing to pop")
 }
 
 test fn runtime_error() {
-    let xs = [1]
+    xs = [1]
     println(xs[5])
 }

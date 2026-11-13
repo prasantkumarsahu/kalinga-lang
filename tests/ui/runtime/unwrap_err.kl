@@ -1,4 +1,4 @@
 fn main() {
-    let r: Result<int, str> = Err("disk full")
+    r: Result<int, str> = Err("disk full")
     println(r.unwrap())
 }

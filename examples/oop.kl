@@ -5,9 +5,9 @@ interface Show {
 }
 
 class Animal {
-    name: str
-    sound: str = "..."
-    legs: int = 4
+    var name: str
+    var sound: str = "..."
+    var legs: int = 4
 
     init(name: str) {
         self.name = name
@@ -23,7 +23,7 @@ class Animal {
 }
 
 class Dog : Animal, Show {
-    tricks: [str]
+    var tricks: [str]
 
     init(name: str) {
         super(name)
@@ -59,7 +59,7 @@ class Bird : Animal {
 }
 
 class Counter {
-    count: int
+    var count: int
 
     fn tick() -> int {
         self.count += 1
@@ -76,23 +76,23 @@ fn loudest(animals: [Animal]) -> Animal? {
 }
 
 fn main() {
-    let rex = Dog("Rex")
+    rex = Dog("Rex")
     rex.learn("sit")
     rex.learn("roll")
 
-    let zoo: [Animal] = [rex, Puppy("Bit"), Bird("Tweety"), Animal("Generic")]
+    zoo: [Animal] = [rex, Puppy("Bit"), Bird("Tweety"), Animal("Generic")]
     for a in zoo {
         println(a.describe())
     }
 
-    let shown: [Show] = [rex, Puppy("Nib")]
+    shown: [Show] = [rex, Puppy("Nib")]
     for s in shown {
         println(s.show())
     }
 
-    if let b = loudest(zoo) { println("fewest legs:", b.name) }
+    if b = loudest(zoo) { println("fewest legs:", b.name) }
 
-    let c = Counter()
+    c = Counter()
     c.tick()
     c.tick()
     println("counter:", c.tick())

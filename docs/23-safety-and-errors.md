@@ -77,8 +77,8 @@ immediately with a message on stderr and exit code `101`:
 
 ```kalinga
 fn main() {
-    let xs = [1, 2, 3]
-    let i = 5
+    xs = [1, 2, 3]
+    i = 5
     println("before")
     println(xs[i])
     println("never printed")
@@ -117,7 +117,7 @@ running, is reported instead of silently corrupting data:
 
 ```kalinga
 class Account {
-    balance: int = 100
+    var balance: int = 100
 
     fn transfer_to(other: Account, amount: int) {
         self.balance -= amount
@@ -126,8 +126,8 @@ class Account {
 }
 
 fn main() {
-    let a = Account()
-    let b = Account()
+    a = Account()
+    b = Account()
     a.transfer_to(b, 30) // fine: two different objects
     println(a.balance, b.balance)
     a.transfer_to(a, 10) // the same object twice: runtime error

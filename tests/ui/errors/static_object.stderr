@@ -1,0 +1,4 @@
+tests/ui/errors/static_object.kl:6:22: error: `BOSS` is set when the program is compiled, so this cannot be computed here
+6 |     static BOSS: E = E()
+  |                      ^
+  = help: use literals, other fixed values, arrays, maps, tuples, enum variants and struct values; for an object, write `static var name: Type? = none` and set it when the program runs

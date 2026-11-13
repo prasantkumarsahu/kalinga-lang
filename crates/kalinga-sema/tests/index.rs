@@ -32,7 +32,7 @@ enum Shape {
 
 struct P {
     x: int
-    const ORIGIN: int = 0
+    static ORIGIN: int = 0
 }
 
 fn twice(n: int) -> int {
@@ -40,10 +40,10 @@ fn twice(n: int) -> int {
 }
 
 fn main() {
-    let dog = Dog.make()
+    dog = Dog.make()
     var total = twice(P.ORIGIN)
     total += dog.speak().len()
-    let s = Shape.Circle(1.0)
+    s = Shape.Circle(1.0)
     match s {
         Circle(r) => println(r)
         Dot => println(dog.name)
@@ -54,7 +54,8 @@ fn main() {
 
 fn index(source: &str) -> Index {
     let tokens = lexer::lex(source, 0).expect("lexes");
-    let prog = parser::parse(tokens).expect("parses");
+    let mut prog = parser::parse(tokens).expect("parses");
+    kalinga_sema::namespaces::apply(&mut prog, &Default::default()).expect("resolves");
     let model = Model::build(&prog, false).expect("builds");
     typeck::analyze(&prog, &model).1
 }

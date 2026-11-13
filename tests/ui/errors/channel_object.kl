@@ -1,4 +1,4 @@
 class Player {
     hp: int
 }
-fn main() { let c = Channel<Player>() }
+fn main() { c = Channel<Player>() }

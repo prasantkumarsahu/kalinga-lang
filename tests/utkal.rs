@@ -119,8 +119,8 @@ fn describe(p: Point) -> str {
 }
 
 fn main() {
-    let a: geo.Point = geo.Point(1, 2)
-    let b = px.Point(0.5)
+    a: geo.Point = geo.Point(1, 2)
+    b = px.Point(0.5)
     println(geo.describe(a), px.describe(b), describe(Point("x")), geo.origin().x, extra())
 }
 "#,
@@ -141,7 +141,7 @@ fn main() {
     // Error messages name package types as `package.Name`.
     write(
         &app.join("src/main.kl"),
-        "import \"geo\"\nimport \"pixels\" as px\n\nfn main() {\n    let p: Point = px.Point(1.0)\n}\n",
+        "import \"geo\"\nimport \"pixels\" as px\n\nfn main() {\n    p: Point = px.Point(1.0)\n}\n",
     );
     let err = fails(&utkal(&app, &["build"]));
     assert!(err.contains("pixels.Point"), "{}", err);
@@ -234,7 +234,7 @@ fn rust_dependencies_from_the_manifest() {
     ok(&utkal(&app, &["add", "fastrand", "--rust", "2"]));
     write(
         &app.join("src/main.kl"),
-        "extern fn roll() -> int = rust { fastrand::i64(1..=6) }\n\nfn main() {\n    let r = roll()\n    println(r >= 1 && r <= 6)\n}\n",
+        "extern fn roll() -> int = rust { fastrand::i64(1..=6) }\n\nfn main() {\n    r = roll()\n    println(r >= 1 && r <= 6)\n}\n",
     );
     assert_eq!(ok(&utkal(&app, &["run"])).trim(), "true");
 }

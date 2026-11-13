@@ -1,0 +1,8 @@
+class A {
+    name: str = ""
+}
+
+fn main() {
+    a = A()
+    a.name = "b"
+}

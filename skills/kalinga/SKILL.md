@@ -83,7 +83,7 @@ class Square : Shape {
 fn largest(shapes: [Shape]) -> Shape? {
     var best: Shape? = none
     for s in shapes {
-        if let b = best {
+        if b = best {
             if s.area() > b.area() {
                 best = s
             }
@@ -95,14 +95,14 @@ fn largest(shapes: [Shape]) -> Shape? {
 }
 
 fn main() {
-    let shapes: [Shape] = [Circle(1.5), Square()]
+    shapes: [Shape] = [Circle(1.5), Square()]
     for s in shapes {
         println("{s.name()}: {Math.round(s.area() * 100.0) / 100.0}")
     }
-    if let big = largest(shapes) {
+    if big = largest(shapes) {
         println("largest is the", big.name())
     }
-    let counts = {"circle": 1, "square": 1}
+    counts = {"circle": 1, "square": 1}
     println(counts, len(shapes))
 }
 ```
@@ -234,9 +234,9 @@ fn min_max(xs: [int]) -> (int, int) {
 }
 
 fn main() {
-    let (lo, hi) = min_max([4, 9, 1])
-    let ages: {str: int} = {"Asha": 30}
-    let age = if let a = ages.get("Ravi") { a } else { -1 }
+    (lo, hi) = min_max([4, 9, 1])
+    ages: {str: int} = {"Asha": 30}
+    age = if a = ages.get("Ravi") { a } else { -1 }
     println(lo, hi, age)
 }
 ```
@@ -249,8 +249,8 @@ Results and `?`:
 
 ```kalinga
 fn parse_age(text: str) -> Result<int, str> {
-    let t = text.trim()
-    if let n = t.parse_int() {
+    t = text.trim()
+    if n = t.parse_int() {
         return if n >= 0 { Ok(n) } else { Err("negative: {n}") }
     }
     return Err("not a number: {text}")
@@ -307,10 +307,10 @@ fn main() {
     for x in [5, 2, 8, 1] {
         t = insert(t, x)
     }
-    let sorted = to_list(t, [])
+    sorted = to_list(t, [])
     println(sorted, sorted.map(fn(x) => x * 10).filter(fn(x) => x > 20))
     var calls = 0
-    let count = fn() {
+    count = fn() {
         calls += 1
     }
     count()

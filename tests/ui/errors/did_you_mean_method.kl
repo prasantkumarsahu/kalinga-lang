@@ -5,6 +5,6 @@ class Animal {
 }
 class Dog : Animal {}
 fn main() {
-    let d = Dog()
+    d = Dog()
     println(d.spek())
 }

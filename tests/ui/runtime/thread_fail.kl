@@ -1,6 +1,6 @@
 fn main() {
-    let t = Thread.spawn(fn() -> int {
-        let xs = [1]
+    t = Thread.spawn(fn() -> int {
+        xs = [1]
         return xs[5]
     })
     println("before join")
