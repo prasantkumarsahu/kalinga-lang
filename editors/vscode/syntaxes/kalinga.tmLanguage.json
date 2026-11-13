@@ -129,8 +129,8 @@
           }
         },
         {
-          "comment": "class fields: `name: type` at the start of a line, optionally `private`",
-          "match": "^\\s*(?:(private)\\s+)?([a-z_][A-Za-z0-9_]*)\\s*(?=:)",
+          "comment": "class fields: `name: type` at the start of a line, optionally `private` or `private(set)`",
+          "match": "^\\s*(?:(private(?:\\(set\\))?)\\s+)?([a-z_][A-Za-z0-9_]*)\\s*(?=:)",
           "captures": {
             "1": {
               "name": "storage.modifier.kalinga"

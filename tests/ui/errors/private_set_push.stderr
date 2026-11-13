@@ -1,0 +1,3 @@
+tests/ui/errors/private_set_push.kl:7:6: error: `history` can only be changed inside `Account` (it is `private(set)`)
+7 |     a.history.push(1)
+  |      ^

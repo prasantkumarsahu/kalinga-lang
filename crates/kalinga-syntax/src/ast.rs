@@ -61,6 +61,8 @@ pub struct FieldDecl {
     pub ty: TypeExpr,
     pub default: Option<Expr>,
     pub is_private: bool,
+    /// `private(set)`: readable anywhere, assignable only inside its class or struct.
+    pub is_private_set: bool,
     pub pos: Span,
 }
 

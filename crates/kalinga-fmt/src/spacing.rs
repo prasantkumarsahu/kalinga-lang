@@ -186,8 +186,8 @@ fn spaced(a: &Item, ra: Role, b: &Item, rb: Role) -> bool {
         return false;
     }
     match tb {
-        // `f(x)`, `fn(x)`, `init(x)`, `super(x)`, `Channel<int>()`, `op +(o: V)`
-        Tok::LParen => !(names_call(ta) || ra == Role::GenericClose || ra == Role::OperatorName),
+        // `f(x)`, `fn(x)`, `init(x)`, `super(x)`, `Channel<int>()`, `op +(o: V)`, `private(set)`
+        Tok::LParen => !(names_call(ta) || ra == Role::GenericClose || ra == Role::OperatorName || *ta == Tok::Private),
         // `xs[0]`, `f()[0]`, `"abc"[1]`, but `features ["std"]`
         Tok::LBracket => {
             matches!(ta, Tok::Ident(n) if n == "features")

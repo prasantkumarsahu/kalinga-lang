@@ -1,0 +1,39 @@
+// `private(set)` fields can be read anywhere but changed only inside their type.
+
+class Account {
+    private(set) balance: int = 0
+    private(set) history: [int] = []
+    owner: str
+
+    init(owner: str) {
+        self.owner = owner
+    }
+
+    fn deposit(amount: int) {
+        self.balance += amount
+        self.history.push(amount)
+    }
+}
+
+struct Counter {
+    private(set) count: int = 0
+
+    mut fn tick() {
+        self.count += 1
+    }
+}
+
+fn main() {
+    let a = Account("Ann")
+    a.deposit(50)
+    a.deposit(25)
+    println("{a.owner} has {a.balance}")
+    println(a.history)
+    a.owner = "Annie"
+    println(a.owner)
+
+    var c = Counter()
+    c.tick()
+    c.tick()
+    println(c.count)
+}

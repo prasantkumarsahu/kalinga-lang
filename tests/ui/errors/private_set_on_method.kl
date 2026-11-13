@@ -1,0 +1,7 @@
+class Account {
+    private(set) fn reset() {
+    }
+}
+
+fn main() {
+}

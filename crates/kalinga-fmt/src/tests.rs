@@ -118,3 +118,11 @@ fn interpolated_strings_on_reindented_lines() {
         "fn main() {\n    let a = 1\n    f(fn() {\n        println(\"Hello, {a} {g(a)}\")\n    })\n}\n",
     );
 }
+
+#[test]
+fn struct_bases_and_private_set() {
+    check(
+        "struct Version: Ord,Show {\n    private (set) major: int\n}\n",
+        "struct Version : Ord, Show {\n    private(set) major: int\n}\n",
+    );
+}

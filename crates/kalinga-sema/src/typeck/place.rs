@@ -21,6 +21,7 @@ impl Checker<'_> {
                 && self.m.has_subclasses(c)
             {
                 let ft = self.field_type(cx, c, f, target.pos)?;
+                self.check_settable(cx, c, f, target.pos)?;
                 self.note_field(target.pos, &recv_t.ty, f, &ft);
                 let value = self.assign_value(cx, op, &ft, value)?;
                 return Ok(TStmt::SetField { recv: recv_t, field: f.clone(), op, value });
@@ -172,6 +173,7 @@ impl Checker<'_> {
             }
             let class = self.self_class(cx, recv.pos)?;
             let ty = self.field_type(cx, &class, f, pos)?;
+            self.check_settable(cx, &class, f, pos)?;
             return Ok(TPlace::SelfField { field: f.to_string(), ty, wrapped: self.m.is_wrapped_field(&class, f) });
         }
         let recv_t = self.expr(cx, recv, None)?;
@@ -179,15 +181,20 @@ impl Checker<'_> {
             // A field of a struct value: change it where the struct lives.
             Type::Struct(st, sargs) => {
                 let ty = self.struct_field_type(cx, &st, &sargs, f, pos)?;
+                if self.m.structs[&st].private_set_fields.contains(f) && cx.strukt.as_deref() != Some(st.as_str()) {
+                    return err(format!("`{}` can only be changed inside `{}` (it is `private(set)`)", f, st), pos);
+                }
                 let base = self.place(cx, recv)?;
                 Ok(TPlace::StructField { base: Box::new(base), field: f.to_string(), ty })
             }
             Type::Class(c) if !self.m.has_subclasses(&c) => {
                 let ty = self.field_type(cx, &c, f, pos)?;
+                self.check_settable(cx, &c, f, pos)?;
                 Ok(TPlace::ObjectField { recv: Box::new(recv_t), field: f.to_string(), ty, wrapped: false })
             }
             Type::Generic(c, targs) => {
                 let ty = subst(&self.field_type(cx, &c, f, pos)?, &self.m.bindings(&c, &targs));
+                self.check_settable(cx, &c, f, pos)?;
                 let wrapped = self.m.is_wrapped_field(&c, f);
                 Ok(TPlace::ObjectField { recv: Box::new(recv_t), field: f.to_string(), ty, wrapped })
             }
@@ -219,6 +226,18 @@ impl Checker<'_> {
                 )
             }
         }
+    }
+
+    /// A `private(set)` field of class `class` (or a base class) is changed only inside the
+    /// class that declares it.
+    fn check_settable(&self, cx: &Ctx, class: &str, field: &str, pos: Span) -> Result<()> {
+        if let Some((_, _, owner)) = self.m.all_fields(class).into_iter().find(|(n, _, _)| n == field)
+            && self.m.classes[&owner].private_set_fields.contains(field)
+            && cx.class.as_deref() != Some(owner.as_str())
+        {
+            return err(format!("`{}` can only be changed inside `{}` (it is `private(set)`)", field, owner), pos);
+        }
+        Ok(())
     }
 
     /// Type of struct field `f` (with the struct's type arguments), checking `private`.

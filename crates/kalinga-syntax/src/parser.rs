@@ -24,6 +24,8 @@ struct Mods {
     is_mut: bool,
     is_async: bool,
     is_private: bool,
+    /// `private(set)`, on fields only.
+    is_private_set: bool,
     is_static: bool,
     is_abstract: bool,
     is_override: bool,
@@ -319,6 +321,9 @@ impl Parser {
     }
 
     fn function(&mut self, mods: Mods) -> Result<FnDecl> {
+        if mods.is_private_set {
+            return err("`private(set)` is only for fields; write `private fn` for a private method", self.pos());
+        }
         let pos = self.expect(Tok::Fn, "`fn`")?;
         let (name, _) = self.ident("function name")?;
         let (tparams, bounds) = self.tparams()?;
@@ -472,7 +477,23 @@ impl Parser {
         let mut m = Mods::default();
         loop {
             let pos = self.pos();
+            let next = |k: usize| self.tokens.get(self.i + k).map(|t| &t.tok);
+            let private_set = self.peek() == &Tok::Private
+                && next(1) == Some(&Tok::LParen)
+                && next(2) == Some(&Tok::Ident("set".into()))
+                && next(3) == Some(&Tok::RParen);
+            if private_set {
+                if m.is_private || m.is_private_set {
+                    return err("`private` written twice", pos);
+                }
+                m.is_private_set = true;
+                for _ in 0..4 {
+                    self.advance();
+                }
+                continue;
+            }
             let flag = match self.peek() {
+                Tok::Private if m.is_private_set => return err("`private` written twice", pos),
                 Tok::Private => &mut m.is_private,
                 Tok::Static => &mut m.is_static,
                 Tok::Abstract => &mut m.is_abstract,
@@ -518,13 +539,20 @@ impl Parser {
             match self.peek().clone() {
                 Tok::Ident(fname) => {
                     if mods.is_static || mods.is_abstract || mods.is_override {
-                        return err("fields can only be marked `private`", mpos);
+                        return err("fields can only be marked `private` or `private(set)`", mpos);
                     }
                     let fpos = self.advance().pos;
                     self.expect(Tok::Colon, "`:` and a type after field name")?;
                     let ty = self.ty()?;
                     let default = if self.eat(&Tok::Assign) { Some(self.expr()?) } else { None };
-                    class.fields.push(FieldDecl { name: fname, ty, default, is_private: mods.is_private, pos: fpos });
+                    class.fields.push(FieldDecl {
+                        name: fname,
+                        ty,
+                        default,
+                        is_private: mods.is_private,
+                        is_private_set: mods.is_private_set,
+                        pos: fpos,
+                    });
                     self.end_of_statement()?;
                 }
                 Tok::Init => {
@@ -625,6 +653,28 @@ impl Parser {
         Ok(InterfaceDecl { name, tparams, bases, base_args, methods, pos })
     }
 
+    /// `op +(other: T) -> T { ... }` in a struct body, if the member is one.
+    fn struct_op(&mut self, pos: Span) -> Result<Option<OpDecl>> {
+        if self.peek() != &Tok::Ident("op".into()) {
+            return Ok(None);
+        }
+        let op = match self.tokens.get(self.i + 1).map(|t| &t.tok) {
+            Some(Tok::Plus) => BinOp::Add,
+            Some(Tok::Minus) => BinOp::Sub,
+            Some(Tok::Star) => BinOp::Mul,
+            Some(Tok::Slash) => BinOp::Div,
+            Some(Tok::Percent) => BinOp::Rem,
+            _ => return Ok(None),
+        };
+        self.advance();
+        self.advance();
+        let params = self.params()?;
+        let ret = self.ret_type()?;
+        let body = self.block()?;
+        self.skip_newlines();
+        Ok(Some(OpDecl { op, params, ret, body, pos }))
+    }
+
     fn struct_decl(&mut self) -> Result<StructDecl> {
         let pos = self.expect(Tok::Struct, "`struct`")?;
         let (name, _) = self.ident("struct name")?;
@@ -654,27 +704,9 @@ impl Parser {
         self.skip_newlines();
         while !self.check(&Tok::RBrace) {
             let mpos = self.pos();
-            // `op +(other: T) -> T { ... }`
-            if self.peek() == &Tok::Ident("op".into()) {
-                let next = self.tokens.get(self.i + 1).map(|t| t.tok.clone());
-                let op = match next {
-                    Some(Tok::Plus) => Some(BinOp::Add),
-                    Some(Tok::Minus) => Some(BinOp::Sub),
-                    Some(Tok::Star) => Some(BinOp::Mul),
-                    Some(Tok::Slash) => Some(BinOp::Div),
-                    Some(Tok::Percent) => Some(BinOp::Rem),
-                    _ => None,
-                };
-                if let Some(op) = op {
-                    self.advance();
-                    self.advance();
-                    let params = self.params()?;
-                    let ret = self.ret_type()?;
-                    let body = self.block()?;
-                    s.ops.push(OpDecl { op, params, ret, body, pos: mpos });
-                    self.skip_newlines();
-                    continue;
-                }
+            if let Some(o) = self.struct_op(mpos)? {
+                s.ops.push(o);
+                continue;
             }
             // `mut fn` (a method that changes `self`)
             let mut is_mut = false;
@@ -692,13 +724,20 @@ impl Parser {
             match self.peek().clone() {
                 Tok::Ident(fname) if !is_mut => {
                     if mods.is_static || mods.is_abstract || mods.is_override || mods.is_async {
-                        return err("fields can only be marked `private`", mpos);
+                        return err("fields can only be marked `private` or `private(set)`", mpos);
                     }
                     let fpos = self.advance().pos;
                     self.expect(Tok::Colon, "`:` and a type after field name")?;
                     let ty = self.ty()?;
                     let default = if self.eat(&Tok::Assign) { Some(self.expr()?) } else { None };
-                    s.fields.push(FieldDecl { name: fname, ty, default, is_private: mods.is_private, pos: fpos });
+                    s.fields.push(FieldDecl {
+                        name: fname,
+                        ty,
+                        default,
+                        is_private: mods.is_private,
+                        is_private_set: mods.is_private_set,
+                        pos: fpos,
+                    });
                     self.end_of_statement()?;
                 }
                 Tok::Fn => {

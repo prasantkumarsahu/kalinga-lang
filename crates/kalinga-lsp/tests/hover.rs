@@ -120,3 +120,10 @@ fn tuples_and_their_parts() {
     assert!(shown("s) = p", 0).contains("let s: str"), "{}", shown("s) = p", 0));
     assert!(shown("pair()", 0).contains("fn pair() -> (int, str)"), "{}", shown("pair()", 0));
 }
+
+#[test]
+fn private_set_fields_say_so() {
+    let src = "class Account {\n    private(set) balance: int = 0\n}\nfn main() {\n    let a = Account()\n    println(a.balance)\n}\n";
+    let (text, _) = hover(src, "balance", 1).expect("a hover");
+    assert!(text.contains("private(set) balance: int"), "{}", text);
+}

@@ -1,0 +1,8 @@
+struct Counter {
+    private(set) count: int = 0
+}
+
+fn main() {
+    var c = Counter()
+    c.count += 1
+}
