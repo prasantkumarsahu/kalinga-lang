@@ -46,7 +46,7 @@ The rules so far:
 - **Performance**: how fast programs run and how much memory they use can change; the aim
   is that it only improves.
 
-## Not in 0.6
+## Not in 0.7
 
 These are known gaps, so code does not depend on them working in a particular way yet:
 `?.` on optionals, `async` instance methods, objects shared across threads (only values

@@ -252,7 +252,7 @@ test fn keeps_values_in_range() {
   `utkal add mathx --git <url> --tag v1.0` or `--path ../mathx` adds a package, used as
   `import "mathx"`; `import "mathx" as m` then `m.Vec2`. `utkal add fastrand --rust 2`
   adds a Rust crate.
-- `utkal.toml` has `kalinga = "0.6"`: the language version the code is written for;
+- `utkal.toml` has `kalinga = "0.7"`: the language version the code is written for;
   `utkal fix` / `kalinga fix` update older code.
 
 ## Rust interop

@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.7.0
 
 **Breaking: fixed by default.** Code written for 0.6 needs `kalinga fix` (below); after
 that it compiles and does the same thing.
