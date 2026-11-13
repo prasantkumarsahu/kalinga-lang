@@ -1,0 +1,6 @@
+// ui: web
+import "std/fs"
+
+fn main() {
+    println(fs.exists("x"))
+}

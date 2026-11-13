@@ -172,7 +172,7 @@ fn NAME(...) { ... }                                 each use is a warning
 use rust "FILE.rs"
 use crate "NAME" = "VERSION" [features ["FEATURE", ...]]
 extern type NAME
-extern fn NAME(PARAM, ...) [-> TYPE] [= "rust::path" | = rust { RUST CODE }]
+extern fn NAME(PARAM, ...) [-> TYPE] [= "rust::path" | = rust { RUST CODE } | = js { JS CODE }]
 
 interface NAME[<T, ...>] [: INTERFACE[<TYPE, ...>], ...] {
     fn NAME(PARAM, ...) [-> TYPE]

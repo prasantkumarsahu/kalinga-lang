@@ -1,0 +1,18 @@
+tests/ui/web/not_on_web.kl:7:18: error: a web build can wait with `Async.run` only in `main`; make this function `async` and use `await`
+7 |     return Async.run(slow())
+  |                  ^^^
+tests/ui/web/not_on_web.kl:15:16: error: `Thread.spawn` is not available in a web build
+15 |     t = Thread.spawn(fn() => work())
+   |                ^^^^^
+tests/ui/web/not_on_web.kl:16:15: error: `join` on threads, channels and shared values is not available in a web build
+16 |     println(t.join())
+   |               ^^^^
+tests/ui/web/not_on_web.kl:17:10: error: `Channel` is not available in a web build
+17 |     ch = Channel<int>()
+   |          ^^^^^^^
+tests/ui/web/not_on_web.kl:18:8: error: `send` on threads, channels and shared values is not available in a web build
+18 |     ch.send(1)
+   |        ^^^^
+tests/ui/web/not_on_web.kl:19:12: error: `input()` (reading the console) is not available in a web build
+19 |     name = input()
+   |            ^^^^^

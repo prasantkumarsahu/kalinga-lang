@@ -1,0 +1,21 @@
+// ui: web
+fn work() -> int {
+    return 1
+}
+
+fn later() -> int {
+    return Async.run(slow())
+}
+
+async fn slow() -> int {
+    return 2
+}
+
+fn main() {
+    t = Thread.spawn(fn() => work())
+    println(t.join())
+    ch = Channel<int>()
+    ch.send(1)
+    name = input()
+    println(name, later())
+}

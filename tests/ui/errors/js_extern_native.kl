@@ -1,0 +1,5 @@
+extern fn now_ms() -> float = js { return Date.now(); }
+
+fn main() {
+    println(now_ms())
+}

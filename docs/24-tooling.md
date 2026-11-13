@@ -196,7 +196,8 @@ Language Server Protocol (Neovim, Helix, Zed, Emacs, ...) can use it by running
 - Quick fixes: mark a method `override fn`, remove a wrong `override`, add a method an
   interface or abstract base class requires
 - **Format Document** with `kalinga fmt`
-- Syntax highlighting; inline `= rust { ... }` bodies are highlighted as Rust
+- Syntax highlighting; inline `= rust { ... }` bodies are highlighted as Rust, `= js { ... }`
+  bodies as JavaScript
 - ▶ **Run** button in the editor title bar, and `Ctrl+F5`
 - Commands (Ctrl+Shift+P): **Kalinga: Run File**, **Kalinga: Run Tests in File**,
   **Kalinga: Build Executable**,

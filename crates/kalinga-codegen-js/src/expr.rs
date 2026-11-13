@@ -180,6 +180,7 @@ impl Gen<'_> {
 
     fn lambda(&self, l: &TLambda) -> String {
         let was_async = self.in_async.replace(false);
+        let was_main = self.block_on.replace(false);
         // Each lambda gets its own copy of the outer variables it uses, except a `var` that
         // a lambda changes, which is shared.
         let copies: Vec<(String, String)> = l
@@ -199,6 +200,7 @@ impl Gen<'_> {
         };
         let body = if body.starts_with('{') { self.catch_try(body) } else { body };
         self.in_async.set(was_async);
+        self.block_on.set(was_main);
         let arrow = format!("({}) => {}", params.join(", "), body);
         if copies.is_empty() {
             format!("({})", arrow)

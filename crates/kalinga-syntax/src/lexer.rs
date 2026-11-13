@@ -342,8 +342,9 @@ impl Lexer {
         if w.starts_with("__") {
             return err("names starting with `__` are reserved", pos);
         }
-        // `= rust { ... }`: the body is Rust, so take it as raw text.
-        if w == "rust" && self.out.last().is_some_and(|t| t.tok == Tok::Assign) {
+        // `= rust { ... }` / `= js { ... }`: the body is Rust or JavaScript, so take it as
+        // raw text.
+        if (w == "rust" || w == "js") && self.out.last().is_some_and(|t| t.tok == Tok::Assign) {
             let mut j = self.i;
             while matches!(self.chars.get(j), Some(' ' | '\t')) {
                 j += 1;
@@ -352,8 +353,13 @@ impl Lexer {
                 while self.i < j {
                     self.bump();
                 }
-                let body = self.rust_block(pos)?;
-                self.push(Tok::RustBlock(body), pos);
+                if w == "js" {
+                    let body = self.js_block(pos)?;
+                    self.push(Tok::JsBlock(body), pos);
+                } else {
+                    let body = self.rust_block(pos)?;
+                    self.push(Tok::RustBlock(body), pos);
+                }
                 return Ok(());
             }
         }
@@ -408,6 +414,68 @@ impl Lexer {
                             } else if d == '\'' {
                                 break;
                             }
+                        }
+                    }
+                    continue;
+                }
+                '/' if self.peek() == Some('/') => {
+                    out.push(c);
+                    while let Some(d) = self.peek() {
+                        if d == '\n' {
+                            break;
+                        }
+                        out.push(d);
+                        self.bump();
+                    }
+                    continue;
+                }
+                '/' if self.peek() == Some('*') => {
+                    out.push(c);
+                    while let Some(d) = self.bump() {
+                        out.push(d);
+                        if d == '*' && self.peek() == Some('/') {
+                            self.bump();
+                            out.push('/');
+                            break;
+                        }
+                    }
+                    continue;
+                }
+                _ => {}
+            }
+            out.push(c);
+        }
+    }
+
+    /// Reads a balanced `{ ... }` of JavaScript, skipping strings, template literals and
+    /// comments.
+    fn js_block(&mut self, pos: Span) -> Result<String> {
+        self.bump(); // `{`
+        let mut out = String::new();
+        let mut depth = 1;
+        loop {
+            let c = match self.bump() {
+                Some(c) => c,
+                None => return err("unterminated `js { ... }` block", pos),
+            };
+            match c {
+                '{' => depth += 1,
+                '}' => {
+                    depth -= 1;
+                    if depth == 0 {
+                        return Ok(out);
+                    }
+                }
+                '"' | '\'' | '`' => {
+                    out.push(c);
+                    while let Some(d) = self.bump() {
+                        out.push(d);
+                        if d == '\\' {
+                            if let Some(e) = self.bump() {
+                                out.push(e);
+                            }
+                        } else if d == c {
+                            break;
                         }
                     }
                     continue;

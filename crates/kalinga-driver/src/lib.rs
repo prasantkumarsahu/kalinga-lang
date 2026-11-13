@@ -64,7 +64,18 @@ impl From<DriverError> for Failure {
 }
 
 /// The files of one compilation, as they are loaded.
+/// What a program is built for. Some features exist only for one of them.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Backend {
+    /// A native executable (through Rust).
+    Native,
+    /// JavaScript for a browser (or Node.js).
+    Web,
+}
+
 struct Loader<'a> {
+    /// The build's target; `None` (editors, `kalinga check`) allows both.
+    backend: Option<Backend>,
     pkgs: Packages,
     map: SourceMap,
     /// Canonical path of each file in `map` (by id), when it has one.
@@ -83,9 +94,10 @@ struct Loader<'a> {
 
 /// Parses `root` and, transitively, every file it imports, into one program.
 /// Each file is loaded once, so import cycles are harmless.
-fn load(root_name: &str, root_source: &str) -> Result<(Program, SourceMap)> {
+fn load(root_name: &str, root_source: &str, backend: Option<Backend>) -> Result<(Program, SourceMap)> {
     let no_open_files = HashMap::new();
     let mut l = Loader::new(root_name, root_source, &no_open_files)?;
+    l.backend = backend;
     match l.load_all() {
         Ok(()) => Ok((l.program, l.map)),
         Err(Failure::Program(ds)) => Err(DriverError::compile_all(l.map, ds)),
@@ -165,6 +177,7 @@ impl<'a> Loader<'a> {
     fn new(root_name: &str, root_source: &str, open: &'a HashMap<PathBuf, String>) -> Result<Self> {
         let root_path = PathBuf::from(root_name);
         Ok(Loader {
+            backend: None,
             pkgs: packages_for(root_name)?,
             map: SourceMap::default(),
             paths: vec![],
@@ -203,6 +216,10 @@ impl<'a> Loader<'a> {
         self.units.file_aliases.push(Default::default());
         let tokens = lexer::lex(&self.map.files[id as usize].1, id)?;
         let parsed = parser::parse(tokens)?;
+        let wrong_target = self.target_errors(&parsed, &unit);
+        if !wrong_target.is_empty() {
+            return Err(Failure::Program(wrong_target));
+        }
         if !parsed.rust_files.is_empty() || parsed.extern_fns.iter().any(|x| x.body.is_some()) {
             self.units.rust_units.insert(unit.clone());
         }
@@ -229,6 +246,45 @@ impl<'a> Loader<'a> {
         p.consts.extend(parsed.consts);
         p.tests.extend(parsed.tests);
         Ok(())
+    }
+
+    /// Declarations of a file that the build's target cannot run: Rust code in a web
+    /// build (the standard library's own glue excepted), JavaScript in a native one.
+    fn target_errors(&self, parsed: &Program, unit: &str) -> Vec<Diagnostic> {
+        let mut out = vec![];
+        let std = unit.starts_with("std_");
+        match self.backend {
+            Some(Backend::Web) if !std => {
+                for (_, pos) in &parsed.rust_files {
+                    out.push(Diagnostic::error("`use rust` is not available in a web build", *pos));
+                }
+                for c in &parsed.crates {
+                    out.push(Diagnostic::error("`use crate` is not available in a web build", c.pos));
+                }
+                for x in parsed.extern_fns.iter().filter(|x| x.js.is_none()) {
+                    out.push(Diagnostic::error(
+                        format!(
+                            "`extern fn {}` calls Rust, which a web build cannot run; give it a `js {{ ... }}` body",
+                            x.name
+                        ),
+                        x.pos,
+                    ));
+                }
+            }
+            Some(Backend::Native) => {
+                for x in parsed.extern_fns.iter().filter(|x| x.js.is_some()) {
+                    out.push(Diagnostic::error(
+                        format!(
+                            "`extern fn {}` has a `js {{ ... }}` body, which runs only in a web build (`kalinga run --web`)",
+                            x.name
+                        ),
+                        x.pos,
+                    ));
+                }
+            }
+            _ => {}
+        }
+        out
     }
 
     /// `use rust "file.rs"`, relative to the folder of the file that says it.
@@ -272,6 +328,9 @@ impl<'a> Loader<'a> {
             }
             if !stdlib::has(module) {
                 return Err(fail(format!("there is no standard module `std/{}`", module)));
+            }
+            if self.backend == Some(Backend::Web) && matches!(module, "fs" | "game") {
+                return Err(fail(format!("`std/{}` is not available in a web build", module)));
             }
             return Ok((stdlib::dir()?.join(format!("{}.kl", module)), format!("std_{}", module)));
         }
@@ -368,8 +427,8 @@ struct Checked {
     files: Vec<String>,
 }
 
-fn check_program(file: &str, source: &str, purpose: Purpose) -> Result<Checked> {
-    let (program, map) = load(file, source)?;
+fn check_program(file: &str, source: &str, purpose: Purpose, backend: Option<Backend>) -> Result<Checked> {
+    let (program, map) = load(file, source, backend)?;
     let model = match kalinga_sema::Model::build(&program, purpose == Purpose::Program) {
         Ok(m) => m,
         Err(d) => return Err(DriverError::compile(map, d)),
@@ -379,6 +438,13 @@ fn check_program(file: &str, source: &str, purpose: Purpose) -> Result<Checked> 
         Ok(t) => t,
         Err(ds) => return Err(DriverError::compile_all(map, ds)),
     };
+    if backend == Some(Backend::Web) {
+        let errors: Vec<Diagnostic> =
+            kalinga_sema::web::web_errors(&typed).into_iter().map(|(d, name)| on_name(&map, d, &name)).collect();
+        if !errors.is_empty() {
+            return Err(DriverError::compile_all(map, errors));
+        }
+    }
     // Warnings do not stop the build; they are shown only when there are no errors.
     for (d, name) in kalinga_sema::warnings::warnings(&program, &model, &index) {
         eprintln!("{}", map.render(&on_name(&map, d, &name)));
@@ -388,7 +454,8 @@ fn check_program(file: &str, source: &str, purpose: Purpose) -> Result<Checked> 
 }
 
 fn compile(file: &str, source: &str, purpose: Purpose) -> Result<(String, Native)> {
-    let c = check_program(file, source, purpose)?;
+    let backend = if purpose == Purpose::Check { None } else { Some(Backend::Native) };
+    let c = check_program(file, source, purpose, backend)?;
     let target = kalinga_codegen::Target { tests: purpose == Purpose::Tests, files: &c.files };
     let rust = kalinga_codegen::generate(&c.program, &c.model, &c.typed, &target);
     let program = &c.program;
@@ -404,7 +471,7 @@ fn compile(file: &str, source: &str, purpose: Purpose) -> Result<(String, Native
 /// a program that runs the root file's `test fn`s.
 pub fn to_js(file: &str, source: &str, tests: bool) -> Result<String> {
     let purpose = if tests { Purpose::Tests } else { Purpose::Program };
-    let c = check_program(file, source, purpose)?;
+    let c = check_program(file, source, purpose, Some(Backend::Web))?;
     let target = kalinga_codegen_js::Target { tests, files: &c.files };
     Ok(kalinga_codegen_js::generate(&c.program, &c.model, &c.typed, &target))
 }

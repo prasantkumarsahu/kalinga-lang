@@ -273,7 +273,7 @@ impl<'a> Resolver<'a> {
         }
         for x in &mut prog.extern_fns {
             let new = self.final_name(&unit_of(x.pos), &x.name);
-            if new != x.name && x.path.is_none() && x.body.is_none() {
+            if new != x.name && x.path.is_none() && x.body.is_none() && x.js.is_none() {
                 // The Rust function keeps its own name.
                 x.path = Some(x.name.clone());
             }

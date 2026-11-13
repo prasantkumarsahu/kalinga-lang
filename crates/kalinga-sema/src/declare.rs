@@ -406,10 +406,10 @@ impl Model {
                 return err(format!("function `{}` is defined more than once", x.name), x.pos);
             }
             let sig = signature(&x.params, &x.ret, &|t| resolve_type(t, &self.names, &[]))?;
-            let path = match (&x.path, &x.body) {
-                (_, Some(_)) => format!("__x_{}", x.name),
-                (Some(p), None) => p.clone(),
-                (None, None) => x.name.clone(),
+            let path = match (&x.path, x.body.is_some() || x.js.is_some()) {
+                (_, true) => format!("__x_{}", x.name),
+                (Some(p), false) => p.clone(),
+                (None, false) => x.name.clone(),
             };
             self.extern_fns.insert(x.name.clone(), (sig, path));
         }

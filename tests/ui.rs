@@ -10,6 +10,8 @@
 //! `BLESS=1 cargo test --test ui` rewrites the snapshots from the current output. Tests
 //! whose first line is `// ui: network` (they download crates) run only with `--ignored`.
 //!
+//! A test whose first line is `// ui: web` is a web program: it always runs with `--web`.
+//!
 //! `ui_web` runs the same programs again as JavaScript (`kalinga run --web`, with Node.js)
 //! and compares them with the same snapshots, so both backends behave alike. Programs
 //! using what a browser does not have (threads, files, Rust code) are listed in `NOT_WEB`.
@@ -30,8 +32,13 @@ const EXAMPLES: &[(&str, &str)] = &[
     ("examples/interop/main.kl", "interop"),
 ];
 
-/// Programs the web pass skips: they use threads, files or Rust code.
+/// Programs the web pass skips: they use threads, files or Rust code (or test the errors
+/// for JavaScript in a native build).
 const NOT_WEB: &[&str] = &[
+    "tests/ui/errors/extern_dup.kl",
+    "tests/ui/errors/game_needs_methods.kl",
+    "tests/ui/errors/js_extern_native.kl",
+    "tests/ui/errors/rust_missing.kl",
     "tests/ui/interop/main.kl",
     "tests/ui/run/async.kl",
     "tests/ui/run/inline_rust.kl",
@@ -54,6 +61,8 @@ struct Case {
     snapshot: PathBuf,
     mode: Mode,
     network: bool,
+    /// `// ui: web`: always built as JavaScript.
+    web: bool,
 }
 
 struct Outcome {
@@ -84,6 +93,7 @@ fn cases() -> Vec<Case> {
                     _ => Mode::Run,
                 },
                 network: first == "// ui: network",
+                web: first == "// ui: web",
                 source,
             });
         }
@@ -94,6 +104,7 @@ fn cases() -> Vec<Case> {
             snapshot: Path::new("tests/ui/examples").join(name),
             mode: Mode::Run,
             network: false,
+            web: false,
         });
     }
     out
@@ -115,7 +126,7 @@ fn run(case: &Case, web: bool) -> Outcome {
     let source = case.source.to_str().unwrap().replace('\\', "/");
     let mut command = Command::new(env!("CARGO_BIN_EXE_kalinga"));
     command.args([cmd, &source]);
-    if web {
+    if web || case.web {
         command.arg("--web");
     }
     let out = command.output().expect("failed to run kalinga");
@@ -167,7 +178,10 @@ fn run_all(network: bool, web: bool) {
         let path = c.source.to_str().unwrap().replace('\\', "/");
         c.network == network
             && (!web
-                || (c.mode != Mode::Check && c.source.starts_with("tests/ui") && !NOT_WEB.contains(&path.as_str())))
+                || (c.mode != Mode::Check
+                    && !c.web
+                    && c.source.starts_with("tests/ui")
+                    && !NOT_WEB.contains(&path.as_str())))
     };
     let queue = Mutex::new(cases().into_iter().filter(wanted).collect::<Vec<_>>());
     let failures = Mutex::new(vec![]);
