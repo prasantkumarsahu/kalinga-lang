@@ -297,8 +297,8 @@ pub fn language() -> Vec<CompletionItem> {
     let libraries =
         LIBRARIES.iter().map(|l| item(l, CompletionItemKind::MODULE, Some(format!("built-in library {}", l)), None));
     let keywords = [
-        "if", "else", "while", "for", "match", "let", "var", "return", "break", "continue", "await", "true", "false",
-        "none", "fn",
+        "if", "else", "while", "for", "match", "var", "return", "break", "continue", "await", "true", "false", "none",
+        "fn",
     ]
     .iter()
     .map(|k| item(k, CompletionItemKind::KEYWORD, None, None));
@@ -352,7 +352,6 @@ pub fn top_level() -> Vec<CompletionItem> {
         ("struct", "struct ${1:Name} {\n\t$0\n}"),
         ("interface", "interface ${1:Name} {\n\t$0\n}"),
         ("enum", "enum ${1:Name} {\n\t$0\n}"),
-        ("const", "const ${1:NAME}: ${2:int} = $0"),
         ("import", "import \"${1:file.kl}\""),
         ("import as", "import \"${1:package}\" as ${2:name}"),
         ("use rust", "use rust \"${1:native/file.rs}\""),
@@ -375,7 +374,8 @@ pub fn body(snap: &Snapshot, opener: &Opener, written: &HashSet<String>) -> Vec<
                 kw("mut fn", "mut fn ${1:name}(${2}) {\n\t$0\n}"),
                 kw("static fn", "static fn ${1:name}(${2}) {\n\t$0\n}"),
                 kw("private", "private "),
-                kw("const", "const ${1:NAME}: ${2:int} = $0"),
+                kw("var", "var ${1:name}: ${2:int}"),
+                kw("static", "static ${1:NAME}: ${2:int} = $0"),
                 kw("static var", "static var ${1:name}: ${2:int} = $0"),
             ];
             out.extend(["+", "-", "*", "/", "%"].iter().map(|op| {
@@ -393,7 +393,8 @@ pub fn body(snap: &Snapshot, opener: &Opener, written: &HashSet<String>) -> Vec<
                 kw("private", "private "),
                 kw("static fn", "static fn ${1:name}(${2}) {\n\t$0\n}"),
                 kw("static async fn", "static async fn ${1:name}(${2}) -> ${3:int} {\n\t$0\n}"),
-                kw("const", "const ${1:NAME}: ${2:int} = $0"),
+                kw("var", "var ${1:name}: ${2:int}"),
+                kw("static", "static ${1:NAME}: ${2:int} = $0"),
                 kw("static var", "static var ${1:name}: ${2:int} = $0"),
             ];
             if *is_abstract {

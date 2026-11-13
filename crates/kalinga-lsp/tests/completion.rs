@@ -338,9 +338,11 @@ fn struct_body_and_top_level_keywords() {
     let items = complete_in(&v3_dir(), &body);
     assert!(has(&items, "mut fn") && has(&items, "op +"), "{:?}", labels(&items));
     let top = complete_in(&v3_dir(), &format!("{}\n|", V3));
-    for k in ["struct", "use rust", "use crate", "extern fn", "extern type", "const"] {
+    for k in ["struct", "use rust", "use crate", "extern fn", "extern type"] {
         assert!(has(&top, k), "{}", k);
     }
+    assert!(!has(&top, "const"));
+    assert!(has(&items, "var") && has(&items, "static") && has(&items, "static var"), "{:?}", labels(&items));
 }
 
 #[test]

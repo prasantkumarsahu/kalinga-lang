@@ -192,6 +192,15 @@ fn quick_fixes_for_override_and_missing_methods() {
 }
 
 #[test]
+fn quick_fix_makes_a_fixed_variable_or_field_var() {
+    let make_var = vec![("Make it `var`".to_string(), "var ".to_string())];
+    assert_eq!(fixes("fn main() {\n    n = 1\n    n = 2\n}\n"), make_var);
+    assert_eq!(fixes("class A {\n    hp: int = 3\n\n    fn hit() {\n        self.hp -= 1\n    }\n}\n"), make_var);
+    // `(a, b) = ...`: `var` would go before the parenthesis; no fix offered.
+    assert!(fixes("fn main() {\n    (a, b) = (1, 2)\n    a = 3\n    println(b)\n}\n").is_empty());
+}
+
+#[test]
 fn diagnostics_cover_every_class_rule_and_body() {
     let src = "interface I {\n    fn f()\n}\nclass A : I {\n}\nclass B : I {\n}\nfn main() {\n    x: int = \"s\"\n}\n";
     let (mut world, uri) = open(&temp_dir("nav-diag"), src);

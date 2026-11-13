@@ -67,9 +67,9 @@
     "prefix": "ife",
     "body": ["if ${1:cond} {", "\t$2", "} else {", "\t$0", "}"]
   },
-  "if let": {
-    "prefix": "iflet",
-    "body": ["if let ${1:value} = ${2:optional} {", "\t$0", "}"],
+  "if unwrap": {
+    "prefix": "ifopt",
+    "body": ["if ${1:value} = ${2:optional} {", "\t$0", "}"],
     "description": "Unwrap an optional value"
   },
   "while": {
@@ -130,10 +130,10 @@
     "body": ["class ${1:Holder}<${2:T}> {", "\t${3:value}: ${2:T}?", "\t$0", "}"],
     "description": "Generic class"
   },
-  "if let as": {
+  "if as": {
     "prefix": "ifas",
-    "body": ["if let ${1:d} = ${2:value} as ${3:Class} {", "\t$0", "}"],
-    "description": "Downcast with if let"
+    "body": ["if ${1:d} = ${2:value} as ${3:Class} {", "\t$0", "}"],
+    "description": "Downcast with `if name = value as Class`"
   },
   "struct": {
     "prefix": "struct",
@@ -179,8 +179,8 @@
     "body": [
       "var last = Time.now()",
       "while ${1:running} {",
-      "\tlet now = Time.now()",
-      "\tlet dt = now - last",
+      "\tnow = Time.now()",
+      "\tdt = now - last",
       "\tlast = now",
       "\t$0",
       "}"
@@ -204,19 +204,19 @@
   },
   "thread spawn": {
     "prefix": "spawn",
-    "body": ["let ${1:task} = Thread.spawn(fn() -> ${2:int} {", "\t$0", "})", "let ${3:result} = ${1:task}.join()"],
+    "body": ["${1:task} = Thread.spawn(fn() -> ${2:int} {", "\t$0", "})", "${3:result} = ${1:task}.join()"],
     "description": "Run work on another thread and wait for its result"
   },
   "channel": {
     "prefix": "channel",
     "body": [
-      "let ${1:ch} = Channel<${2:int}>()",
+      "${1:ch} = Channel<${2:int}>()",
       "Thread.spawn(fn() {",
       "\t${1:ch}.send(${3:1})",
       "\t${1:ch}.close()",
       "})",
       "while true {",
-      "\tif let ${4:v} = ${1:ch}.receive() {",
+      "\tif ${4:v} = ${1:ch}.receive() {",
       "\t\t$0",
       "\t} else {",
       "\t\tbreak",

@@ -91,7 +91,7 @@ fn tokens(snap: &Snapshot) -> Vec<SemanticToken> {
                 Some(DeclKind::Variant) => (Kind::EnumMember, 0),
                 Some(DeclKind::Const) => (Kind::Property, READONLY | STATIC),
                 Some(DeclKind::StaticVar) => (Kind::Property, STATIC),
-                _ => (Kind::Property, 0),
+                _ => (Kind::Property, if fixed_field(model, &n.symbol) { READONLY } else { 0 }),
             },
             Symbol::Const(_) => (Kind::Variable, READONLY | STATIC),
             Symbol::Library { name, .. } if name.chars().all(|c| c.is_ascii_uppercase() || c == '_') => {
@@ -124,6 +124,16 @@ fn tokens(snap: &Snapshot) -> Vec<SemanticToken> {
         (line, col) = (l, c);
     }
     out
+}
+
+/// A field without `var` (of the class or struct that declares it, or a base class).
+fn fixed_field(model: &kalinga_sema::Model, symbol: &Symbol) -> bool {
+    let Symbol::Member { owner, name } = symbol else { return false };
+    if let Some(s) = model.structs.get(owner) {
+        return s.fixed_fields.contains(name);
+    }
+    model.classes.contains_key(owner)
+        && model.ancestors(owner).iter().any(|c| model.classes[c].fixed_fields.contains(name))
 }
 
 fn type_kind(model: &kalinga_sema::Model, name: &str) -> Kind {
