@@ -1,0 +1,11 @@
+<div id="app"><ul class="items" data-kind="fruit"><li class="done" style="color: red">apple</li><li>pear</li></ul></div>
+2 true fruit none
+click on button: 1
+click on button: 2
+app saw a click
+typed hello
+<ul class="items" data-kind="fruit"></ul> 0 true
+Asha none
+/items/3 1024.0
+Shop
+timer ran

@@ -332,6 +332,11 @@ impl<'a> Loader<'a> {
             if self.backend == Some(Backend::Web) && matches!(module, "fs" | "game") {
                 return Err(fail(format!("`std/{}` is not available in a web build", module)));
             }
+            if self.backend == Some(Backend::Native) && module == "web" {
+                return Err(fail(
+                    "`std/web` needs a web build: `kalinga run --web` or `kalinga build --web`".to_string(),
+                ));
+            }
             return Ok((stdlib::dir()?.join(format!("{}.kl", module)), format!("std_{}", module)));
         }
         if import.path.ends_with(".kl") {
@@ -485,6 +490,7 @@ pub fn run_web(input: &Path, tests: bool) -> Result<i32> {
     std::fs::create_dir_all(&work).map_err(DriverError::io("create", &work))?;
     let suffix = if tests { "_tests" } else { "" };
     let path = work.join(format!("{}{}.js", build_name(input), suffix));
+    let js = format!("{}\n{}", kalinga_codegen_js::NODE_DOM, js);
     std::fs::write(&path, js).map_err(DriverError::io("write", &path))?;
     let status = Command::new("node")
         .arg("--stack-size=65500")

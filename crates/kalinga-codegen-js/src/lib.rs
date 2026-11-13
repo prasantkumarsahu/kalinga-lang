@@ -17,6 +17,7 @@
 
 mod expr;
 mod items;
+mod reach;
 mod stmt;
 
 use std::cell::{Cell, RefCell};
@@ -39,6 +40,7 @@ pub fn generate(prog: &Program, model: &Model, typed: &TypedProgram, target: &Ta
     let g = Gen {
         m: model,
         t: typed,
+        reach: reach::reach(model, typed, target.tests),
         tests: target.tests,
         files: target.files,
         fresh: Cell::new(0),
@@ -53,6 +55,8 @@ pub fn generate(prog: &Program, model: &Model, typed: &TypedProgram, target: &Ta
 struct Gen<'a> {
     m: &'a Model,
     t: &'a TypedProgram,
+    /// The functions, types and constants the program uses; only these are written.
+    reach: reach::Reach,
     tests: bool,
     files: &'a [String],
     /// Numbers temporaries (`$t1`, `$t2`, ...).
@@ -254,3 +258,7 @@ fn js_str(s: &str) -> String {
 
 /// The runtime every generated program starts with.
 const RUNTIME: &str = include_str!("../runtime/runtime.js");
+
+/// A small page (`document`, `window`, ...) for running web programs under Node.js; put
+/// before a program run with `node`, never in a browser build.
+pub const NODE_DOM: &str = include_str!("../runtime/node_dom.js");

@@ -367,6 +367,22 @@ const $kl = (() => {
     if (e instanceof RangeError && /call stack/.test(e.message)) return "stack overflow (a function called itself too deeply)";
     return "internal error: " + (e && e.stack ? e.stack : String(e));
   }
+  /** A runtime error in code the browser calls (an event handler, a timer): reported like
+   * one in `main`. */
+  function report(e) {
+    eprintln("runtime error: " + message(e));
+    exit(101);
+  }
+  /** `f`, reporting its runtime errors instead of throwing them at the browser. */
+  const guard =
+    (f) =>
+    (...a) => {
+      try {
+        return f(...a);
+      } catch (e) {
+        report(e);
+      }
+    };
   /** Runs `main` (or an async `main`); a runtime error stops the program with code 101. */
   function main(f, onResult) {
     const done = (r) => {
@@ -424,6 +440,6 @@ const $kl = (() => {
     sArr, sMap, sOpt, sTup, sRes, sObj, sFn, ix, at, pop, chars, slen, charAt, codeAt, sliceS, sliceA, split,
     find, chr, parseInt: parseInt_, parseFloat: parseFloat_, toIntS, toFloatS, tryO, tryR, unwrap, unset,
     round, fsign, clamp, seed, randInt, randFloat, shuffle, pick, now, millis, sleep, Job, lazy, run, wait,
-    spawn, all, print, println, eprintln, args, exit, main, mainResult, tests, unsupported,
+    spawn, all, print, println, eprintln, args, exit, main, mainResult, tests, unsupported, guard,
   };
 })();

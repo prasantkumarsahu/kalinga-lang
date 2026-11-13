@@ -1,0 +1,58 @@
+// ui: web
+import "std/web"
+
+fn main() {
+    app = Document.app()
+    list = app.append(Document.create("ul"))
+    list.add_class("items")
+    list.set_attr("data-kind", "fruit")
+    for name in ["apple", "pear"] {
+        li = list.append(Document.create("li"))
+        li.set_text(name)
+    }
+    first = list.children()[0]
+    first.toggle_class("done", true)
+    first.set_style("color", "red")
+    println(app.html())
+    println(len(Document.find_all("ul.items li")), first.has_class("done"), list.attr("data-kind"), list.attr("x"))
+
+    // Events: handlers get an `Event`; listeners can be removed.
+    button = app.append(Document.create("button"))
+    button.set_text("+1")
+    var clicks = 0
+    listener = button.on("click", fn(e: Event) {
+        clicks += 1
+        if t = e.target() {
+            println("{e.kind()} on {t.tag()}: {clicks}")
+        }
+    })
+    button.click()
+    button.click()
+    listener.remove()
+    button.click()
+
+    // Events reach the elements around the one they happen on, unless stopped.
+    app.on("click", fn(e: Event) { println("app saw a click") })
+    button.click()
+    first.on("click", fn(e: Event) { e.stop() })
+    first.click()
+
+    input = app.append(Document.create("input"))
+    input.on("input", fn(e: Event) { println("typed {e.value()}") })
+    input.set_value("hello")
+    input.trigger("input")
+
+    first.remove()
+    list.clear()
+    if ul = app.find("ul") {
+        println(ul.html(), len(list.children()), list.find("li") == none)
+    }
+
+    Storage.set("name", "Asha")
+    println(Storage.get("name"), Storage.get("missing"))
+    History.push("/items/3")
+    println(Location.path(), Window.width())
+    Document.set_title("Shop")
+    println(Document.title())
+    Timer.after(0.01, fn() { println("timer ran") })
+}

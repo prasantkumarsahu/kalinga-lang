@@ -8,6 +8,7 @@
 - [Files: std/fs](#files-stdfs)
 - [2D math: std/math2d](#2d-math-stdmath2d)
 - [Reactive values: std/reactive](#reactive-values-stdreactive)
+- [Web pages: std/web](#web-pages-stdweb)
 - [Tests](#tests)
 - [Modules and packages](#modules-and-packages)
 - [Rust interop](#rust-interop)
@@ -222,6 +223,52 @@ page sees 7
   them (their effects stop; using a disposed signal stops the program).
 - These are small handles (structs): copies are the same signal. Use the functions
   `signal(...)` and `computed(...)`, not `Signal(...)`.
+
+## Web pages: std/web
+
+`import "std/web"` needs a web build: `kalinga build --web app.kl` writes
+`dist/index.html`, `dist/app.js` and every `.css` file next to `app.kl`;
+`kalinga run --web app.kl` runs it under Node.js on a stand-in page. `std/web` does not
+use `std/reactive`; import both to keep the page up to date.
+
+```kalinga
+import "std/reactive"
+import "std/web"
+
+fn main() {
+    app = Document.app()
+    count = signal(0)
+    shown = app.append(Document.create("p"))
+    effect(fn() {
+        shown.set_text("Clicked {count.get()} times")
+    })
+    plus = app.append(Document.create("button"))
+    plus.set_text("+1")
+    plus.on("click", fn(e: Event) { count.update(fn(n) => n + 1) })
+}
+```
+
+- `Document`: `app()` (the `<div id="app">`), `body()`, `create(tag)`, `text(text)`,
+  `find(selector)` (`Element?`), `find_all`, `add_styles(css)`, `title()`, `set_title`.
+- `Element`: `text`/`set_text`, `html`, `tag`, `attr` (`str?`)/`set_attr`/`remove_attr`,
+  `add_class`/`remove_class`/`toggle_class(name, on)`/`has_class`, `set_style`/
+  `remove_style`, `value`/`set_value`, `checked`/`set_checked`, `append(child)` (returns
+  the child), `insert_before`, `remove`, `clear`, `parent`, `children`, `find`,
+  `find_all`, `on(kind, fn(e: Event) { ... })` (returns a `Listener` with `remove()`),
+  `focus`, `click`, `trigger(kind)`.
+- `Event`: `kind`, `key`, `value`, `x`, `y`, `button`, `target` (`Element?`),
+  `prevent_default`, `stop`.
+- `Timer.after(seconds, f)` / `Timer.every(seconds, f)` and `cancel()`;
+  `Frame.next(fn(time: float) { ... })`.
+- `Http.get(url)` / `post(url, body)` / `send(method, url, body, headers)` are `async`
+  and give `Result<Response, str>`; `Response` has `status`, `text`, `ok()`,
+  `header(name)`.
+- `Storage.get/set/remove`, `Location.path/query/hash/href`, `History.push/replace/
+  on_change`, `Window.width/height/on_resize/on_key`.
+- CSS in a string doubles its braces: `".note {{ color: red; }}"`.
+- Web builds have no threads, `Channel`, `Shared`, `input()`, `std/fs`, `std/game`,
+  `use rust` or `rust { }` bodies; write `extern fn f(x: int) -> int = js { return x; }`
+  instead.
 
 ## Tests
 

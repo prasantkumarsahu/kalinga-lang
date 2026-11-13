@@ -1,0 +1,33 @@
+// A counter page: `kalinga build --web examples/web/counter.kl`, then open
+// examples/web/dist/index.html. `std/web` makes the elements and `std/reactive` keeps them
+// up to date: changing `count` reruns only the effects that read it, which change one text.
+
+import "std/reactive"
+import "std/web"
+
+fn main() {
+    app = Document.app()
+    count = signal(0)
+    doubled = computed(fn() => count.get() * 2)
+
+    title = app.append(Document.create("h1"))
+    title.set_text("Counter")
+
+    shown = app.append(Document.create("p"))
+    effect(fn() {
+        shown.set_text("{count.get()} (doubled: {doubled.get()})")
+        shown.toggle_class("big", count.get() >= 10)
+    })
+
+    buttons = app.append(Document.create("div"))
+    buttons.add_class("buttons")
+    minus = buttons.append(Document.create("button"))
+    minus.set_text("-1")
+    minus.on("click", fn(e: Event) { count.update(fn(n) => n - 1) })
+    plus = buttons.append(Document.create("button"))
+    plus.set_text("+1")
+    plus.on("click", fn(e: Event) { count.update(fn(n) => n + 1) })
+    reset = buttons.append(Document.create("button"))
+    reset.set_text("Reset")
+    reset.on("click", fn(e: Event) { count.set(0) })
+}
