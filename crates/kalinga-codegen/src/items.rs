@@ -277,8 +277,14 @@ impl Gen<'_> {
     fn statics(&self, out: &mut String, prog: &Program) {
         for c in &prog.consts {
             let Some(v) = self.t.static_values.get(&(String::new(), c.name.clone())) else { continue };
-            let _ =
-                writeln!(out, "\nfn __k_{}() -> {} {{ {} }}", c.name, self.rty(&self.m.consts[&c.name]), self.expr(v));
+            let ty = &self.m.consts[&c.name];
+            let _ = writeln!(
+                out,
+                "\nfn __k_{}() -> {} {{ {} }}",
+                c.name,
+                self.rty(ty),
+                fixed_body(ty, &self.rty(ty), &self.expr(v))
+            );
         }
         for owner in self.m.struct_order.iter().chain(&self.m.class_order) {
             let values = self.m.static_values_of(owner).unwrap_or_default();
@@ -295,7 +301,7 @@ impl Gen<'_> {
                         "    fn __s_{name}() -> &'static RefCell<{t}> {{\n        thread_local! {{ static V: &'static RefCell<{t}> = Box::leak(Box::new(RefCell::new({v}))); }}\n        V.with(|v| *v)\n    }}"
                     );
                 } else {
-                    let _ = writeln!(out, "    fn __c_{}() -> {} {{ {} }}", name, t, v);
+                    let _ = writeln!(out, "    fn __c_{}() -> {} {{ {} }}", name, t, fixed_body(&s.ty, &t, &v));
                 }
             }
             out.push_str("}\n");
@@ -888,4 +894,14 @@ fn rust_module_name(path: &str) -> String {
         .chars()
         .map(|c| if c.is_ascii_alphanumeric() { c.to_ascii_lowercase() } else { '_' })
         .collect()
+}
+
+/// The body of the function that reads a fixed value: the value itself for numbers, `bool`
+/// and `str`, otherwise built once per thread and cloned (an array or struct value is one
+/// value, not rebuilt at every use).
+fn fixed_body(ty: &Type, rty: &str, value: &str) -> String {
+    match ty {
+        Type::Int | Type::Float | Type::Bool | Type::Str => value.to_string(),
+        _ => format!("thread_local! {{ static V: {rty} = {value}; }} V.with(|v| v.clone())"),
+    }
 }

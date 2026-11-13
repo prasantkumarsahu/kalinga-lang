@@ -6,8 +6,8 @@ An array holds any number of values of one type. Its type is written `[T]`.
 
 ```kalinga
 fn main() {
-    let primes = [2, 3, 5, 7]
-    let names: [str] = ["Ravi", "Mira"]
+    primes = [2, 3, 5, 7]
+    names: [str] = ["Ravi", "Mira"]
     var empty: [float] = []
     println(primes, names, empty)
 }
@@ -52,7 +52,7 @@ Either end may be left out, and `a..=b` includes `b`:
 
 ```kalinga
 fn main() {
-    let xs = [10, 20, 30, 40, 50]
+    xs = [10, 20, 30, 40, 50]
     println(xs[1..3], xs[..2], xs[3..], xs[1..=3])
 }
 ```
@@ -82,7 +82,7 @@ fn main() {
     stack.push("c")
     println(stack.contains("b"), stack.len())
 
-    if let top = stack.pop() {
+    if top = stack.pop() {
         println("popped", top)
     }
     println(stack)
@@ -168,9 +168,9 @@ fn evens(xs: [int]) -> [int] {
 }
 
 fn main() {
-    let data = [4, 9, 2, 7, 6]
+    data = [4, 9, 2, 7, 6]
     println(sum(data), max_of(data), evens(data))
-    let nothing: [int] = []
+    nothing: [int] = []
     println(max_of(nothing))
 }
 ```
@@ -186,9 +186,9 @@ A `str` is UTF-8 text. Join strings with `+`; convert other values with `str()`:
 
 ```kalinga
 fn main() {
-    let lang = "Kalinga"
-    let version = 1
-    let line = lang + " v" + str(version)
+    lang = "Kalinga"
+    version = 1
+    line = lang + " v" + str(version)
     println(line, len(line))
 }
 ```
@@ -203,8 +203,8 @@ Put any printable expression inside `{ }` in a string, and its value is inserted
 
 ```kalinga
 fn main() {
-    let name = "Mira"
-    let items = [3, 4]
+    name = "Mira"
+    items = [3, 4]
     println("Hello {name}, you have {len(items)} items: {items}")
     println("next year you will be {30 + 1}")
     println("use {{ and }} for literal braces")
@@ -240,12 +240,12 @@ For objects, insert a field or a method result: `"{user.name}"`.
 
 ```kalinga
 fn main() {
-    let raw = "  Hello World  "
-    let clean = raw.trim()
+    raw = "  Hello World  "
+    clean = raw.trim()
     println(clean.upper(), clean.lower(), clean.contains("World"))
-    let parts = "a,b,c".split(",")
+    parts = "a,b,c".split(",")
     println(parts, parts.join(" + "), "3 cats".replace("cats", "dogs"))
-    if let n = "42".parse_int() {
+    if n = "42".parse_int() {
         println(n + 1)
     }
 }
@@ -272,7 +272,7 @@ fn reverse(s: str) -> str {
 }
 
 fn main() {
-    let word = "kalinga"
+    word = "kalinga"
     println(word[0], word[1..4], reverse("stressed"))
     println(word.code_at(0), chr(75))
 }

@@ -12,7 +12,7 @@ fn parse_level(text: str) -> Result<int, str> {
     if text == "" {
         return Err("empty")
     }
-    let n = int(text)
+    n = int(text)
     if n < 1 {
         return Err("level must be at least 1, got {n}")
     }
@@ -108,7 +108,7 @@ fn load(name: str) -> Result<[int], LoadError> {
 }
 
 fn total(name: str) -> Result<int, LoadError> {
-    let xs = load(name)?
+    xs = load(name)?
     var sum = 0
     for x in xs {
         sum += x
@@ -145,12 +145,12 @@ fn f() -> Result<int, str> {
 }
 
 fn main() {
-    let x = f()?
+    x = f()?
 }
 ```
 
 ```text
-main.kl:6:16: error: `?` can only be used in a function that returns a `Result`; this one returns `void`
+main.kl:6:12: error: `?` can only be used in a function that returns a `Result`; this one returns `void`
 ```
 
 - `?` also works on optionals, in a function that returns an optional: `none` is returned
@@ -158,7 +158,7 @@ main.kl:6:16: error: `?` can only be used in a function that returns a `Result`;
 
 ```kalinga
 fn first_even_times_ten(xs: [int]) -> int? {
-    let f = xs.find(fn(x) => x % 2 == 0)?
+    f = xs.find(fn(x) => x % 2 == 0)?
     return f * 10
 }
 
@@ -192,8 +192,8 @@ fn parse_level(text: str) -> Result<int, str> {
 }
 
 fn main() {
-    let good = parse_level("7")
-    let bad = parse_level("")
+    good = parse_level("7")
+    bad = parse_level("")
     println(good.is_ok(), bad.is_err())
     println(good.unwrap_or(1), bad.unwrap_or(1))
     println(good.ok(), bad.err())
@@ -226,7 +226,7 @@ fn load_config() -> Result<int, str> {
 }
 
 fn main() -> Result<void, str> {
-    let volume = load_config()?
+    volume = load_config()?
     println("volume", volume)
     return Ok()
 }
@@ -244,17 +244,17 @@ When nothing says which `Result` an `Ok` or `Err` belongs to, give the variable 
 
 ```kalinga error
 fn main() {
-    let r = Ok(5)
+    r = Ok(5)
 }
 ```
 
 ```text
-main.kl:2:13: error: cannot tell which `Result` this `Ok` belongs to; give the variable a type, e.g. `let r: Result<int, str> = Ok(...)`
+main.kl:2:9: error: cannot tell which `Result` this `Ok` belongs to; give the variable a type, e.g. `r: Result<int, str> = Ok(...)`
 ```
 
 ```kalinga
 fn main() {
-    let r: Result<int, str> = Ok(5)
+    r: Result<int, str> = Ok(5)
     println(r)
 }
 ```

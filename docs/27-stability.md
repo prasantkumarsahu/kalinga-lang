@@ -1,28 +1,30 @@
 # 27. Stability
 
-Kalinga 0.5 is the first **stable** release. From 0.5 on:
+Kalinga is still at 0.x: a release may change the language when the design calls for
+it. Every such change comes with a `kalinga fix` rule that updates your code, and the
+compiler's error message for the old form says to run it:
 
-- **Code that compiles keeps compiling** in every later 0.x release, and keeps doing the
-  same thing.
-- When a change cannot be avoided (a design mistake, a safety problem), it comes with a
-  `kalinga fix` rule that updates your code, and the compiler's error message for the old
-  form says to run it:
+```bash
+kalinga fix src/
+```
 
-  ```bash
-  kalinga fix src/
-  ```
+`kalinga fix` needs to know which version the code was written for: the nearest
+`utkal.toml` says (`kalinga = "0.4"`), or you tell it with `--from 0.4`. A rule only
+changes code older than the rule, so fixing code twice, or fixing code already written
+for the new version, changes nothing. `utkal fix` does the same for a whole project and
+records the new version in `utkal.toml`.
 
-  `kalinga fix` needs to know which version the code was written for: the nearest
-  `utkal.toml` says (`kalinga = "0.4"`), or you tell it with `--from 0.4`. A rule only
-  changes code older than the rule, so fixing code twice, or fixing code already written
-  for the new version, changes nothing. `utkal fix` does the same for a whole project and
-  records the new version in `utkal.toml`.
+The rules so far:
 
-  0.5 itself has two such rules, for code written for 0.4: `print(...)` becomes
-  `println(...)` (`print` no longer ends the line), and member constants written
-  `static NAME: Type = value` become `const NAME: Type = value`.
+- **0.5**, for code written for 0.4: `print(...)` becomes `println(...)` (`print` no
+  longer ends the line).
+- **0.7**, fixed by default, for any code: `let x = v` becomes `x = v` (or `var x = v`
+  where it hid another `x`); `if let` / `while let` become `if x = v` / `while x = v`;
+  `const NAME: T = v` becomes `NAME: T = v` at the top level and `static NAME: T = v` in a
+  class or struct; fields that code changes become `var` fields, and `private(set)` fields
+  become `private(set) var`.
 
-## What the promise covers
+## What changes come with a fix rule
 
 - The syntax and meaning of programs: everything in these docs and the
   [Language Reference](26-reference.md).

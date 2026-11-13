@@ -2,7 +2,31 @@
 
 ## Unreleased
 
-Everything here is new; code written for 0.6.1 compiles and does the same thing.
+**Breaking: fixed by default.** Code written for 0.6 needs `kalinga fix` (below); after
+that it compiles and does the same thing.
+
+### Breaking: fixed by default
+- No keyword means fixed, `var` means changeable, for locals, fields and type members.
+  `let` and `const` are removed (they are errors that say what to write).
+- `name = value` declares a fixed variable when no `name` is visible (otherwise it changes
+  that one); `name: T = value` always declares; `var name = value` as before.
+  `(a, b) = pair` takes a tuple apart. See [Basics](docs/02-basics.md#variables).
+- `if p = opt { }` and `while p = opt { }` replace `if let` and `while let`; `=` in a
+  condition always unwraps, so `if x = 5` is an error that suggests `==`.
+- **Fields are fixed unless `var`**: a fixed field is set by its default or in its own
+  class's `init`, never in methods, subclasses or outside code; struct fields are set when
+  the struct is built. `private(set)` needs `var`. See
+  [Classes](docs/09-classes.md#fixed-and-var-fields).
+- `static NAME: T = v` (fixed) and top-level `NAME: T = v` replace `const`. `static`, `static
+  var` and top-level values are set at compile time: a constant expression (literals,
+  operators, other static values, `none`, array / map / tuple literals, enum variants and
+  struct values), never a call or a class object.
+- New warning: a variable that is never used, with "did you mean `total`?" when a misspelt
+  assignment (`totl = total + 1`) declared it.
+- To update code, run `kalinga fix src/` (or `utkal fix`): it removes `let`, turns a `let`
+  that hid another variable into `var`, rewrites `if let` / `while let` and `const`, adds
+  `var` to `private(set)` fields and to every field the code changes. All examples, the
+  standard modules and the docs were migrated with it.
 
 ### Language
 - **Default methods in interfaces**: an interface method may have a body; classes get it
@@ -21,12 +45,15 @@ Everything here is new; code written for 0.6.1 compiles and does the same thing.
   [Functions](docs/04-functions.md#deprecating-a-function).
 - A program's own type named `Show`, `Eq` or `Ord` still means that type after `:`.
 
-### Editor (VS Code extension)
+### Editor (VS Code extension 0.7.0)
+- Highlighting, snippets (`ifopt`, `ifas`, ...), completion and hover follow the new rules:
+  `var` and `static` fields, no `let` or `const`. Fixed fields and values are read-only
+  semantic tokens, and a quick fix "Make it `var`" answers "cannot change `x`: it is fixed".
 - Uses of deprecated code are struck-through warnings; hover shows the deprecation note
   and `private(set)`. Completion lists generated `as_str`, `equals`, `compare` and
   interface default methods. `#[...]` and `private(set)` are highlighted.
 - Semantic highlighting: the language server colours each name by what it is (parameter,
-  read-only `let` or `var`, property, method, class, struct, interface, enum, variant,
+  fixed or `var` variable, property, method, class, struct, interface, enum, variant,
   constant, built-in), and the grammar colours plain variables and parameters before it
   answers.
 - Code inside a string's `{...}` is coloured as code (braces marked, names and bracket

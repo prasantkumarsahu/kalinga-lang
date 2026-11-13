@@ -61,7 +61,7 @@ fn main() {
 
 ```kalinga
 class Stack<T> {
-    items: [T]
+    var items: [T]
 
     fn push(x: T) {
         self.items.push(x)
@@ -77,12 +77,12 @@ class Stack<T> {
 }
 
 fn main() {
-    let numbers: Stack<int> = Stack()
+    numbers: Stack<int> = Stack()
     numbers.push(1)
     numbers.push(2)
     println(numbers.size(), numbers.pop(), numbers.pop(), numbers.pop())
 
-    let words = Stack<str>()
+    words = Stack<str>()
     words.push("hi")
     println(words.pop())
 }
@@ -97,7 +97,7 @@ The type arguments come from (in order of preference):
 
 1. Explicit arguments: `Stack<str>()`.
 2. The constructor's arguments: `Pair(1, "a")` is a `Pair<int, str>`.
-3. The expected type: `let s: Stack<int> = Stack()`.
+3. The expected type: `s: Stack<int> = Stack()`.
 
 If none of these says what `T` is, the compiler asks you to write it:
 
@@ -123,8 +123,8 @@ class Pair<A, B> {
 }
 
 fn main() {
-    let p = Pair("x", 5)
-    let q = p.swap()
+    p = Pair("x", 5)
+    q = p.swap()
     println(p.first, p.second, "->", q.first, q.second)
 }
 ```
@@ -192,7 +192,7 @@ class Square : Shape {
 fn largest<T: Ord>(xs: [T]) -> T? {
     var best: T? = none
     for x in xs {
-        if let b = best {
+        if b = best {
             if b < x {
                 best = x
             }

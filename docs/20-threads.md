@@ -24,8 +24,8 @@ fn work(n: int) -> int {
 }
 
 fn main() {
-    let a = Thread.spawn(fn() => work(1000000))
-    let b = Thread.spawn(fn() => work(2000000))
+    a = Thread.spawn(fn() => work(1000000))
+    b = Thread.spawn(fn() => work(2000000))
     // both run at the same time, on two cores
     println(a.join() == work(1000000), b.join() == work(2000000))
 }
@@ -60,16 +60,16 @@ class Player {
 }
 
 fn main() {
-    let p = Player()
-    let t = Thread.spawn(fn() => p.hp)
+    p = Player()
+    t = Thread.spawn(fn() => p.hp)
 }
 ```
 
 ```text
-main.kl:7:26: error: `Thread.spawn` cannot use `p` here: a `Player` cannot move to another thread (pass plain values, a `Channel` or a `Shared`)
+main.kl:7:22: error: `Thread.spawn` cannot use `p` here: a `Player` cannot move to another thread (pass plain values, a `Channel` or a `Shared`)
 ```
 
-Copy what the thread needs into a value first (`let hp = p.hp`), or describe the data with a
+Copy what the thread needs into a value first (`hp = p.hp`), or describe the data with a
 `struct`.
 
 ## Channels
@@ -84,12 +84,12 @@ struct Job {
 }
 
 fn main() {
-    let jobs = Channel<Job>()
-    let results = Channel<int>()
-    let worker = Thread.spawn(fn() -> int {
+    jobs = Channel<Job>()
+    results = Channel<int>()
+    worker = Thread.spawn(fn() -> int {
         var count = 0
         while true {
-            if let j = jobs.receive() {
+            if j = jobs.receive() {
                 results.send(j.id * j.size)
                 count += 1
             } else {
@@ -105,7 +105,7 @@ fn main() {
 
     var total = 0
     while true {
-        if let v = results.try_receive() {
+        if v = results.try_receive() {
             total += v
         } else {
             break
@@ -138,7 +138,7 @@ with no other thread in between, so increments are never lost:
 
 ```kalinga
 fn main() {
-    let counter = Shared(0)
+    counter = Shared(0)
     var tasks: [Task<void>] = []
     for i in 0..8 {
         tasks.push(Thread.spawn(fn() {
@@ -184,9 +184,9 @@ fn cost(n: int) -> int {
 }
 
 fn main() {
-    let sizes = [300000, 300000, 300000, 300000, 300000, 300000]
-    let a = sizes.map(fn(n) => cost(n))
-    let b = sizes.par_map(fn(n) => cost(n))
+    sizes = [300000, 300000, 300000, 300000, 300000, 300000]
+    a = sizes.map(fn(n) => cost(n))
+    b = sizes.par_map(fn(n) => cost(n))
     println(a == b, Thread.cores() >= 1)
 }
 ```

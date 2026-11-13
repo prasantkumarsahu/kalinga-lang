@@ -90,7 +90,7 @@ fn count<T: Eq>(items: [T], x: T) -> int {
 }
 
 fn main() {
-    let a = Point(1, 2)
+    a = Point(1, 2)
     println(a == Point(1, 2))
     println(a != Point(2, 1))
     println(a == a)
@@ -101,8 +101,8 @@ fn main() {
     println(User(1, "Ann") == User(1, "Annie"))
     println(User(1, "Ann") == User(2, "Ann"))
 
-    let maybe: Point? = Point(1, 2)
-    let other: Point? = Point(1, 2)
+    maybe: Point? = Point(1, 2)
+    other: Point? = Point(1, 2)
     println(maybe == other)
     println(Pin(a, "home") == Pin(Point(1, 2), "home"))
     println((a, 1) == (Point(1, 2), 1))
@@ -120,7 +120,7 @@ fn main() {
     tasks.sort()
     println(tasks)
 
-    let shapes: [Shape] = [Square(), Shape(3)]
+    shapes: [Shape] = [Square(), Shape(3)]
     println(shapes[0] == Shape(4))
     println(count(shapes, Square()))
     println(count([1, 2, 1], 1))

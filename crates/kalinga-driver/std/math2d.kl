@@ -2,8 +2,8 @@
 
 /// A 2D vector (position, velocity, direction...).
 struct Vec2 {
-    x: float
-    y: float
+    var x: float
+    var y: float
 
     static fn zero() -> Vec2 {
         return Vec2(0.0, 0.0)
@@ -28,7 +28,7 @@ struct Vec2 {
 
     /// The same direction with length 1 (or zero for the zero vector).
     fn normalized() -> Vec2 {
-        let len = self.length()
+        len = self.length()
         if len == 0.0 {
             return Vec2(0.0, 0.0)
         }
@@ -66,10 +66,10 @@ struct Vec2 {
 
 /// An axis-aligned rectangle: top-left corner plus size.
 struct Rect {
-    x: float
-    y: float
-    w: float
-    h: float
+    var x: float
+    var y: float
+    var w: float
+    var h: float
 
     fn center() -> Vec2 {
         return Vec2(self.x + self.w / 2.0, self.y + self.h / 2.0)

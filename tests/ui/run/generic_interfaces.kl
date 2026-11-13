@@ -13,7 +13,7 @@ interface Named {
 }
 
 class IntStore : Store<int>, Named {
-    value: int = 0
+    var value: int = 0
 
     override fn get() -> int {
         return self.value
@@ -29,7 +29,7 @@ class IntStore : Store<int>, Named {
 }
 
 class TextCache : Cache<str> {
-    text: str = ""
+    var text: str = ""
 
     override fn get() -> str {
         return self.text
@@ -63,29 +63,29 @@ fn show_get<T: Show, S: Store<T>>(s: S) {
 
 // T bound to a sub-interface, used where the super-interface is expected
 fn first_then_clear<C: Cache<str>>(c: C) -> str {
-    let s: Store<str> = c
-    let v = s.get()
+    s: Store<str> = c
+    v = s.get()
     c.clear()
     return v
 }
 
 fn main() {
-    let ints = IntStore()
+    ints = IntStore()
     fill(ints, [1, 2, 3])
     println(ints.get())
     bump(ints)
     println(ints.get(), ints.name())
 
-    let stores: [Store<int>] = [IntStore(), ints]
+    stores: [Store<int>] = [IntStore(), ints]
     for s in stores {
         s.put(s.get() * 10)
         println(s.get())
     }
 
-    let cache = TextCache()
+    cache = TextCache()
     fill(cache, ["a", "b"])
     show_get(cache)
-    let as_store: Store<str> = cache
+    as_store: Store<str> = cache
     as_store.put("c")
     println(first_then_clear(cache))
     println("[{cache.get()}]")

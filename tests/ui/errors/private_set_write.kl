@@ -1,8 +1,8 @@
 class Account {
-    private(set) balance: int = 0
+    private(set) var balance: int = 0
 }
 
 fn main() {
-    let a = Account()
+    a = Account()
     a.balance = 100
 }

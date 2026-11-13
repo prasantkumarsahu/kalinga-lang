@@ -1,0 +1,44 @@
+// Fields are fixed unless `var`: set by a default or in `init`, never after.
+class Pet {
+    var name: str = ""
+}
+
+class User {
+    name: str
+    var score: int = 0
+    pet: Pet = Pet()
+    tags: [str] = []
+
+    init(name: str) {
+        self.name = name
+        if name == "Ann" {
+            self.name = "Ann!"
+        }
+        self.tags.push("new")
+    }
+
+    fn play() {
+        self.score += 1
+        // The object in a fixed field still changes.
+        self.pet.name = "Rex"
+    }
+}
+
+struct Point {
+    x: int
+    var y: int
+
+    mut fn lift() {
+        self.y += 1
+    }
+}
+
+fn main() {
+    u = User("Ann")
+    u.play()
+    u.score += 5
+    var p = Point(1, 2)
+    p.y = 7
+    p.lift()
+    println(u.name, u.score, u.pet.name, u.tags, p)
+}

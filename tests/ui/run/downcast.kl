@@ -14,8 +14,8 @@ class Cat : Animal {}
 
 class Node {
     value: int
-    children: [Node]
-    parent: Node? = none
+    var children: [Node]
+    var parent: Node? = none
     init(value: int) { self.value = value }
     fn add(child: Node) {
         child.parent = self
@@ -24,24 +24,24 @@ class Node {
 }
 
 fn main() {
-    let zoo: [Animal] = [Dog("Rex"), Cat("Tom"), Puppy("Bit")]
+    zoo: [Animal] = [Dog("Rex"), Cat("Tom"), Puppy("Bit")]
     for a in zoo {
-        if let d = a as Dog {
+        if d = a as Dog {
             println(d.fetch())
         } else {
             println(a.name, "is not a dog")
         }
         println(a is Puppy, a is Animal)
     }
-    let s: Show = Puppy("Nib")
-    if let p = s as Puppy { println("puppy", p.name) }
+    s: Show = Puppy("Nib")
+    if p = s as Puppy { println("puppy", p.name) }
     println(s is Dog)
-    let r = Dog("R")
+    r = Dog("R")
     println(r.me().name, r.me() is Dog)
 
-    let root = Node(1)
-    let kid = Node(2)
+    root = Node(1)
+    kid = Node(2)
     root.add(kid)
-    if let p = kid.parent { println("parent of 2 is", p.value) }
+    if p = kid.parent { println("parent of 2 is", p.value) }
     println(len(root.children))
 }

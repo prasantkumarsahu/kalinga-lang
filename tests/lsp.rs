@@ -70,7 +70,7 @@ fn diagnostics_hover_and_shutdown_over_stdio() {
     assert_eq!(init["result"]["capabilities"]["hoverProvider"], true);
     s.send(json!({"jsonrpc": "2.0", "method": "initialized", "params": {}}));
 
-    let text = "fn twice(n: int) -> int {\n    return n * 2\n}\n\nfn main() {\n    let s: str = twice(2)\n}\n";
+    let text = "fn twice(n: int) -> int {\n    return n * 2\n}\n\nfn main() {\n    s: str = twice(2)\n}\n";
     s.send(json!({"jsonrpc": "2.0", "method": "textDocument/didOpen", "params": {
         "textDocument": {"uri": uri, "languageId": "kalinga", "version": 1, "text": text}}}));
     let diags = s.receive_where(|m| m["method"] == "textDocument/publishDiagnostics");
@@ -80,7 +80,7 @@ fn diagnostics_hover_and_shutdown_over_stdio() {
     assert!(list[0]["message"].as_str().is_some_and(|m| m.contains("expected `str`")), "{:?}", list[0]);
 
     s.send(json!({"jsonrpc": "2.0", "id": 2, "method": "textDocument/hover", "params": {
-        "textDocument": {"uri": uri}, "position": {"line": 5, "character": 19}}}));
+        "textDocument": {"uri": uri}, "position": {"line": 5, "character": 15}}}));
     let hover = s.receive_where(|m| m["id"] == 2);
     let value = hover["result"]["contents"]["value"].as_str().expect("hover text").to_string();
     assert!(value.contains("fn twice(n: int) -> int"), "{}", value);

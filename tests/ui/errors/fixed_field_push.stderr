@@ -1,0 +1,3 @@
+tests/ui/errors/fixed_field_push.kl:5:13: error: cannot change `tags`: it is a fixed field of `A`, set only in its `init` (declare it `var tags` to change it)
+5 |         self.tags.push(t)
+  |             ^

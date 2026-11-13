@@ -1,7 +1,7 @@
 import "std/reactive"
 
 fn main() {
-    let s = scope()
+    s = scope()
     var count = signal(0)
     s.run(fn() {
         count = signal(1)

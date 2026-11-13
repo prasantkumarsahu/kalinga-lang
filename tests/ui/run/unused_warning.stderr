@@ -1,0 +1,4 @@
+tests/ui/run/unused_warning.kl:4:5: warning: `totl` is never used
+4 |     totl = total + 1
+  |     ^^^^
+  = help: did you mean `total`? `totl = ...` declares a new variable

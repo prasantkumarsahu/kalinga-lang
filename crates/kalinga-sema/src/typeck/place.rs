@@ -111,11 +111,11 @@ impl Checker<'_> {
                     err(format!("`{}` is changed inside a lambda", name), e.pos)
                 }
                 Some(_) => err(
-                    format!("cannot change `{}`: it was declared with `let` (use `var` for a mutable variable)", name),
+                    format!("cannot change `{}`: it is fixed (declare it `var {}` to change it)", name, name),
                     e.pos,
                 ),
                 None if self.m.consts.contains_key(name) => {
-                    err(format!("`{}` is a constant and cannot be changed", name), e.pos)
+                    err(format!("`{}` is a fixed value and cannot be changed", name), e.pos)
                 }
                 None => {
                     let locals = cx.visible();
@@ -155,7 +155,7 @@ impl Checker<'_> {
         if let Some(n) = self.static_owner(cx, recv) {
             return match self.m.static_value(n, f) {
                 Some(s) if s.mutable => Ok(TPlace::Static { owner: n.clone(), name: f.to_string(), ty: s.ty.clone() }),
-                Some(_) => err(format!("`{}.{}` is a constant; use `static var` for a value that changes", n, f), pos),
+                Some(_) => err(format!("`{}.{}` is fixed; declare it `static var` to change it", n, f), pos),
                 None => err(format!("`{}` has no `static var` named `{}`", n, f), pos),
             };
         }
@@ -169,6 +169,7 @@ impl Checker<'_> {
                 }
                 let sargs = self.struct_param_args(&st);
                 let ty = self.struct_field_type(cx, &st, &sargs, f, pos)?;
+                self.check_struct_settable(&st, f, pos)?;
                 return Ok(TPlace::SelfField { field: f.to_string(), ty, wrapped: false });
             }
             let class = self.self_class(cx, recv.pos)?;
@@ -184,6 +185,7 @@ impl Checker<'_> {
                 if self.m.structs[&st].private_set_fields.contains(f) && cx.strukt.as_deref() != Some(st.as_str()) {
                     return err(format!("`{}` can only be changed inside `{}` (it is `private(set)`)", f, st), pos);
                 }
+                self.check_struct_settable(&st, f, pos)?;
                 let base = self.place(cx, recv)?;
                 Ok(TPlace::StructField { base: Box::new(base), field: f.to_string(), ty })
             }
@@ -230,12 +232,38 @@ impl Checker<'_> {
 
     /// A `private(set)` field of class `class` (or a base class) is changed only inside the
     /// class that declares it.
+    /// A fixed field (no `var`) is set only by its default or its own class's `init`.
     fn check_settable(&self, cx: &Ctx, class: &str, field: &str, pos: Span) -> Result<()> {
-        if let Some((_, _, owner)) = self.m.all_fields(class).into_iter().find(|(n, _, _)| n == field)
-            && self.m.classes[&owner].private_set_fields.contains(field)
-            && cx.class.as_deref() != Some(owner.as_str())
-        {
+        let Some((_, _, owner)) = self.m.all_fields(class).into_iter().find(|(n, _, _)| n == field) else {
+            return Ok(());
+        };
+        let info = &self.m.classes[&owner];
+        let inside = cx.class.as_deref() == Some(owner.as_str());
+        if info.fixed_fields.contains(field) && !(inside && cx.in_init) {
+            return err(
+                format!(
+                    "cannot change `{}`: it is a fixed field of `{}`, set only in its `init` (declare it `var {}` to change it)",
+                    field, owner, field
+                ),
+                pos,
+            );
+        }
+        if info.private_set_fields.contains(field) && !inside {
             return err(format!("`{}` can only be changed inside `{}` (it is `private(set)`)", field, owner), pos);
+        }
+        Ok(())
+    }
+
+    /// A struct's fixed field (no `var`) is set when the struct is built, never after.
+    fn check_struct_settable(&self, st: &str, field: &str, pos: Span) -> Result<()> {
+        if self.m.structs[st].fixed_fields.contains(field) {
+            return err(
+                format!(
+                    "cannot change `{}`: it is a fixed field of `{}` (declare it `var {}` to change it)",
+                    field, st, field
+                ),
+                pos,
+            );
         }
         Ok(())
     }

@@ -1,0 +1,11 @@
+class A {
+    name: str = ""
+}
+
+class B : A {
+    init() {
+        self.name = "b"
+    }
+}
+
+fn main() {}

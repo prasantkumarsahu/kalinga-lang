@@ -1,6 +1,6 @@
 struct Vec2 {
-    x: float
-    y: float
+    var x: float
+    var y: float
 
     static fn zero() -> Vec2 { return Vec2(0.0, 0.0) }
 
@@ -19,14 +19,14 @@ struct Vec2 {
 }
 
 struct Particle {
-    pos: Vec2
-    vel: Vec2
-    alive: bool = true
+    var pos: Vec2
+    var vel: Vec2
+    var alive: bool = true
 }
 
 class World {
     gravity: Vec2 = Vec2(0.0, -10.0)
-    parts: [Particle]
+    var parts: [Particle]
 
     fn step(dt: float) {
         for i in 0..len(self.parts) {
@@ -38,7 +38,7 @@ class World {
 }
 
 fn main() {
-    let a = Vec2(1.0, 2.0)
+    a = Vec2(1.0, 2.0)
     var b = a
     b.x = 10.0
     println(a, b, a == Vec2(1.0, 2.0))
@@ -48,7 +48,7 @@ fn main() {
     c += Vec2(1.0, 1.0)
     println(c, c.dot(Vec2(1.0, 0.0)), "{c}")
 
-    let w = World()
+    w = World()
     w.parts.push(Particle(Vec2(0.0, 1.0), Vec2(1.0, 0.0)))
     w.parts.push(Particle(Vec2(0.0, 100.0), Vec2(0.0, 0.0), true))
     for s in 0..10 { w.step(0.1) }

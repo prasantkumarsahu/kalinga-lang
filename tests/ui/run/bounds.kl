@@ -70,7 +70,7 @@ fn count_of<T: Eq>(xs: [T], target: T) -> int {
 fn largest<T: Ord>(xs: [T]) -> T? {
     var best: T? = none
     for x in xs {
-        if let b = best {
+        if b = best {
             if b < x {
                 best = x
             }
@@ -117,9 +117,9 @@ fn biggest_of_all<T: Ord + Show>(a: [T], b: [T]) {
     for x in b {
         both.push(x)
     }
-    let all = sorted(both)
+    all = sorted(both)
     println("sorted: {all}")
-    if let m = largest(all) {
+    if m = largest(all) {
         println("largest: {m}")
     }
 }
@@ -170,16 +170,16 @@ fn main() {
     println(largest(["pear", "apple"]))
     println(sorted([2.5, -1.0, 0.5]))
     println(total_area([Square(2.0), Square(3.0)]))
-    let shapes: [Shape] = [Square(1.0), Cube(1.0)]
+    shapes: [Shape] = [Square(1.0), Cube(1.0)]
     println(total_area(shapes))
-    let solids: [Solid] = [Cube(2.0)]
+    solids: [Solid] = [Cube(2.0)]
     describe_all(solids)
     report(3, 3)
     report("x", "y")
     biggest_of_all([5, 1], [7, 2])
     println(Labelled(42).label())
     println(Labelled("hi").label())
-    let p = Pair("left", 10)
+    p = Pair("left", 10)
     println(p.describe(), p.bigger(3))
     println(Holder(Square(3.0)).report())
 }

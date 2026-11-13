@@ -1,0 +1,3 @@
+tests/ui/errors/if_let_removed.kl:6:8: error: `if let` was removed: write `if name = optional` (`kalinga fix` updates old code)
+6 |     if let x = f() {
+  |        ^^^

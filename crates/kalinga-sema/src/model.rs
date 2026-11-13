@@ -72,6 +72,8 @@ pub struct ClassInfo {
     pub private_fields: HashSet<String>,
     /// `private(set)` fields: assignable only inside the class that declares them.
     pub private_set_fields: HashSet<String>,
+    /// Fields without `var`: set by their default or the class's own `init`, never after.
+    pub fixed_fields: HashSet<String>,
     pub private_methods: HashSet<String>,
     pub abstract_methods: HashSet<String>,
     /// `static async fn`s.
@@ -160,6 +162,8 @@ pub struct StructInfo {
     pub private_fields: HashSet<String>,
     /// `private(set)` fields: assignable only inside the struct.
     pub private_set_fields: HashSet<String>,
+    /// Fields without `var`: set when the struct is built, never after.
+    pub fixed_fields: HashSet<String>,
     pub methods: HashMap<String, StructMethod>,
     pub ops: Vec<StructOp>,
     /// Built-in interfaces listed after `:` (`struct Version : Ord`).

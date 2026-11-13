@@ -9,6 +9,6 @@ class B : A {
     override fn show() -> str { return "b" }
 }
 fn main() {
-    let xs: [S] = [A(), B()]
+    xs: [S] = [A(), B()]
     for x in xs { println(x.show()) }
 }

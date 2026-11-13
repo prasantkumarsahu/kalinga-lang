@@ -151,25 +151,28 @@
           }
         },
         {
-          "match": "\\b(let|var)\\s+([A-Za-z_][A-Za-z0-9_]*)",
+          "comment": "fields and values: `name: type` at the start of a line, optionally after `private`, `private(set)` or `static`, and `var`",
+          "match": "^\\s*(?:(private(?:\\(set\\))?|static)\\s+)?(?:(var)\\s+)?([A-Za-z_][A-Za-z0-9_]*)\\s*(?=:)",
+          "captures": {
+            "1": {
+              "name": "storage.modifier.kalinga"
+            },
+            "2": {
+              "name": "storage.type.kalinga"
+            },
+            "3": {
+              "name": "variable.other.property.kalinga"
+            }
+          }
+        },
+        {
+          "match": "\\b(var)\\s+([A-Za-z_][A-Za-z0-9_]*)",
           "captures": {
             "1": {
               "name": "storage.type.kalinga"
             },
             "2": {
               "name": "variable.other.declaration.kalinga"
-            }
-          }
-        },
-        {
-          "comment": "class fields: `name: type` at the start of a line, optionally `private` or `private(set)`",
-          "match": "^\\s*(?:(private(?:\\(set\\))?)\\s+)?([a-z_][A-Za-z0-9_]*)\\s*(?=:)",
-          "captures": {
-            "1": {
-              "name": "storage.modifier.kalinga"
-            },
-            "2": {
-              "name": "variable.other.property.kalinga"
             }
           }
         }
@@ -187,7 +190,7 @@
         },
         {
           "name": "storage.type.kalinga",
-          "match": "\\b(fn|class|struct|interface|enum|const|let|var|extern)\\b"
+          "match": "\\b(fn|class|struct|interface|enum|var|extern)\\b"
         },
         {
           "name": "storage.modifier.kalinga",

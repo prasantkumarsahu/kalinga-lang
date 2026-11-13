@@ -1,8 +1,8 @@
 class Account {
-    private(set) history: [int] = []
+    private(set) var history: [int] = []
 }
 
 fn main() {
-    let a = Account()
+    a = Account()
     a.history.push(1)
 }

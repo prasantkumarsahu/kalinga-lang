@@ -30,7 +30,7 @@ struct OldSize {
 }
 
 #[deprecated]
-const LIMIT: int = 3
+LIMIT: int = 3
 
 fn width(s: OldSize) -> int {
     return s.w
@@ -39,10 +39,10 @@ fn width(s: OldSize) -> int {
 fn main() {
     println(hello())
     println(greet())
-    let d = Dog()
+    d = Dog()
     println(d.bark())
     println(d.legs)
     println(d.speak())
-    let s = OldSize(2)
+    s = OldSize(2)
     println(width(s) + LIMIT)
 }

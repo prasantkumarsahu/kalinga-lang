@@ -33,13 +33,13 @@ fn sig(body: &str) -> Option<(String, u32)> {
 #[test]
 fn functions_constructors_methods_and_builtins() {
     assert_eq!(sig("    helper(1, |"), Some(("helper(a: int, b: str) -> int".into(), 1)));
-    assert_eq!(sig("    let d = Dog(|").map(|s| s.0).as_deref(), Some("Dog(name: str)"));
+    assert_eq!(sig("    d = Dog(|").map(|s| s.0).as_deref(), Some("Dog(name: str)"));
     assert_eq!(
-        sig("    let d = Dog(\"x\")\n    d.fetch(\"ball\", |"),
+        sig("    d = Dog(\"x\")\n    d.fetch(\"ball\", |"),
         Some(("fetch(item: str, times: int) -> bool".into(), 1))
     );
     assert_eq!(sig("    print(len(|").map(|s| s.0).as_deref(), Some("len(x: [T], {K: V} or str) -> int"));
-    assert_eq!(sig("    let x = 1 + |"), None);
+    assert_eq!(sig("    x = 1 + |"), None);
 }
 
 const V2: &str = r#"
@@ -73,10 +73,7 @@ fn variants_statics_generics_and_function_values() {
     assert_eq!(sig2("    Animal.create(|").map(|s| s.0).as_deref(), Some("create(nick: str) -> Animal"));
     assert_eq!(sig2("    first<int>(|").map(|s| s.0).as_deref(), Some("first(xs: [T]) -> T?"));
     assert_eq!(sig2("    apply(fn(x) => x, |").map(|s| s.1), Some(1));
-    assert_eq!(
-        sig2("    let g = fn(a: int, b: str) => a\n    g(1, |").map(|s| s.0).as_deref(),
-        Some("g(int, str) -> int")
-    );
+    assert_eq!(sig2("    g = fn(a: int, b: str) => a\n    g(1, |").map(|s| s.0).as_deref(), Some("g(int, str) -> int"));
 }
 
 #[test]

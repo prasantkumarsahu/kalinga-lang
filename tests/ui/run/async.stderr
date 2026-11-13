@@ -1,0 +1,3 @@
+tests/ui/run/async.kl:43:9: warning: `ticks` is never used
+43 |     var ticks = 0
+   |         ^^^^^

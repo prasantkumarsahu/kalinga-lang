@@ -35,8 +35,8 @@ When a key may be missing, use `get`, which returns an optional:
 
 ```kalinga
 fn main() {
-    let ages = {"Asha": 31, "Ravi": 27}
-    if let a = ages.get("Asha") {
+    ages = {"Asha": 31, "Ravi": 27}
+    if a = ages.get("Asha") {
         println("Asha is {a}")
     }
     println(ages.get("Mira"), ages.has("Mira"))
@@ -65,7 +65,7 @@ none false
 
 ```kalinga
 fn main() {
-    let scores = {"b": 2, "a": 1, "c": 3}
+    scores = {"b": 2, "a": 1, "c": 3}
     for name in scores {
         println("{name} = {scores[name]}")
     }
@@ -84,7 +84,7 @@ With two names, the loop gives each key and its value:
 
 ```kalinga
 fn main() {
-    let stock = {"pens": 12, "ink": 3}
+    stock = {"pens": 12, "ink": 3}
     for item, count in stock {
         println("{item}: {count}")
     }
@@ -114,7 +114,7 @@ fn count_words(text: [str]) -> {str: int} {
 }
 
 fn main() {
-    let words = ["to", "be", "or", "not", "to", "be"]
+    words = ["to", "be", "or", "not", "to", "be"]
     println(count_words(words))
 }
 ```
@@ -134,7 +134,7 @@ fn main() {
     groups["fruit"].push("mango")
     groups["veg"] = ["leek"]
     println(groups)
-    if let removed = groups.remove("veg") {
+    if removed = groups.remove("veg") {
         println("removed", removed)
     }
     println(groups)

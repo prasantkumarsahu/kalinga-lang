@@ -23,7 +23,7 @@ impl Checker<'_> {
         let (cond, then) = match binding {
             // `if let x = optional { ... }`: the `then` branch sees the value as `x`.
             Some(name) => {
-                let (value, inner) = self.optional_value(cx, cond, "if let")?;
+                let (value, inner) = self.optional_value(cx, cond, "if")?;
                 let then = cx.scoped(|cx| {
                     self.declare(cx, name, inner, false, cond.pos)?;
                     self.value_block(cx, then, &mut ty)

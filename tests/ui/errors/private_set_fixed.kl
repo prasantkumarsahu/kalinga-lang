@@ -1,0 +1,5 @@
+class A {
+    private(set) hp: int = 0
+}
+
+fn main() {}

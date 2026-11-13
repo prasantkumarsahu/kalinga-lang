@@ -8,8 +8,8 @@ step with its data, and it needs no garbage collector.
 import "std/reactive"
 
 fn main() {
-    let count = signal(1)
-    let doubled = computed(fn() => count.get() * 2)
+    count = signal(1)
+    doubled = computed(fn() => count.get() * 2)
     effect(fn() {
         println("count is {count.get()}, doubled is {doubled.get()}")
     })
@@ -63,8 +63,8 @@ of it at once, which suits a screen or a part of the user interface that goes aw
 import "std/reactive"
 
 fn main() {
-    let ticks = signal(0)
-    let page = scope()
+    ticks = signal(0)
+    page = scope()
     page.run(fn() {
         effect(fn() {
             println("page sees", ticks.get())

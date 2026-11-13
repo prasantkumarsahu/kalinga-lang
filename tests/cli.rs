@@ -53,10 +53,10 @@ fn check_reads_stdin() {
         .stderr(std::process::Stdio::piped())
         .spawn()
         .unwrap();
-    child.stdin.take().unwrap().write_all(b"fn main() {\n    let x: int = true\n}\n").unwrap();
+    child.stdin.take().unwrap().write_all(b"fn main() {\n    x: int = true\n}\n").unwrap();
     let out = child.wait_with_output().unwrap();
     assert_eq!(out.status.code(), Some(1));
-    assert!(stderr(&out).starts_with("buffer.kl:2:18: error: expected `int`, found `bool`"), "{}", stderr(&out));
+    assert!(stderr(&out).starts_with("buffer.kl:2:14: error: expected `int`, found `bool`"), "{}", stderr(&out));
 }
 
 #[test]
@@ -113,7 +113,7 @@ fn game_window_smoke() {
     std::fs::write(
         &src,
         format!(
-            "import \"std/game\"\n\nclass Smoke : Game {{\n    frame: int\n\n    override fn update(input: Input, dt: float) {{\n        self.frame += 1\n        if self.frame >= 5 {{\n            input.quit()\n        }}\n    }}\n\n    override fn draw(screen: Screen) {{\n        screen.clear(Color.BLACK)\n        screen.rect(Rect(10.0, 10.0, 50.0, 50.0), Color.YELLOW)\n        if self.frame == 3 {{\n            screen.screenshot({:?})\n        }}\n    }}\n}}\n\nfn main() {{\n    let g = Smoke()\n    Window.run(\"smoke\", 200, 100, g)\n    println(\"frames\", g.frame)\n}}\n",
+            "import \"std/game\"\n\nclass Smoke : Game {{\n    frame: int\n\n    override fn update(input: Input, dt: float) {{\n        self.frame += 1\n        if self.frame >= 5 {{\n            input.quit()\n        }}\n    }}\n\n    override fn draw(screen: Screen) {{\n        screen.clear(Color.BLACK)\n        screen.rect(Rect(10.0, 10.0, 50.0, 50.0), Color.YELLOW)\n        if self.frame == 3 {{\n            screen.screenshot({:?})\n        }}\n    }}\n}}\n\nfn main() {{\n    g = Smoke()\n    Window.run(\"smoke\", 200, 100, g)\n    println(\"frames\", g.frame)\n}}\n",
             shot.to_str().unwrap()
         ),
     )

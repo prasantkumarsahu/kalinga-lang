@@ -1,0 +1,7 @@
+fn f() -> int {
+    return 1
+}
+
+X: int = f() + 1
+
+fn main() {}

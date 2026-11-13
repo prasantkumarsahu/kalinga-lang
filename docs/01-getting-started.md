@@ -59,7 +59,7 @@ fn square(n: int) -> int {
 }
 
 fn main() {
-    let name = "Kalinga"
+    name = "Kalinga"
     var total = 0
 
     for i in 1..4 {
@@ -79,7 +79,7 @@ Hi from Kalinga
 What is happening here:
 
 - `fn square(n: int) -> int` declares a function that takes an `int` and returns an `int`.
-- `let` makes a variable that cannot change, `var` makes one that can.
+- `name = value` makes a variable that cannot change; `var name = value` makes one that can.
 - `for i in 1..4` counts `1, 2, 3` (the end is not included).
 - `print` accepts any number of values and puts a space between them.
 

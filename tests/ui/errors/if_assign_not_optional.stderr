@@ -1,0 +1,4 @@
+tests/ui/errors/if_assign_not_optional.kl:3:12: error: `if name = value` unwraps an optional (`T?`), but this is `int`
+3 |     if x = 5 {
+  |            ^
+  = help: to compare, write `==`

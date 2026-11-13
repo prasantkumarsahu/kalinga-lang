@@ -1,0 +1,9 @@
+tests/ui/run/threads.kl:62:5: warning: `t0` is never used
+62 |     t0 = Time.now()
+   |     ^^
+tests/ui/run/threads.kl:64:5: warning: `t1` is never used
+64 |     t1 = Time.now()
+   |     ^^
+tests/ui/run/threads.kl:66:5: warning: `t2` is never used
+66 |     t2 = Time.now()
+   |     ^^

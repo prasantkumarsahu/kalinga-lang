@@ -14,6 +14,6 @@ fn main() {
     for c in counts {
         if c < 800 { ok = false }
     }
-    let flip = coin()
+    flip = coin()
     println("fastrand works:", ok, flip == true || flip == false)
 }

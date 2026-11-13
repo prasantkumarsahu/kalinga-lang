@@ -52,8 +52,8 @@ class Puppy : Animal {
 
 class Owner : Show {
     name: str
-    pets: [Dog]
-    best: Dog?
+    var pets: [Dog]
+    var best: Dog?
 
     init(name: str) {
         self.name = name
@@ -77,19 +77,19 @@ fn describe<T: Show>(x: T) -> str {
 }
 
 fn main() {
-    let rex = Dog("Rex", 3)
+    rex = Dog("Rex", 3)
     println(rex)
     println("dog: {rex}")
     println(str(rex) + "!")
     println(rex.as_str())
     println(Point(1, 2))
 
-    let animals: [Animal] = [Animal("Generic"), Cat("Tom"), Puppy("Bo")]
+    animals: [Animal] = [Animal("Generic"), Cat("Tom"), Puppy("Bo")]
     for a in animals {
         println(a)
     }
 
-    let o = Owner("Ann")
+    o = Owner("Ann")
     o.pets.push(rex)
     o.pets.push(Dog("Fido", 1))
     println(o)
@@ -97,7 +97,7 @@ fn main() {
     println(o)
 
     println([Point(0, 0), Point(3, 4)])
-    let maybe: Dog? = none
+    maybe: Dog? = none
     println(maybe)
     println(Walk(rex, 30))
     println(Event.Born(rex))

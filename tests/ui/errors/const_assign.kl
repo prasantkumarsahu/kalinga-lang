@@ -1,8 +1,8 @@
-const N: int = 3
+N: int = 3
 
 struct P {
     x: int
-    const Z: int = 0
+    static Z: int = 0
 }
 
 fn main() {

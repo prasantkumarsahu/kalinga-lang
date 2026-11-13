@@ -1,5 +1,5 @@
 struct V {
-    x: float
+    var x: float
     mut fn grow() {
         self.x += 1.0
     }

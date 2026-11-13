@@ -100,7 +100,7 @@ fn main() {
 
 ## Parameters are values
 
-Parameters cannot be reassigned inside the function (they behave like `let`). Copy into a
+Parameters cannot be reassigned inside the function (they are fixed). Copy into a
 `var` if you need to change one:
 
 ```kalinga
@@ -127,7 +127,7 @@ How values are passed depends on the type:
 
 ```kalinga
 class Holder {
-    value: int
+    var value: int
 }
 
 fn fill(items: [int], b: Holder) {
@@ -137,8 +137,8 @@ fn fill(items: [int], b: Holder) {
 }
 
 fn main() {
-    let nums = [1, 2]
-    let b = Holder()
+    nums = [1, 2]
+    b = Holder()
     fill(nums, b)
     println(nums, b.value)
 }
@@ -194,7 +194,7 @@ How values are printed:
 
 ```kalinga
 fn main() {
-    let maybe: int? = none
+    maybe: int? = none
     println(42, 2.0, 0.25, true, "text", [1, 2, 3], maybe)
 }
 ```
@@ -209,8 +209,8 @@ Reading input:
 
 ```kalinga
 fn main() {
-    let name = input("Your name: ")
-    let age = int(input("Your age: "))
+    name = input("Your name: ")
+    age = int(input("Your age: "))
     println("Hello", name, "- next year you will be", age + 1)
 }
 ```
@@ -236,13 +236,13 @@ fn min_max(xs: [int]) -> (int, int) {
 }
 
 fn main() {
-    let (lo, hi) = min_max([4, 9, 1, 7])
+    (lo, hi) = min_max([4, 9, 1, 7])
     println(lo, hi)
 
-    let range = min_max([3, 8])
+    range = min_max([3, 8])
     println(range, range.0, range.1)
 
-    let people: [(str, int)] = [("Asha", 30), ("Ravi", 25)]
+    people: [(str, int)] = [("Asha", 30), ("Ravi", 25)]
     for (name, age) in people {
         println(name, "is", age)
     }
@@ -257,7 +257,7 @@ Ravi is 25
 ```
 
 - The type of `(1, "a")` is `(int, str)`; a tuple has two to six parts.
-- `let (a, b) = t` (or `var`) gives each part its own variable; `for (a, b) in xs` does the
+- `(a, b) = t` (or `var (a, b) = t`) gives each part its own variable; `for (a, b) in xs` does the
   same for each element. `t.0`, `t.1`, ... read one part.
 - Tuples are values: they print, and compare with `==` when their parts do. For more parts,
   or names for them, use a [struct](14-structs-and-operators.md).
@@ -269,14 +269,15 @@ Ravi is 25
   and written once for many types — see [Generics](13-generics.md).
 - Built-in names (`print`, `println`, `len`, `str`, `int`, `float`, `input`, `chr`, `args`)
   cannot be redefined.
-- There are no global variables to change; use a `const` for a fixed value and a
-  `static var` member for shared state (see [Classes](09-classes.md#constants-and-static-variables)).
+- There are no global variables to change; use a top-level `NAME: Type = value` for a
+  fixed value and a `static var` member for shared state (see
+  [Classes](09-classes.md#static-values-and-static-variables)).
 
 ## Deprecating a function
 
 `#[deprecated]` on the line before a function marks it as on its way out: it still works,
 but every use is a warning, with the message if one is given. The program still builds and
-runs. It also works on classes, structs, interfaces, enums, constants, fields and methods:
+runs. It also works on classes, structs, interfaces, enums, fixed values, fields and methods:
 
 ```kalinga
 #[deprecated("use `greet` instead")]

@@ -75,6 +75,8 @@ pub struct FieldDecl {
     pub is_private: bool,
     /// `private(set)`: readable anywhere, assignable only inside its class or struct.
     pub is_private_set: bool,
+    /// `var name: T`: can be changed; other fields are set once (default or `init`).
+    pub is_var: bool,
     pub pos: Span,
 }
 

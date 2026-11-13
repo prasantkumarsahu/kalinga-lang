@@ -1,5 +1,5 @@
 struct Counter {
-    private(set) count: int = 0
+    private(set) var count: int = 0
 }
 
 fn main() {

@@ -1,4 +1,4 @@
-tests/ui/errors/did_you_mean_variant.kl:6:18: error: enum `Color` has no variant `Gren`
-6 |     let c = Color.Gren
-  |                  ^
+tests/ui/errors/did_you_mean_variant.kl:6:14: error: enum `Color` has no variant `Gren`
+6 |     c = Color.Gren
+  |              ^
   = help: did you mean `Green`?

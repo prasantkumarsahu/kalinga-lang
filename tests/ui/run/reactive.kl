@@ -8,9 +8,9 @@ struct Todo {
 fn main() {
     // A diamond: two computed values over one signal, and an effect over both that runs
     // once per change.
-    let n = signal(2)
-    let square = computed(fn() => n.get() * n.get())
-    let half = computed(fn() => n.get() / 2)
+    n = signal(2)
+    square = computed(fn() => n.get() * n.get())
+    half = computed(fn() => n.get() / 2)
     var runs = 0
     effect(fn() {
         runs += 1
@@ -22,7 +22,7 @@ fn main() {
 
     // A computed value is only worked out when read, and only again after a change.
     var work = 0
-    let slow = computed(fn() -> int {
+    slow = computed(fn() -> int {
         work += 1
         return n.get() + 1
     })
@@ -32,9 +32,9 @@ fn main() {
     println(slow.get(), work)
 
     // Batches: the effect sees only the final values.
-    let first = signal("Asha")
-    let last = signal("Rao")
-    let full = computed(fn() => "{first.get()} {last.get()}")
+    first = signal("Asha")
+    last = signal("Rao")
+    full = computed(fn() => "{first.get()} {last.get()}")
     effect(fn() {
         println("name:", full.get())
     })
@@ -44,8 +44,8 @@ fn main() {
     })
 
     // Signals of any type; an effect that only reads some of them.
-    let todos = signal([Todo("write", false), Todo("test", true)])
-    let left = computed(fn() => todos.get().filter(fn(t) => !t.done).len())
+    todos = signal([Todo("write", false), Todo("test", true)])
+    left = computed(fn() => todos.get().filter(fn(t) => !t.done).len())
     effect(fn() {
         println("todo left:", left.get())
     })
@@ -56,14 +56,14 @@ fn main() {
     })
 
     // Disposing: an effect stops, and a scope frees everything made in it.
-    let ticks = signal(0)
-    let e = effect(fn() {
+    ticks = signal(0)
+    e = effect(fn() {
         println("tick", ticks.get())
     })
     ticks.set(1)
     e.dispose()
     ticks.set(2)
-    let s = scope()
+    s = scope()
     s.run(fn() {
         effect(fn() {
             println("in scope:", ticks.get())

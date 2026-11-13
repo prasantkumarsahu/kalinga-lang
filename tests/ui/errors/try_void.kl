@@ -2,5 +2,5 @@ fn f() -> Result<int, str> {
     return Ok(1)
 }
 fn main() {
-    let x = f()?
+    x = f()?
 }

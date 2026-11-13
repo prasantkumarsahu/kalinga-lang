@@ -118,13 +118,17 @@ pub fn apply(prog: &mut Program, units: &Units) -> Result<DisplayNames> {
         }
     }
 
-    let r = Resolver { units, declared: &declared, renamed: &renamed, visible: &visible };
+    let values: HashSet<String> = prog.consts.iter().map(|c| c.name.clone()).collect();
+    let r = Resolver { units, declared: &declared, renamed: &renamed, visible: &visible, values: &values };
     r.rewrite(prog)?;
     Ok(display)
 }
 
 struct Resolver<'a> {
     units: &'a Units,
+    /// Top-level values (`NAME: Type = value`): `NAME = x` changes one (an error), it does
+    /// not declare a local.
+    values: &'a HashSet<String>,
     declared: &'a HashMap<String, Vec<String>>,
     renamed: &'a HashMap<(String, String), String>,
     visible: &'a HashMap<String, Vec<String>>,
@@ -400,6 +404,17 @@ impl<'a> Resolver<'a> {
         r
     }
 
+    /// Does `target = value` declare a fixed variable? Yes when the target is a name (or a
+    /// tuple of names) that is neither a visible local nor a top-level value.
+    fn declares(&self, target: &Expr, sc: &Scope) -> bool {
+        let new = |e: &Expr| matches!(&e.kind, ExprKind::Ident(n) if !sc.has(n) && !self.values.contains(n));
+        match &target.kind {
+            ExprKind::Ident(_) => new(target),
+            ExprKind::Tuple(xs) => !xs.is_empty() && xs.iter().all(new),
+            _ => false,
+        }
+    }
+
     fn stmt(&self, s: &mut Stmt, sc: &mut Scope) -> Result<()> {
         match &mut s.kind {
             StmtKind::Let { name, ty, value, .. } => {
@@ -414,6 +429,30 @@ impl<'a> Resolver<'a> {
                 for (n, _) in names.iter() {
                     sc.add(n);
                 }
+            }
+            StmtKind::Assign { target, op: AssignOp::Set, value } if self.declares(target, sc) => {
+                self.expr(value, sc)?;
+                let kind = match &target.kind {
+                    ExprKind::Ident(n) => {
+                        sc.add(n);
+                        StmtKind::Let { name: n.clone(), mutable: false, ty: None, value: value.clone() }
+                    }
+                    ExprKind::Tuple(xs) => {
+                        let names: Vec<(String, Span)> = xs
+                            .iter()
+                            .filter_map(|x| match &x.kind {
+                                ExprKind::Ident(n) => Some((n.clone(), x.pos)),
+                                _ => None,
+                            })
+                            .collect();
+                        for (n, _) in &names {
+                            sc.add(n);
+                        }
+                        StmtKind::LetTuple { names, mutable: false, value: value.clone() }
+                    }
+                    _ => unreachable!("`declares` accepts names and tuples of names"),
+                };
+                s.kind = kind;
             }
             StmtKind::Assign { target, value, .. } => {
                 self.expr(target, sc)?;

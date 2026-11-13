@@ -6,4 +6,4 @@ abstract class A {
         return 1
     }
 }
-fn main() { let a = A() }
+fn main() { a = A() }

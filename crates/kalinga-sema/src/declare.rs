@@ -856,6 +856,7 @@ fn struct_info(st: &StructDecl, names: &TypeNames) -> Result<StructInfo> {
         fields,
         private_fields: st.fields.iter().filter(|f| f.is_private).map(|f| f.name.clone()).collect(),
         private_set_fields: st.fields.iter().filter(|f| f.is_private_set).map(|f| f.name.clone()).collect(),
+        fixed_fields: st.fields.iter().filter(|f| !f.is_var).map(|f| f.name.clone()).collect(),
         methods,
         ops,
         capabilities,
@@ -1032,6 +1033,7 @@ fn class_info(c: &ClassDecl, names: &TypeNames) -> Result<ClassInfo> {
         statics,
         private_fields: c.fields.iter().filter(|f| f.is_private).map(|f| f.name.clone()).collect(),
         private_set_fields: c.fields.iter().filter(|f| f.is_private_set).map(|f| f.name.clone()).collect(),
+        fixed_fields: c.fields.iter().filter(|f| !f.is_var).map(|f| f.name.clone()).collect(),
         private_methods: names_where(|m| m.is_private),
         abstract_methods: names_where(|m| m.is_abstract),
         async_statics: names_where(|m| m.is_async),
@@ -1203,7 +1205,7 @@ fn static_values(
     let mut out: Vec<(String, StaticInfo)> = Vec::new();
     for d in decls {
         if !tparams.is_empty() {
-            return err(format!("generic types cannot have `const` or `static var` members (yet): `{}`", owner), d.pos);
+            return err(format!("generic types cannot have `static` members (yet): `{}`", owner), d.pos);
         }
         if taken(&d.name) || out.iter().any(|(n, _)| n == &d.name) {
             return err(format!("`{}` is defined twice in `{}`", d.name, owner), d.pos);

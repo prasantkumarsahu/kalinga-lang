@@ -49,6 +49,7 @@ fn names_are_coloured_by_what_they_are() {
 
 struct Point {
     x: int
+    var y: int = 0
 }
 
 class User {
@@ -69,14 +70,14 @@ fn old() -> int {
     return 1
 }
 
-const LIMIT: int = 3
+LIMIT: int = 3
 
 fn main() {
-    let user = User("Ann")
+    user = User("Ann")
     var total = len(user.greet("Bo")) + old() + LIMIT
-    let double = fn(n: int) -> int { return n * 2 }
+    double = fn(n: int) -> int { return n * 2 }
     total += double(Point(1).x)
-    let c = Color.Red
+    c = Color.Red
     println("{total} {User.count} {c}")
 }
 "#;
@@ -87,7 +88,9 @@ fn main() {
     assert_eq!(kind_of(&t, "User")[0], "class.declaration");
     assert!(kind_of(&t, "count").contains(&"property.declaration.static".to_string()), "{:?}", kind_of(&t, "count"));
     assert!(kind_of(&t, "name").contains(&"parameter.declaration.readonly".to_string()), "{:?}", kind_of(&t, "name"));
-    assert!(kind_of(&t, "name").contains(&"property".to_string()), "{:?}", kind_of(&t, "name"));
+    assert!(kind_of(&t, "name").contains(&"property.readonly".to_string()), "a fixed field: {:?}", kind_of(&t, "name"));
+    assert_eq!(kind_of(&t, "x"), ["property.declaration.readonly", "property.readonly"]);
+    assert_eq!(kind_of(&t, "y"), ["property.declaration"], "a `var` field");
     assert_eq!(kind_of(&t, "greet"), ["method.declaration", "method"]);
     assert_eq!(kind_of(&t, "other"), ["parameter.declaration.readonly", "parameter.readonly"]);
     assert_eq!(kind_of(&t, "old"), ["function.declaration.deprecated", "function.deprecated"]);
@@ -96,5 +99,4 @@ fn main() {
     assert_eq!(kind_of(&t, "total")[0], "variable.declaration");
     assert_eq!(kind_of(&t, "n"), ["parameter.declaration.readonly", "parameter.readonly"]);
     assert_eq!(kind_of(&t, "len"), ["function.defaultLibrary"]);
-    assert_eq!(kind_of(&t, "x"), ["property.declaration", "property"]);
 }

@@ -1,0 +1,3 @@
+tests/ui/errors/const_removed.kl:1:1: error: `const` was removed: write `NAME: Type = value` at the top level, or `static NAME: Type = value` in a class or struct (`kalinga fix` updates old code)
+1 | const X: int = 1
+  | ^^^^^

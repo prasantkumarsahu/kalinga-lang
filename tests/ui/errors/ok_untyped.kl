@@ -1,1 +1,1 @@
-fn main() { let r = Ok(5) }
+fn main() { r = Ok(5) }

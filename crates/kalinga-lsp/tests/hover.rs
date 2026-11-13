@@ -34,7 +34,7 @@ enum Dir {
 }
 
 fn main() {
-    let p = Point(1, 2)
+    p = Point(1, 2)
     var total = double(p.x) + p.sum()
     println(Math.sqrt(2.0), len("a"), Dir.Right(1), helper())
 }
@@ -60,7 +60,7 @@ fn structs_fields_methods_and_variables() {
     let point = text("Point(1, 2)", 0);
     assert!(point.contains("struct Point(x: int, y: int)") && point.contains("A point on the **map**."), "{}", point);
     assert!(text("x)", 0).contains("x: int"), "field after a dot");
-    assert!(text("p.x", 0).contains("let p: Point"));
+    assert!(text("p.x", 0).contains("p: Point"));
     let sum = text("sum()", 1);
     assert!(
         sum.contains("fn sum() -> int") && sum.contains("Sum of both coordinates.") && sum.contains("in `Point`"),
@@ -96,17 +96,17 @@ fn package_aliases_and_their_members() {
     std::fs::write(dir.join("mathx/utkal.toml"), "[package]\nname = \"mathx\"\nversion = \"0.1.0\"\n").expect("write");
     let lib = "/// A 2D vector.\nstruct Vec2 {\n    x: float\n    y: float\n}\n/// Dot product.\nfn dot(a: Vec2, b: Vec2) -> float { return a.x * b.x }\n";
     std::fs::write(dir.join("mathx/src/lib.kl"), lib).expect("write");
-    let src = "import \"mathx\" as mx\nfn main() {\n    let v = mx.Vec2(1.0, 2.0)\n    println(mx.dot(v, v), v.x)\n}\n";
+    let src = "import \"mathx\" as mx\nfn main() {\n    v = mx.Vec2(1.0, 2.0)\n    println(mx.dot(v, v), v.x)\n}\n";
     let at = |word: &str| hover_in(&dir, src, word, 0).map(|h| h.0).unwrap_or_default();
     assert!(at("mx.Vec2").contains("import \"mathx\" as mx"), "{}", at("mx.Vec2"));
     assert!(at("dot").contains("Dot product."), "{}", at("dot"));
     assert!(at("Vec2(1.0").contains("A 2D vector."), "{}", at("Vec2(1.0"));
-    assert!(at("v.x").contains("let v: mx.Vec2"), "{}", at("v.x"));
+    assert!(at("v.x").contains("v: mx.Vec2"), "{}", at("v.x"));
 }
 
 #[test]
 fn bounds_are_shown() {
-    let src = "interface Shape {\n    fn area() -> float\n}\nfn total<T: Shape + Show>(xs: [T]) -> int { return len(xs) }\nclass Crate<T: Ord> {}\nfn main() {\n    let n = 1\n}\n";
+    let src = "interface Shape {\n    fn area() -> float\n}\nfn total<T: Shape + Show>(xs: [T]) -> int { return len(xs) }\nclass Crate<T: Ord> {}\nfn main() {\n    n = 1\n}\n";
     let shown = |word: &str| hover(src, word, 0).map(|h| h.0).unwrap_or_default();
     assert!(shown("total").contains("fn total<T: Shape + Show>(xs: [T]) -> int"), "{}", shown("total"));
     assert!(shown("Crate").contains("class Crate<T: Ord>"), "{}", shown("Crate"));
@@ -114,18 +114,18 @@ fn bounds_are_shown() {
 
 #[test]
 fn tuples_and_their_parts() {
-    let src = "fn pair() -> (int, str) { return (1, \"a\") }\nfn main() {\n    let p = pair()\n    let (n, s) = p\n    println(n, s, p.0)\n}\n";
+    let src = "fn pair() -> (int, str) { return (1, \"a\") }\nfn main() {\n    p = pair()\n    (n, s) = p\n    println(n, s, p.0)\n}\n";
     let shown = |word: &str, nth: usize| hover(src, word, nth).map(|h| h.0).unwrap_or_default();
-    assert!(shown("p = pair", 0).contains("let p: (int, str)"), "{}", shown("p = pair", 0));
-    assert!(shown("s) = p", 0).contains("let s: str"), "{}", shown("s) = p", 0));
+    assert!(shown("p = pair", 0).contains("p: (int, str)"), "{}", shown("p = pair", 0));
+    assert!(shown("s) = p", 0).contains("s: str"), "{}", shown("s) = p", 0));
     assert!(shown("pair()", 0).contains("fn pair() -> (int, str)"), "{}", shown("pair()", 0));
 }
 
 #[test]
 fn private_set_fields_say_so() {
-    let src = "class Account {\n    private(set) balance: int = 0\n}\nfn main() {\n    let a = Account()\n    println(a.balance)\n}\n";
+    let src = "class Account {\n    private(set) var balance: int = 0\n}\nfn main() {\n    a = Account()\n    println(a.balance)\n}\n";
     let (text, _) = hover(src, "balance", 1).expect("a hover");
-    assert!(text.contains("private(set) balance: int"), "{}", text);
+    assert!(text.contains("private(set) var balance: int"), "{}", text);
 }
 
 const DEPRECATED: &str = "/// Says hello.\n#[deprecated(\"use greet\")]\nfn hello() -> str {\n    return \"hi\"\n}\nfn main() {\n    println(hello())\n}\n";

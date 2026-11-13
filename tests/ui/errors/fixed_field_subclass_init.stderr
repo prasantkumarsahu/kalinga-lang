@@ -1,0 +1,3 @@
+tests/ui/errors/fixed_field_subclass_init.kl:7:13: error: cannot change `name`: it is a fixed field of `A`, set only in its `init` (declare it `var name` to change it)
+7 |         self.name = "b"
+  |             ^

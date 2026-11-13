@@ -1,0 +1,9 @@
+class A {
+    hp: int = 3
+
+    fn hit() {
+        self.hp -= 1
+    }
+}
+
+fn main() {}

@@ -1,0 +1,9 @@
+fn f() -> int? {
+    return 1
+}
+
+fn main() {
+    if let x = f() {
+        println(x)
+    }
+}

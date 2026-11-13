@@ -3,7 +3,7 @@ import "std/math2d"
 struct Grid<T> {
     w: int
     h: int
-    cells: [T]
+    var cells: [T]
 
     static fn filled(w: int, h: int, value: T) -> Grid<T> {
         var cells: [T] = []
@@ -31,10 +31,10 @@ fn main() {
     var nums: Grid<int> = Grid.filled(2, 2, 0)
     nums.set(0, 0, 5)
     println(nums.cells, nums == Grid(2, 2, [5, 0, 0, 0]))
-    let p = Pair("x", 3)
+    p = Pair("x", 3)
     println(p.swap(), p.swap().first + 1)
-    let v = Vec2(1.0, 2.0)
+    v = Vec2(1.0, 2.0)
     println(2.0 * v, v * 3.0, 0.5 * (v + v))
-    let explicit = Grid<str>(1, 1, ["e"])
+    explicit = Grid<str>(1, 1, ["e"])
     println(explicit.get(0, 0))
 }

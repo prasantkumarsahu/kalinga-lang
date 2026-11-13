@@ -2,6 +2,6 @@ class Player {
     hp: int
 }
 fn main() {
-    let p = Player()
-    let t = Thread.spawn(fn() => p.hp)
+    p = Player()
+    t = Thread.spawn(fn() => p.hp)
 }

@@ -1,5 +1,5 @@
 class Log {
-    lines: [str]
+    var lines: [str]
     fn add(s: str) { self.lines.push(s) }
 }
 
@@ -23,25 +23,25 @@ fn heavy(n: int) -> int {
 }
 
 async fn main() {
-    let log = Log()
+    log = Log()
     // timers finish in time order, not in start order
     // (wide gaps, so a slow machine cannot reorder them; one after another would take 1.2 s)
-    let jobs = [delayed(log, "slow", 0.6), delayed(log, "fast", 0.2), delayed(log, "medium", 0.4)]
-    let t0 = Time.now()
-    let names = await Async.all(jobs)
-    let took = Time.now() - t0
+    jobs = [delayed(log, "slow", 0.6), delayed(log, "fast", 0.2), delayed(log, "medium", 0.4)]
+    t0 = Time.now()
+    names = await Async.all(jobs)
+    took = Time.now() - t0
     println(names, log.lines, "concurrent:", took < 1.0)
 
     // background job keeps running while we do other things
-    let bg = Async.spawn(delayed(log, "background", 0.05))
+    bg = Async.spawn(delayed(log, "background", 0.05))
     println("started background")
     await Time.wait(0.1)
     println("background result:", await bg)
 
     // a thread computing while async timers tick
-    let task = Thread.spawn(fn() => heavy(5000000))
+    task = Thread.spawn(fn() => heavy(5000000))
     var ticks = 0
-    let ticker = Async.spawn(Loader.load(4))
-    let v = await task
+    ticker = Async.spawn(Loader.load(4))
+    v = await task
     println("thread result ok:", v == heavy(5000000), "loader:", await ticker)
 }

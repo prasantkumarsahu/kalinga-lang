@@ -21,10 +21,10 @@ There are two forms:
 ```kalinga
 fn main() {
     // Short form: `=>` followed by one expression, which is the result.
-    let double = fn(x: int) => x * 2
+    double = fn(x: int) => x * 2
 
     // Block form: like a normal function body.
-    let classify = fn(n: int) -> str {
+    classify = fn(n: int) -> str {
         if n < 0 {
             return "negative"
         }
@@ -66,7 +66,7 @@ fn square(n: int) -> int {
 }
 
 fn main() {
-    let ops: [fn(int) -> int] = [square, fn(n) => n + 1, fn(n) => -n]
+    ops: [fn(int) -> int] = [square, fn(n) => n + 1, fn(n) => -n]
     for op in ops {
         println(op(5))
     }
@@ -90,12 +90,12 @@ fn make_adder(k: int) -> fn(int) -> int {
 }
 
 fn main() {
-    let add5 = make_adder(5)
-    let add10 = make_adder(10)
+    add5 = make_adder(5)
+    add10 = make_adder(10)
     println(add5(1), add10(1))
 
     var greeting = "hello"
-    let greet = fn(name: str) => "{greeting}, {name}"
+    greet = fn(name: str) => "{greeting}, {name}"
     greeting = "bye" // the lambda kept its own copy
     println(greet("Asha"))
 }
@@ -123,7 +123,7 @@ fn make_counter() -> fn() -> int {
 
 fn main() {
     var total = 0
-    let add = fn(x: int) {
+    add = fn(x: int) {
         total += x
     }
     add(5)
@@ -131,15 +131,15 @@ fn main() {
     println(total)
 
     var log: [str] = []
-    let note = fn(s: str) {
+    note = fn(s: str) {
         log.push(s)
     }
     note("start")
     note("stop")
     println(log)
 
-    let a = make_counter()
-    let b = make_counter()
+    a = make_counter()
+    b = make_counter()
     println(a(), a(), b())
 }
 ```
@@ -150,8 +150,9 @@ fn main() {
 1 2 1
 ```
 
-- Only variables declared with `var` can be changed this way; changing a `let` is an
-  error, inside a lambda or not.
+- Only variables declared with `var` can be changed this way; changing a fixed variable
+  is an error, inside a lambda or not. Inside a lambda, `count = count + 1` changes an
+  outer `var count`; with no outer `count` it declares the lambda's own fixed variable.
 - Each call of `make_counter` makes a new `count`, so every counter has its own.
 - A variable shared like this cannot be used by a lambda that runs on another thread
   (`Thread.spawn`, `par_map`); use a `Shared` there ([chapter 20](20-threads.md)).
@@ -161,12 +162,12 @@ the one object the outside code sees too.
 
 ```kalinga
 class Counter {
-    n: int
+    var n: int
 }
 
 fn main() {
-    let c = Counter()
-    let bump = fn() {
+    c = Counter()
+    bump = fn() {
         c.n += 1
     }
     bump()
@@ -180,7 +181,7 @@ fn main() {
 ```
 
 Inside a method, `self` cannot be used in a lambda directly. Copy it to a variable first:
-`let me = self`, then use `me` in the lambda.
+`me = self`, then use `me` in the lambda.
 
 ## Functions in fields
 
@@ -189,7 +190,7 @@ A field can hold a function. Calling it looks like calling a method:
 ```kalinga
 class Button {
     label: str
-    on_click: fn(str) -> str = fn(who) => "nothing happens"
+    var on_click: fn(str) -> str = fn(who) => "nothing happens"
 
     init(label: str) {
         self.label = label
@@ -201,9 +202,9 @@ class Button {
 }
 
 fn main() {
-    let ok = Button("OK")
+    ok = Button("OK")
     println(ok.press("Asha"))
-    let label = ok.label
+    label = ok.label
     ok.on_click = fn(who) => "{who} pressed {label}"
     println(ok.press("Asha"))
 }
@@ -228,9 +229,9 @@ Fields of function type need a default value, like fields that hold objects.
 
 ```kalinga
 fn main() {
-    let nums = [5, 3, 8, 1, 9, 2]
-    let evens = nums.filter(fn(n) => n % 2 == 0)
-    let labels = nums.map(fn(n) => "#{n}")
+    nums = [5, 3, 8, 1, 9, 2]
+    evens = nums.filter(fn(n) => n % 2 == 0)
+    labels = nums.map(fn(n) => "#{n}")
     println(evens, labels, nums.find(fn(n) => n > 6))
 
     var words = ["banana", "fig", "cherry", "kiwi"]

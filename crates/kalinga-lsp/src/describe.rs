@@ -33,7 +33,7 @@ pub fn describe(snap: &Snapshot, symbol: &Symbol, ty: Option<&Type>) -> Option<D
         Symbol::Function(name) => Description { code: function(snap.model()?, name)?, owner: None, docs: user_docs() },
         Symbol::Const(name) => {
             let t = snap.model()?.consts.get(name)?;
-            Description { code: format!("const {}: {}", name, t), owner: None, docs: user_docs() }
+            Description { code: format!("{}: {}", name, t), owner: None, docs: user_docs() }
         }
         Symbol::Type(name) => Description { code: type_decl(snap.model()?, name)?, owner: None, docs: user_docs() },
         Symbol::Member { owner, name } => {
@@ -121,12 +121,13 @@ fn member(m: &Model, owner: &str, name: &str) -> Option<String> {
         return i.methods.iter().find(|(n, _)| n == name).map(|(_, sig)| format!("fn {}{}", name, params_and_ret(sig)));
     }
     if let Some(s) = m.static_value(owner, name) {
-        let kw = if s.mutable { "static var" } else { "const" };
+        let kw = if s.mutable { "static var" } else { "static" };
         return Some(format!("{} {}: {}", kw, name, s.ty));
     }
     if let Some(c) = m.classes.get(owner) {
         if let Some((_, t)) = c.fields.iter().find(|(n, _)| n == name) {
-            return Some(format!("{}{}: {}", access(&c.private_fields, &c.private_set_fields, name), name, t));
+            let a = access(&c.private_fields, &c.private_set_fields, &c.fixed_fields, name);
+            return Some(format!("{}{}: {}", a, name, t));
         }
         if let Some(sig) = c.methods.get(name) {
             return Some(format!("fn {}{}", name, params_and_ret(sig)));
@@ -136,7 +137,8 @@ fn member(m: &Model, owner: &str, name: &str) -> Option<String> {
     }
     let s = m.structs.get(owner)?;
     if let Some((_, t)) = s.fields.iter().find(|(n, _)| n == name) {
-        return Some(format!("{}{}: {}", access(&s.private_fields, &s.private_set_fields, name), name, t));
+        let a = access(&s.private_fields, &s.private_set_fields, &s.fixed_fields, name);
+        return Some(format!("{}{}: {}", a, name, t));
     }
     let meth = s.methods.get(name)?;
     let kw = match (meth.is_static, meth.is_mut) {
@@ -147,15 +149,18 @@ fn member(m: &Model, owner: &str, name: &str) -> Option<String> {
     Some(format!("{} {}{}", kw, name, params_and_ret(&meth.sig)))
 }
 
-/// `private ` or `private(set) ` before a field, when it is one.
-fn access(private: &HashSet<String>, private_set: &HashSet<String>, name: &str) -> &'static str {
+/// The modifiers written before a field: `private`, `private(set)`, `var`.
+fn access(private: &HashSet<String>, private_set: &HashSet<String>, fixed: &HashSet<String>, name: &str) -> String {
+    let mut out = String::new();
     if private.contains(name) {
-        "private "
+        out.push_str("private ");
     } else if private_set.contains(name) {
-        "private(set) "
-    } else {
-        ""
+        out.push_str("private(set) ");
     }
+    if !fixed.contains(name) {
+        out.push_str("var ");
+    }
+    out
 }
 
 fn builtin(receiver: Option<&'static str>, name: &str) -> Option<Description> {
@@ -175,7 +180,7 @@ fn builtin(receiver: Option<&'static str>, name: &str) -> Option<Description> {
 fn library(lib: &str, name: &str) -> Option<Description> {
     let full = format!("{}.{}", lib, name);
     if let Some(c) = CONSTANTS.iter().find(|c| c.name == full) {
-        return Some(Description { code: format!("const {}: {}", full, c.ty), owner: None, docs: Some(c.doc.into()) });
+        return Some(Description { code: format!("{}: {}", full, c.ty), owner: None, docs: Some(c.doc.into()) });
     }
     let f = FUNCTIONS.iter().find(|f| f.name == full)?;
     Some(Description { code: format!("fn {}", f.signature()), owner: None, docs: Some(f.doc.into()) })

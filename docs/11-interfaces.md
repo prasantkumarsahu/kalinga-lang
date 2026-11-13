@@ -41,7 +41,7 @@ class Planet : Describable {
 }
 
 fn main() {
-    let things: [Describable] = [Book("Dune"), Planet("Mars", 2)]
+    things: [Describable] = [Book("Dune"), Planet("Mars", 2)]
     for t in things {
         println(t.describe())
     }
@@ -108,7 +108,7 @@ fn best(words: [str], s: Scorer) -> str {
 }
 
 fn main() {
-    let words = ["sky", "banana", "queue"]
+    words = ["sky", "banana", "queue"]
     println(best(words, LengthScorer()))
     println(best(words, VowelScorer()))
 }
@@ -161,8 +161,8 @@ fn total(items: [Priced]) -> float {
 }
 
 fn main() {
-    let l = Laptop("Zen")
-    let p: Printable = l
+    l = Laptop("Zen")
+    p: Printable = l
     println(p.to_text(), total([l, Laptop("Pro")]))
 }
 ```
@@ -199,7 +199,7 @@ class Chatbot : Droid {
 }
 
 fn main() {
-    let voices: [Speaker] = [Droid(), Chatbot()]
+    voices: [Speaker] = [Droid(), Chatbot()]
     for v in voices {
         println(v.speak())
     }
@@ -240,7 +240,7 @@ fn greet(n: Named) {
 }
 
 fn main() {
-    let p: Pet = Dog()
+    p: Pet = Dog()
     println(p.name(), p.sound())
     greet(p) // a Pet is also a Named
 }
@@ -267,7 +267,7 @@ interface Cache<T> : Store<T> {
 }
 
 class Counter : Store<int> {
-    n: int = 0
+    var n: int = 0
 
     override fn get() -> int {
         return self.n
@@ -279,7 +279,7 @@ class Counter : Store<int> {
 }
 
 class Notes : Cache<str> {
-    text: str = ""
+    var text: str = ""
 
     override fn get() -> str {
         return self.text
@@ -301,12 +301,12 @@ fn fill<T>(s: Store<T>, items: [T]) {
 }
 
 fn main() {
-    let c = Counter()
+    c = Counter()
     fill(c, [1, 2, 3])
     println(c.get())
-    let notes = Notes()
+    notes = Notes()
     fill(notes, ["milk", "eggs"])
-    let s: Store<str> = notes
+    s: Store<str> = notes
     println(s.get())
 }
 ```
@@ -360,7 +360,7 @@ class Cat : Named {
 fn main() {
     println(Dog().greet())
     println(Cat().shout())
-    let all: [Named] = [Dog(), Cat()]
+    all: [Named] = [Dog(), Cat()]
     for n in all {
         println(n.greet())
     }

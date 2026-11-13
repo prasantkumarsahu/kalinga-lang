@@ -43,14 +43,14 @@ convenience. `min`, `max` and `clamp` need all `int` or all `float` values.
 
 ```kalinga
 fn main() {
-    Random.seed(42)            // optional: makes the sequence repeatable
-    let die = Random.int(1, 7) // 1 to 6 (the upper bound is excluded)
-    let unit = Random.float()  // 0.0 up to (not including) 1.0
+    Random.seed(42)        // optional: makes the sequence repeatable
+    die = Random.int(1, 7) // 1 to 6 (the upper bound is excluded)
+    unit = Random.float()  // 0.0 up to (not including) 1.0
     println(die >= 1 && die <= 6, unit >= 0.0 && unit < 1.0)
 
     var deck = [1, 2, 3, 4, 5]
     Random.shuffle(deck)
-    if let card = Random.pick(deck) {
+    if card = Random.pick(deck) {
         println("picked a card:", card >= 1 && card <= 5)
     }
     println(Random.chance(1.0), Random.chance(0.0))
@@ -79,9 +79,9 @@ for passwords or other security uses.
 
 ```kalinga
 fn main() {
-    let start = Time.now()
+    start = Time.now()
     Time.sleep(0.05)
-    let elapsed = Time.now() - start
+    elapsed = Time.now() - start
     println(elapsed >= 0.05, elapsed < 1.0)
     println(Time.millis() > 0)
 }
@@ -104,12 +104,12 @@ A typical frame loop measures the time since the last frame and moves things by 
 ```kalinga
 fn main() {
     var x = 0.0
-    let speed = 100.0 // units per second
+    speed = 100.0 // units per second
     var last = Time.now()
     for frame in 0..3 {
         Time.sleep(0.01)
-        let now = Time.now()
-        let dt = now - last
+        now = Time.now()
+        dt = now - last
         last = now
         x += speed * dt
     }
@@ -137,8 +137,8 @@ fn save(score: int) -> Result<void, str> {
 }
 
 fn load() -> Result<int, str> {
-    let text = File.read("saves/best.txt")?
-    if let n = text.trim().parse_int() {
+    text = File.read("saves/best.txt")?
+    if n = text.trim().parse_int() {
         return Ok(n)
     }
     return Err("the save file is damaged")

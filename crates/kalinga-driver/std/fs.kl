@@ -15,7 +15,7 @@ class File {
 
     /// The file's lines, without their line endings.
     static fn read_lines(path: str) -> Result<[str], str> {
-        let text = fs_read(path)?
+        text = fs_read(path)?
         var lines: [str] = []
         for line in text.split("\n") {
             lines.push(if line.ends_with("\r") { line[..len(line) - 1] } else { line })

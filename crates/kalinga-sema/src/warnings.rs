@@ -1,9 +1,10 @@
-//! Warnings: problems that do not stop a program from building. So far, uses of
-//! declarations marked `#[deprecated]`.
+//! Warnings: problems that do not stop a program from building: uses of declarations
+//! marked `#[deprecated]`, and variables that are never used (often a misspelt name: with no
+//! keyword, `totl = 1` declares a new variable).
 
 use std::collections::HashSet;
 
-use kalinga_syntax::ast::{Program, TypeExpr};
+use kalinga_syntax::ast::{Program, Stmt, StmtKind, TypeExpr};
 use kalinga_syntax::error::{Diagnostic, Span};
 use kalinga_syntax::visit::{self, Visitor};
 
@@ -14,6 +15,71 @@ use crate::model::Model;
 /// types), with the name used. Each points where the use starts; the driver moves it onto
 /// the name.
 pub fn warnings(prog: &Program, m: &Model, index: &Index) -> Vec<(Diagnostic, String)> {
+    let mut out = deprecated(prog, m, index);
+    out.extend(unused(prog, index));
+    out.sort_by_key(|(d, _)| (d.span.file, d.span.line, d.span.col));
+    out
+}
+
+/// Variables declared by a statement and never read. Names starting with `_` are left alone.
+fn unused(prog: &Program, index: &Index) -> Vec<(Diagnostic, String)> {
+    let mut lets = Lets(HashSet::new());
+    visit::program(prog, &mut lets);
+    let used: HashSet<Span> = index
+        .refs
+        .iter()
+        .filter(|r| !r.is_decl)
+        .filter_map(|r| match &r.symbol {
+            Symbol::Local { decl, .. } => Some(*decl),
+            _ => None,
+        })
+        .collect();
+    let locals: Vec<(Span, &str)> = index
+        .refs
+        .iter()
+        .filter(|r| r.is_decl)
+        .filter_map(|r| match &r.symbol {
+            Symbol::Local { name, decl, .. } => Some((*decl, name.as_str())),
+            _ => None,
+        })
+        .collect();
+    let mut seen = HashSet::new();
+    let mut out = vec![];
+    for &(decl, name) in &locals {
+        if !lets.0.contains(&decl) || used.contains(&decl) || name.starts_with('_') || !seen.insert(decl) {
+            continue;
+        }
+        let mut d = Diagnostic::warning(format!("`{}` is never used", name), decl);
+        // A misspelling of a variable declared earlier in the same file?
+        let earlier = locals
+            .iter()
+            .filter(|(s, n)| s.file == decl.file && (s.line, s.col) < (decl.line, decl.col) && *n != name)
+            .map(|(_, n)| *n);
+        if let Some(close) = crate::suggest::closest(name, earlier) {
+            d = d.with_help(format!("did you mean `{}`? `{} = ...` declares a new variable", close, name));
+        }
+        out.push((d, name.to_string()));
+    }
+    out
+}
+
+/// Where statements declare variables (`x = ...`, `var x = ...`, `(a, b) = ...`).
+struct Lets(HashSet<Span>);
+
+impl Visitor for Lets {
+    fn stmt(&mut self, s: &Stmt) {
+        match &s.kind {
+            StmtKind::Let { name, .. } if !name.starts_with("__") => {
+                self.0.insert(s.pos);
+            }
+            StmtKind::LetTuple { names, .. } => self.0.extend(names.iter().map(|(_, p)| *p)),
+            _ => {}
+        }
+    }
+}
+
+/// A warning for every use of something marked `#[deprecated]`.
+fn deprecated(prog: &Program, m: &Model, index: &Index) -> Vec<(Diagnostic, String)> {
     if m.deprecated.is_empty() {
         return vec![];
     }

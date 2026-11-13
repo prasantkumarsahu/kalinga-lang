@@ -8,11 +8,11 @@ corruption.
 
 | Guarantee | How |
 |---|---|
-| No null pointer crashes | There is no null; missing values are `T?` and must be unwrapped with `if let` |
+| No null pointer crashes | There is no null; missing values are `T?` and must be unwrapped with `if name = value` |
 | No reading or writing outside an array | Every index is checked |
 | No use-after-free, dangling pointers or double frees | Memory is managed automatically (reference counting) |
 | No silent integer overflow | Overflow stops the program |
-| No accidental mutation | Variables are immutable unless declared with `var` |
+| No accidental mutation | Variables and fields are fixed unless declared with `var` |
 | No surprise type conversions | Every conversion is written explicitly |
 | Overrides and interfaces match | Signatures are checked at compile time |
 | No ignored failures | Operations that can fail return a `Result` that must be handled (chapter 16) |
@@ -29,19 +29,20 @@ and the parser carries on after a broken declaration:
 
 ```text
 shop.kl:12:21: error: expected `int`, found `str`
-12 |     let quantity: int = "three"
-   |                         ^
+12 |     quantity: int = "three"
+   |                     ^
 ```
 
 Common compile errors and what to do:
 
 | Message | Cause | Fix |
 |---|---|---|
-| `cannot change `x`: it was declared with `let`` | Assigning to an immutable variable | Declare it with `var` |
+| `` cannot change `x`: it is fixed `` | Changing a variable declared without `var` | Declare it `var x` (the editor's quick fix does it) |
+| `` cannot change `f`: it is a fixed field of `C` `` | Changing a field outside its class's `init` | Declare it `var f` |
 | `expected `int`, found `float`` | Mixing types | Convert with `int()`, `float()`, `str()` |
 | `cannot apply `+` to `str` and `int`` | Joining text and numbers | `"n=" + str(n)` |
 | `` `f` must return a `int` on every path`` | Some path has no `return` | Add an `else` or final `return` |
-| `cannot infer the type of `[]`` / `` `none` `` | Value alone has no type | Annotate: `let xs: [int] = []` |
+| `cannot infer the type of `[]`` / `` `none` `` | Value alone has no type | Annotate: `xs: [int] = []` |
 | `condition must be `bool`` | `if count { }` | `if count > 0 { }` |
 | `` `A` has no field `b` `` / `has no method` | Typo, or member not on that type | Check the class (or interface) definition |
 | `mark it `override fn`` | Same method name as the base class or an interface | Add `override`, or rename |
@@ -58,10 +59,12 @@ Common compile errors and what to do:
 | `` `Thread.spawn` cannot use `p` here `` | An object used inside a thread | Copy the values the thread needs, or use a `Channel` |
 | `` `await` can only be used inside an `async fn` `` | `await` in a normal function | Make the function `async`, or use `Async.run(...)` |
 | `` `Vec2` is defined in both `a` and `b` `` | Two imported packages have the name | `import "a" as a` and write `a.Vec2` |
-| `` `N` is a constant and cannot be changed `` | Assigning to a `const` | Use a `var`, or a `static var` member |
-| `an `if` used as a value needs an `else` branch` | `let x = if c { 1 }` | Add `else { ... }` |
+| `` `N` is a fixed value and cannot be changed `` | Assigning to a top-level value | Use a `var`, or a `static var` member |
+| `` `X` is set when the program is compiled `` | A `static` or top-level value that calls a function or builds an object | Use a constant expression, or `static var x: T? = none` set at run time |
+| `` `if x = ...` unwraps an optional `` | `if x = 5` meant as a comparison | Write `==` |
+| `` `let` was removed `` / `` `const` was removed `` | Code written before 0.7 | `kalinga fix` rewrites it |
+| `an `if` used as a value needs an `else` branch` | `x = if c { 1 }` | Add `else { ... }` |
 | `` `f` has no parameter `x` `` / `named arguments follow the parameter order` | A misspelt or reordered named argument | Use the parameter's name, in order |
-| `constants are written `const NAME: Type = value`` | 0.4's `static NAME: T = v` | `kalinga fix` rewrites it |
 
 ### Warnings
 
@@ -70,6 +73,18 @@ marked `#[deprecated]` (see [Functions](04-functions.md#deprecating-a-function))
 are printed like errors, with `warning:`, but the program still builds and runs, and
 `kalinga check` still succeeds. They are shown only when there are no errors.
 
+A variable that is declared and never used is a warning too. Since `name = value` declares
+a new variable when no `name` is visible, this is also how a misspelt assignment shows up:
+
+```text
+main.kl:3:5: warning: `totl` is never used
+3 |     totl = total + 1
+  |     ^^^^
+  = help: did you mean `total`? `totl = ...` declares a new variable
+```
+
+Names starting with `_` are never reported, so a name like `_unused` stays quiet.
+
 ## Runtime errors
 
 Some problems can only be detected while the program runs. Kalinga stops the program
@@ -77,8 +92,8 @@ immediately with a message on stderr and exit code `101`:
 
 ```kalinga
 fn main() {
-    let xs = [1, 2, 3]
-    let i = 5
+    xs = [1, 2, 3]
+    i = 5
     println("before")
     println(xs[i])
     println("never printed")
@@ -117,7 +132,7 @@ running, is reported instead of silently corrupting data:
 
 ```kalinga
 class Account {
-    balance: int = 100
+    var balance: int = 100
 
     fn transfer_to(other: Account, amount: int) {
         self.balance -= amount
@@ -126,8 +141,8 @@ class Account {
 }
 
 fn main() {
-    let a = Account()
-    let b = Account()
+    a = Account()
+    b = Account()
     a.transfer_to(b, 30) // fine: two different objects
     println(a.balance, b.balance)
     a.transfer_to(a, 10) // the same object twice: runtime error

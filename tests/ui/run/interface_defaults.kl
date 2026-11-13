@@ -68,16 +68,16 @@ class Crate : Store<int> {
 }
 
 fn main() {
-    let d = Dog()
+    d = Dog()
     println(d.greet(), d.shout())
-    let c = Cat()
+    c = Cat()
     println(c.greet(), c.bow(), c.both())
-    let all: [Named] = [d, c]
+    all: [Named] = [d, c]
     for n in all {
         println(n.greet())
     }
     println(welcome(d), welcome(c))
-    let a: Animal = Puppy()
+    a: Animal = Puppy()
     println(a.greet(), Puppy().intro(), Animal().greet())
     println(Crate().get_twice())
 }

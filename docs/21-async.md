@@ -19,7 +19,7 @@ async fn countdown(name: str, n: int) -> str {
 }
 
 async fn main() {
-    let result = await countdown("launch", 3)
+    result = await countdown("launch", 3)
     println(result)
 }
 ```
@@ -46,7 +46,7 @@ waits of 0.6 s, 0.2 s and 0.4 s take about 0.6 s in total, not 1.2 s:
 
 ```kalinga
 class Log {
-    lines: [str]
+    var lines: [str]
 
     fn add(s: str) {
         self.lines.push(s)
@@ -60,10 +60,10 @@ async fn delayed(log: Log, name: str, seconds: float) -> str {
 }
 
 async fn main() {
-    let log = Log()
-    let jobs = [delayed(log, "slow", 0.6), delayed(log, "fast", 0.2), delayed(log, "medium", 0.4)]
-    let t0 = Time.now()
-    let names = await Async.all(jobs)
+    log = Log()
+    jobs = [delayed(log, "slow", 0.6), delayed(log, "fast", 0.2), delayed(log, "medium", 0.4)]
+    t0 = Time.now()
+    names = await Async.all(jobs)
     println(names)
     println(log.lines)
     println("concurrent:", Time.now() - t0 < 1.0)
@@ -94,7 +94,7 @@ async fn load_level(n: int) -> str {
 }
 
 async fn main() {
-    let loading = Async.spawn(load_level(2))
+    loading = Async.spawn(load_level(2))
     println("showing the menu while level 2 loads")
     await Time.wait(0.1)
     println("loaded:", await loading)
@@ -130,9 +130,9 @@ async fn tick(n: int) -> int {
 }
 
 async fn main() {
-    let task = Thread.spawn(fn() => heavy(3000000))
-    let ticker = Async.spawn(tick(5))
-    let v = await task
+    task = Thread.spawn(fn() => heavy(3000000))
+    ticker = Async.spawn(tick(5))
+    v = await task
     println("thread result ok:", v == heavy(3000000), "ticks:", await ticker)
 }
 ```
@@ -214,12 +214,12 @@ async fn job() -> int {
 }
 
 fn main() {
-    let x = await job()
+    x = await job()
 }
 ```
 
 ```text
-main.kl:6:13: error: `await` can only be used inside an `async fn` (not inside a lambda)
+main.kl:6:9: error: `await` can only be used inside an `async fn` (not inside a lambda)
 ```
 
 ## Library summary

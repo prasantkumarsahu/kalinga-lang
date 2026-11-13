@@ -54,8 +54,8 @@ A statement ends at the end of the line. Semicolons are allowed but never needed
 
 ```kalinga
 fn main() {
-    let a = 1
-    let b = 2; let c = 3
+    a = 1
+    b = 2; c = 3
     println(a + b + c)
 }
 ```
@@ -65,10 +65,10 @@ comma, or inside `(` `)` and `[` `]`, or when the next line starts with `.` (a m
 
 ```kalinga
 fn main() {
-    let total = 1 +
+    total = 1 +
         2 +
         3
-    let words = [
+    words = [
         "one",
         "two",
     ]
@@ -82,14 +82,17 @@ fn main() {
 
 ## Variables
 
-| Keyword | Meaning |
+A variable is declared by giving it a value. With no keyword it is **fixed**: it keeps that
+value. `var` makes one that can change.
+
+| Written | Meaning |
 |---|---|
-| `let` | Immutable: the value can never be reassigned |
-| `var` | Mutable: the value can be reassigned |
+| `name = value` | A fixed variable: it can never be given another value |
+| `var name = value` | A changeable variable |
 
 ```kalinga
 fn main() {
-    let pi = 3.14159
+    pi = 3.14159
     var count = 0
     count = count + 1
     count += 1
@@ -101,22 +104,27 @@ fn main() {
 3.14159 2
 ```
 
-Trying to change a `let` variable is a compile error:
+`name = value` declares a new variable when no variable `name` is visible; when one is, it
+changes that one. Changing a fixed variable is a compile error:
 
 ```kalinga error
 fn main() {
-    let x = 1
+    x = 1
     x = 2
 }
 ```
 
 ```text
-main.kl:3:5: error: cannot change `x`: it was declared with `let` (use `var` for a mutable variable)
+main.kl:3:5: error: cannot change `x`: it is fixed (declare it `var x` to change it)
 3 |     x = 2
   |     ^
 ```
 
-Prefer `let`. Use `var` only when a value really needs to change.
+Prefer fixed variables. Use `var` only when a value really needs to change. A variable
+that is declared and never used gets a warning, which also catches a misspelt name
+(`totl = total + 1` declares a new `totl` instead of changing `total`).
+
+`name: Type = value` always declares a new variable, even when an outer `name` exists.
 
 ### Type annotations
 
@@ -125,8 +133,8 @@ colon:
 
 ```kalinga
 fn main() {
-    let a = 10            // int, inferred
-    let b: float = 2.5    // float, written out
+    a = 10                // int, inferred
+    b: float = 2.5        // float, written out
     var names: [str] = [] // an empty array needs a type
     println(a, b, names)
 }
@@ -142,9 +150,9 @@ declare a new variable with the same name (shadowing); the same block may not:
 
 ```kalinga
 fn main() {
-    let x = 1
+    x = 1
     if true {
-        let x = "inner" // a different variable that hides the outer one
+        var x = "inner" // a different variable that hides the outer one
         println(x)
     }
     println(x)
@@ -163,15 +171,15 @@ inner
 - Class and interface names must start with an uppercase letter (`Animal`, `Show`).
 - By convention, variables, functions and methods use `snake_case`.
 
-## Constants
+## Fixed values
 
-`const` at the top level of a file names a value the whole program can use. Its type is
-written out, like a field's:
+`NAME: Type = value` at the top level of a file names a value the whole program can use. Its
+type is written out, like a field's:
 
 ```kalinga
-const MAX_LIVES: int = 3
-const GRAVITY: float = 9.81
-const TITLE: str = "Space Rocks"
+MAX_LIVES: int = 3
+GRAVITY: float = 9.81
+TITLE: str = "Space Rocks"
 
 fn main() {
     println(TITLE, MAX_LIVES, GRAVITY * 2)
@@ -182,9 +190,14 @@ fn main() {
 Space Rocks 3 19.62
 ```
 
-A constant cannot be changed, and constants are written in `UPPER_CASE` by convention.
-Classes and structs can have their own constants, and variables shared by the whole type
-(see [Classes](09-classes.md#constants-and-static-variables)).
+A top-level value cannot be changed, and is written in `UPPER_CASE` by convention. It is
+set when the program is compiled, so it must be a **constant expression**: literals,
+arithmetic on them, other top-level and `static` values, `none`, arrays, maps and tuples of
+those, enum variants and structs built from them. Calling a function or building a class
+object there is an error.
+
+Classes and structs can have their own fixed values (`static`), and variables shared by the
+whole type (`static var`) (see [Classes](09-classes.md#static-values-and-static-variables)).
 
 ## Types
 
@@ -203,7 +216,7 @@ Classes and structs can have their own constants, and variables shared by the wh
 Notes:
 
 - A float literal needs digits on both sides of the dot: `2.0`, not `2.`.
-- Where a `float` is expected, a whole-number literal is that float: `let speed: float = 3`
+- Where a `float` is expected, a whole-number literal is that float: `speed: float = 3`
   and `Vec2(600, 300)` work. This is only for literals; a variable needs `float(n)`.
 - Underscores in numbers are ignored: `1_000` is `1000`.
 - String escapes: `\n` newline, `\t` tab, `\r`, `\0`, `\\` backslash, `\"` quote.
@@ -217,8 +230,8 @@ its own. Use `int()`, `float()` and `str()`:
 
 ```kalinga
 fn main() {
-    let n = 7
-    let f = 2.5
+    n = 7
+    f = 2.5
     println(float(n) * f)     // int → float
     println(int(f))           // float → int (drops the fraction)
     println("n is " + str(n)) // int → str
@@ -272,8 +285,8 @@ Kalinga
 
 ```kalinga
 fn main() {
-    let age = 20
-    let member = true
+    age = 20
+    member = true
     println(age >= 18 && member)
     println("apple" < "banana", [1, 2] == [1, 2])
 }

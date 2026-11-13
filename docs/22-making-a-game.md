@@ -11,12 +11,12 @@ written directly in Rust.
 import "std/game"
 
 class Collector : Game {
-    player: Vec2 = Vec2(400.0, 300.0)
-    star: Vec2 = Vec2(100.0, 100.0)
-    score: int
+    var player: Vec2 = Vec2(400.0, 300.0)
+    var star: Vec2 = Vec2(100.0, 100.0)
+    var score: int
 
     override fn update(input: Input, dt: float) {
-        let speed = 300.0
+        speed = 300.0
         var dir = Vec2.zero()
         if input.key_down("left") { dir.x -= 1.0 }
         if input.key_down("right") { dir.x += 1.0 }
@@ -153,7 +153,7 @@ class Shooter : Game {
 
     override fn update(input: Input, dt: float) {
         if input.key_pressed("space") {
-            if let s = self.laser {
+            if s = self.laser {
                 s.play()
             }
         }
@@ -161,7 +161,7 @@ class Shooter : Game {
 
     override fn draw(screen: Screen) {
         screen.clear(Color.BLACK)
-        if let img = self.ship {
+        if img = self.ship {
             screen.image(img, self.pos)
         } else {
             screen.triangle(self.pos, self.pos + Vec2(-15.0, 30.0), self.pos + Vec2(15.0, 30.0), Color.WHITE)

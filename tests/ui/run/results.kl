@@ -7,7 +7,7 @@ fn parse_level(text: str) -> Result<int, str> {
     if text == "" {
         return Err("empty")
     }
-    let n = int(text)
+    n = int(text)
     if n < 1 {
         return Err("level must be at least 1, got {n}")
     }
@@ -22,14 +22,14 @@ fn load(name: str) -> Result<[int], LoadError> {
 }
 
 fn total(name: str) -> Result<int, LoadError> {
-    let xs = load(name)?
+    xs = load(name)?
     var sum = 0
     for x in xs { sum += x }
     return Ok(sum)
 }
 
 fn first_even(xs: [int]) -> int? {
-    let f = xs.find(fn(x) => x % 2 == 0)?
+    f = xs.find(fn(x) => x % 2 == 0)?
     return f * 10
 }
 
@@ -51,7 +51,7 @@ fn main() -> Result<void, str> {
             Bad(l) => println("bad line", l)
         }
     }
-    let r = parse_level("7")
+    r = parse_level("7")
     println(r.is_ok(), r.unwrap_or(1), parse_level("").unwrap_or(1), r.ok(), parse_level("").err(), r.unwrap())
     println(first_even([1, 3, 4]), first_even([1, 3]))
     setup(true)?

@@ -19,6 +19,8 @@ fn parse_embedded(code: &str, at: Span) -> Result<Expr> {
     Ok(e)
 }
 
+const CONST_GONE: &str = "`const` was removed: write `NAME: Type = value` at the top level, or `static NAME: Type = value` in a class or struct (`kalinga fix` updates old code)";
+
 #[derive(Default, PartialEq)]
 struct Mods {
     is_mut: bool,
@@ -142,13 +144,13 @@ impl Parser {
                     | Tok::Interface
                     | Tok::Enum
                     | Tok::Struct
-                    | Tok::Const
                     | Tok::Use
                     | Tok::Extern
                     | Tok::Import
             );
             let starts_test = matches!(self.peek(), Tok::Ident(n) if n == "test") && self.next_is(&Tok::Fn);
-            if at_line_start && (starts_item || starts_test) {
+            let starts_value = matches!(self.peek(), Tok::Ident(_)) && self.next_is(&Tok::Colon);
+            if at_line_start && (starts_item || starts_test || starts_value) {
                 return;
             }
             self.advance();
@@ -190,7 +192,7 @@ impl Parser {
     fn no_pending(&self) -> Result<()> {
         match self.pending.first() {
             Some(a) => err(
-                "an attribute goes right before a `fn`, `class`, `struct`, `interface`, `enum`, `const` or field",
+                "an attribute goes right before a `fn`, `class`, `struct`, `interface`, `enum`, value or field",
                 a.pos,
             ),
             None => Ok(()),
@@ -220,8 +222,10 @@ impl Parser {
             Tok::Interface => prog.interfaces.push(self.interface()?),
             Tok::Enum => prog.enums.push(self.enum_decl()?),
             Tok::Struct => prog.structs.push(self.struct_decl()?),
-            Tok::Const => {
-                let pos = self.advance().pos;
+            Tok::Const => return err(CONST_GONE, self.pos()),
+            // `NAME: Type = value`: a fixed value the whole program can use.
+            Tok::Ident(_) if self.next_is(&Tok::Colon) => {
+                let pos = self.pos();
                 prog.consts.push(self.static_decl(false, pos)?);
             }
             // `test` is only special before `fn` at the top level.
@@ -502,7 +506,7 @@ impl Parser {
         }
         self.expect(Tok::RParen, "`)`")?;
         if names.len() < 2 {
-            return err("taking a tuple apart needs two or more names: `let (a, b) = ...`", names[0].1);
+            return err("taking a tuple apart needs two or more names: `(a, b) = ...`", names[0].1);
         }
         Ok(names)
     }
@@ -589,24 +593,9 @@ impl Parser {
                 continue;
             }
             match self.peek().clone() {
-                Tok::Ident(fname) => {
-                    if mods.is_static || mods.is_abstract || mods.is_override {
-                        return err("fields can only be marked `private` or `private(set)`", mpos);
-                    }
-                    let fpos = self.advance().pos;
-                    self.expect(Tok::Colon, "`:` and a type after field name")?;
-                    let ty = self.ty()?;
-                    let default = if self.eat(&Tok::Assign) { Some(self.expr()?) } else { None };
-                    class.fields.push(FieldDecl {
-                        name: fname,
-                        attrs: std::mem::take(&mut self.pending),
-                        ty,
-                        default,
-                        is_private: mods.is_private,
-                        is_private_set: mods.is_private_set,
-                        pos: fpos,
-                    });
-                    self.end_of_statement()?;
+                Tok::Ident(_) | Tok::Var => {
+                    let f = self.field(&mods, mpos)?;
+                    class.fields.push(f);
                 }
                 Tok::Init => {
                     if mods != Mods::default() {
@@ -627,7 +616,7 @@ impl Parser {
                 }
                 other => {
                     return err(
-                        format!("expected field, `init`, `fn` or `const` in class body, found {}", other.describe()),
+                        format!("expected field, `init`, `fn` or `static` in class body, found {}", other.describe()),
                         self.pos(),
                     );
                 }
@@ -638,33 +627,65 @@ impl Parser {
         Ok(class)
     }
 
-    /// `const NAME: Type = value` or `static var name: Type = value` in a class or struct
+    /// `static NAME: Type = value` or `static var name: Type = value` in a class or struct
     /// body, after the modifiers; `None` when the member is something else.
     fn static_member(&mut self, mods: &Mods, pos: Span) -> Result<Option<StaticDecl>> {
+        if self.check(&Tok::Const) {
+            return err(CONST_GONE, pos);
+        }
+        if !mods.is_static {
+            return Ok(None);
+        }
+        let only_static = *mods == Mods { is_static: true, ..Mods::default() };
         let mutable = match self.peek() {
-            Tok::Const if *mods == Mods::default() => false,
-            Tok::Var if *mods == Mods { is_static: true, ..Mods::default() } => true,
-            Tok::Const => return err("`const` cannot have modifiers", pos),
-            Tok::Var => return err("write `static var name: Type = value` for a variable shared by the type", pos),
-            Tok::Ident(_)
-                if mods.is_static
-                    && !mods.is_async
-                    && self.tokens.get(self.i + 1).is_some_and(|t| t.tok == Tok::Colon) =>
-            {
-                return Err(Diagnostic::error("constants are written `const NAME: Type = value`".to_string(), pos)
-                    .with_help("`kalinga fix` rewrites `static NAME: Type = value` to `const`"));
+            Tok::Var if only_static => true,
+            Tok::Ident(_) if only_static && self.next_is(&Tok::Colon) => false,
+            Tok::Var | Tok::Ident(_) if self.next_is(&Tok::Colon) || self.check(&Tok::Var) => {
+                return err("a `static` value cannot have other modifiers", pos);
             }
             _ => return Ok(None),
         };
-        let at = self.advance().pos;
+        if mutable {
+            self.advance();
+        }
+        let at = self.pos();
         Ok(Some(self.static_decl(mutable, at)?))
     }
 
-    /// The rest of `const NAME: Type = value` / `static var name: Type = value`, after
-    /// `const` / `var`.
+    /// A field, after its modifiers: `[var] name: Type [= value]`.
+    fn field(&mut self, mods: &Mods, mpos: Span) -> Result<FieldDecl> {
+        if mods.is_static || mods.is_abstract || mods.is_override || mods.is_async || mods.is_mut {
+            return err("fields can only be marked `private`, `private(set)` and `var`", mpos);
+        }
+        let is_var = self.eat(&Tok::Var);
+        if mods.is_private_set && !is_var {
+            return err(
+                "a `private(set)` field must be `var` (a fixed field is never changed): `private(set) var`",
+                mpos,
+            );
+        }
+        let (name, fpos) = self.ident("field name")?;
+        self.expect(Tok::Colon, "`:` and a type after field name")?;
+        let ty = self.ty()?;
+        let default = if self.eat(&Tok::Assign) { Some(self.expr()?) } else { None };
+        let f = FieldDecl {
+            name,
+            attrs: std::mem::take(&mut self.pending),
+            ty,
+            default,
+            is_private: mods.is_private,
+            is_private_set: mods.is_private_set,
+            is_var,
+            pos: fpos,
+        };
+        self.end_of_statement()?;
+        Ok(f)
+    }
+
+    /// The rest of `NAME: Type = value` / `static var name: Type = value`, at the name.
     fn static_decl(&mut self, mutable: bool, pos: Span) -> Result<StaticDecl> {
         let attrs = std::mem::take(&mut self.pending);
-        let (kw, what) = if mutable { ("static var", "variable") } else { ("const", "constant") };
+        let (kw, what) = if mutable { ("static var", "variable") } else { ("static", "value") };
         let (name, _) = self.ident(&format!("a {} name after `{}`", what, kw))?;
         if !self.eat(&Tok::Colon) {
             return err(format!("a {} needs a type: `{} {}: Type = value`", what, kw, name), self.pos());
@@ -784,24 +805,9 @@ impl Parser {
                 continue;
             }
             match self.peek().clone() {
-                Tok::Ident(fname) if !is_mut => {
-                    if mods.is_static || mods.is_abstract || mods.is_override || mods.is_async {
-                        return err("fields can only be marked `private` or `private(set)`", mpos);
-                    }
-                    let fpos = self.advance().pos;
-                    self.expect(Tok::Colon, "`:` and a type after field name")?;
-                    let ty = self.ty()?;
-                    let default = if self.eat(&Tok::Assign) { Some(self.expr()?) } else { None };
-                    s.fields.push(FieldDecl {
-                        name: fname,
-                        attrs: std::mem::take(&mut self.pending),
-                        ty,
-                        default,
-                        is_private: mods.is_private,
-                        is_private_set: mods.is_private_set,
-                        pos: fpos,
-                    });
-                    self.end_of_statement()?;
+                Tok::Ident(_) | Tok::Var if !is_mut => {
+                    let f = self.field(&mods, mpos)?;
+                    s.fields.push(f);
                 }
                 Tok::Fn => {
                     // `override` is checked later: it marks `as_str`, `equals` and `compare` of
@@ -1001,28 +1007,40 @@ impl Parser {
         self.statement_ending(false)
     }
 
+    /// `name [: Type] = value`, after `var` (`mutable`) or at a typed fixed variable.
+    fn declaration(&mut self, mutable: bool) -> Result<StmtKind> {
+        let (name, _) = self.ident("variable name")?;
+        let ty = if self.eat(&Tok::Colon) { Some(self.ty()?) } else { None };
+        self.expect(Tok::Assign, "`=` (variables must be initialized)")?;
+        let value = self.expr()?;
+        Ok(StmtKind::Let { name, mutable, ty, value })
+    }
+
     /// A statement; with `comma_ok` (a one-line match arm) it may also end at a `,`.
     fn statement_ending(&mut self, comma_ok: bool) -> Result<Stmt> {
         let pos = self.pos();
         let kind = match self.peek() {
-            Tok::Let | Tok::Var => {
-                let mutable = self.advance().tok == Tok::Var;
-                if self.check(&Tok::LParen) {
-                    return self.let_tuple(mutable, pos);
-                }
-                let (name, _) = self.ident("variable name")?;
-                let ty = if self.eat(&Tok::Colon) { Some(self.ty()?) } else { None };
-                self.expect(Tok::Assign, "`=` (variables must be initialized)")?;
-                let value = self.expr()?;
-                StmtKind::Let { name, mutable, ty, value }
+            Tok::Let => {
+                return err(
+                    "`let` was removed: write `name = value` for a fixed variable (`kalinga fix` updates old code)",
+                    pos,
+                );
             }
+            Tok::Var => {
+                self.advance();
+                if self.check(&Tok::LParen) {
+                    return self.let_tuple(true, pos);
+                }
+                self.declaration(true)?
+            }
+            // `name: Type = value` declares a fixed variable (`name = value` is decided by
+            // name resolution: a new variable, or a change of a visible one).
+            Tok::Ident(_) if self.next_is(&Tok::Colon) => self.declaration(false)?,
             Tok::If => return self.if_stmt(),
             Tok::Match => return self.match_stmt(),
             Tok::While => {
                 self.advance();
-                if self.eat(&Tok::Let) {
-                    let (name, _) = self.ident("variable name")?;
-                    self.expect(Tok::Assign, "`=`")?;
+                if let Some(name) = self.unwrap_binding("while")? {
                     let value = self.expr()?;
                     let body = self.block()?;
                     self.skip_newlines();
@@ -1102,9 +1120,7 @@ impl Parser {
 
     fn if_stmt(&mut self) -> Result<Stmt> {
         let pos = self.expect(Tok::If, "`if`")?;
-        let kind = if self.eat(&Tok::Let) {
-            let (name, _) = self.ident("variable name")?;
-            self.expect(Tok::Assign, "`=`")?;
+        let kind = if let Some(name) = self.unwrap_binding("if")? {
             let value = self.expr()?;
             let then = self.block()?;
             let otherwise = self.else_part()?;
@@ -1117,6 +1133,22 @@ impl Parser {
         };
         self.skip_newlines();
         Ok(Stmt { kind, pos })
+    }
+
+    /// After `if` / `while`: `name =`, which unwraps an optional into `name`.
+    fn unwrap_binding(&mut self, kw: &str) -> Result<Option<String>> {
+        if self.check(&Tok::Let) {
+            return err(
+                format!("`{kw} let` was removed: write `{kw} name = optional` (`kalinga fix` updates old code)"),
+                self.pos(),
+            );
+        }
+        if matches!(self.peek(), Tok::Ident(_)) && self.next_is(&Tok::Assign) {
+            let (name, _) = self.ident("variable name")?;
+            self.advance();
+            return Ok(Some(name));
+        }
+        Ok(None)
     }
 
     fn else_part(&mut self) -> Result<Option<Vec<Stmt>>> {
@@ -1133,13 +1165,7 @@ impl Parser {
     /// `if` used as a value, after `if`: both branches are value blocks, and `else` is
     /// required.
     fn if_expr(&mut self, pos: Span) -> Result<ExprKind> {
-        let binding = if self.eat(&Tok::Let) {
-            let (name, _) = self.ident("variable name")?;
-            self.expect(Tok::Assign, "`=` after the name in `if let`")?;
-            Some(name)
-        } else {
-            None
-        };
+        let binding = self.unwrap_binding("if")?;
         let cond = self.expr()?;
         let then = self.value_block("if")?;
         self.skip_newlines();

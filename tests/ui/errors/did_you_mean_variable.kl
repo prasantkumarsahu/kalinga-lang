@@ -1,4 +1,4 @@
 fn main() {
-    let count = 3
+    count = 3
     println(cout)
 }

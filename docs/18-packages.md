@@ -87,7 +87,7 @@ import "mathx"
 import "mathx/noise"
 
 fn main() {
-    let v = Vec2(3.0, 4.0)
+    v = Vec2(3.0, 4.0)
     println(v.length(), perlin(0.5, 0.5))
 }
 ```
@@ -110,15 +110,15 @@ struct Vec2 {
 }
 
 fn main() {
-    let a = mx.Vec2(1.0, 2.0)
-    let b: mx.Vec2 = mx.Vec2(3.0, 4.0)
-    let body = phys.Body(a)
+    a = mx.Vec2(1.0, 2.0)
+    b: mx.Vec2 = mx.Vec2(3.0, 4.0)
+    body = phys.Body(a)
     println(a.dot(b), mx.version(), Vec2(1, 2))
 }
 ```
 
 - `alias.Name` works for functions, classes, structs, enums and interfaces, in code and in
-  types (`let b: mx.Vec2`).
+  types (`b: mx.Vec2 = ...`).
 - A plain `import "mathx"` brings the names in directly. Inside a file, a name is looked up
   in its own package (or project) first, then in the packages it imports.
 - When two plainly imported packages both have the name you use, the compiler asks you to

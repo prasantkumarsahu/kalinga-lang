@@ -1,6 +1,6 @@
-tests/ui/errors/several_errors.kl:3:18: error: expected `int`, found `str`
-3 |     let x: int = "s"
-  |                  ^^^
+tests/ui/errors/several_errors.kl:3:14: error: expected `int`, found `str`
+3 |     x: int = "s"
+  |              ^^^
 tests/ui/errors/several_errors.kl:8:16: error: expected `int`, found `bool`
 8 |         return true
   |                ^^^^

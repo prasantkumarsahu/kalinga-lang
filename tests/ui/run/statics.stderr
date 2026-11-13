@@ -1,0 +1,3 @@
+tests/ui/run/statics.kl:40:9: warning: `e` is never used
+40 |         e = Enemy("e{i}")
+   |         ^

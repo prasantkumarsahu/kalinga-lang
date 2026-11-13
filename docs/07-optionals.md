@@ -23,11 +23,11 @@ Kali
 ```
 
 `none` on its own has no type, so a variable holding it needs an annotation:
-`let x = none` is an error, `let x: int? = none` is fine.
+`x = none` is an error, `x: int? = none` is fine.
 
-## Using the value: if let
+## Using the value: if name = value
 
-You cannot use an `int?` where an `int` is needed. Unwrap it with `if let`:
+You cannot use an `int?` where an `int` is needed. Unwrap it with `if name = value`:
 
 ```kalinga
 fn find_index(items: [str], target: str) -> int? {
@@ -40,13 +40,13 @@ fn find_index(items: [str], target: str) -> int? {
 }
 
 fn main() {
-    let colors = ["red", "green", "blue"]
+    colors = ["red", "green", "blue"]
 
-    if let i = find_index(colors, "green") {
+    if i = find_index(colors, "green") {
         println("green is at", i)
     }
 
-    if let i = find_index(colors, "pink") {
+    if i = find_index(colors, "pink") {
         println("pink is at", i)
     } else {
         println("no pink")
@@ -59,15 +59,17 @@ green is at 1
 no pink
 ```
 
-Inside the first block, `i` is a plain `int`. It only exists inside that block.
+Inside the first block, `i` is a plain `int`. It only exists inside that block. In a
+condition, `=` always unwraps an optional; to compare, write `==` (`if i = 5` is an
+error).
 
-`if let` also works as a value, with an `else` (like [`if`](03-control-flow.md)):
+`if name = value` also works as a value, with an `else` (like [`if`](03-control-flow.md)):
 
 ```kalinga
 fn main() {
-    let ages: {str: int} = {"Asha": 30}
-    let a = if let n = ages.get("Asha") { n + 1 } else { 0 }
-    let r = if let n = ages.get("Ravi") { n + 1 } else { 0 }
+    ages: {str: int} = {"Asha": 30}
+    a = if n = ages.get("Asha") { n + 1 } else { 0 }
+    r = if n = ages.get("Ravi") { n + 1 } else { 0 }
     println(a, r)
 }
 ```
@@ -76,8 +78,8 @@ fn main() {
 31 0
 ```
 
-`while let` works the same way and repeats until the value is `none` (see
-[Control flow](03-control-flow.md#while-let)).
+`while name = value` works the same way and repeats until the value is `none` (see
+[Control flow](03-control-flow.md#while-name--value)).
 
 ## Comparing with none
 
@@ -110,7 +112,7 @@ fn first(xs: [int]) -> int? {
 }
 
 fn main() {
-    let n = first([1, 2])
+    n = first([1, 2])
     println(n + 1)
 }
 ```
@@ -144,7 +146,7 @@ fn lookup(id: int) -> User? {
 
 fn main() {
     for id in 1..3 {
-        if let u = lookup(id) {
+        if u = lookup(id) {
             println(id, "->", u.name)
         } else {
             println(id, "-> not found")

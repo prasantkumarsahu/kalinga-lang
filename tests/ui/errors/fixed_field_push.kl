@@ -1,0 +1,9 @@
+class A {
+    tags: [str] = []
+
+    fn tag(t: str) {
+        self.tags.push(t)
+    }
+}
+
+fn main() {}

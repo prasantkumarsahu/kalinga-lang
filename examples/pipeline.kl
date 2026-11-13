@@ -31,7 +31,7 @@ class Pipeline<T> {
 fn group_by<T>(items: [T], key: fn(T) -> str) -> {str: [T]} {
     var groups: {str: [T]} = {}
     for x in items {
-        let k = key(x)
+        k = key(x)
         if !groups.has(k) {
             groups[k] = []
         }
@@ -53,7 +53,7 @@ class City {
 }
 
 fn main() {
-    let cities = [
+    cities = [
         City("Bhubaneswar", "IN", 837),
         City("Cuttack", "IN", 606),
         City("Lyon", "FR", 522),
@@ -61,18 +61,18 @@ fn main() {
         City("Puri", "IN", 201),
     ]
 
-    let big = Pipeline(cities)
+    big = Pipeline(cities)
         .keep(fn(c) => c.people > 500)
         .sorted_by(fn(a, b) => a.people > b.people)
         .take(3)
     println(big.map(fn(c) => "{c.name} ({c.people}k)"))
 
-    let by_country = group_by(cities, fn(c) => c.country)
+    by_country = group_by(cities, fn(c) => c.country)
     for country in by_country {
-        let names = by_country[country].map(fn(c) => c.name)
+        names = by_country[country].map(fn(c) => c.name)
         println("{country}: {names}")
     }
 
-    let words = Pipeline(["kiwi", "fig", "banana", "apple"]).sorted_by(fn(a, b) => a < b)
+    words = Pipeline(["kiwi", "fig", "banana", "apple"]).sorted_by(fn(a, b) => a < b)
     println(words.take(2))
 }

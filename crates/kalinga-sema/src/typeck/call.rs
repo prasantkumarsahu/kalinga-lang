@@ -165,7 +165,7 @@ impl Checker<'_> {
             _ => {
                 return err(
                     format!(
-                        "cannot tell which `Result` this `{}` belongs to; give the variable a type, e.g. `let r: Result<int, str> = {}(...)`",
+                        "cannot tell which `Result` this `{}` belongs to; give the variable a type, e.g. `r: Result<int, str> = {}(...)`",
                         name, name
                     ),
                     pos,
@@ -738,7 +738,7 @@ impl Checker<'_> {
             let tp = &info.tparams[0];
             return err(
                 format!(
-                    "cannot tell what `{}` is for `{}`; give the variable a type, e.g. `let x: {}<int> = {}`",
+                    "cannot tell what `{}` is for `{}`; give the variable a type, e.g. `x: {}<int> = {}`",
                     tp, what, type_name, what
                 ),
                 pos,

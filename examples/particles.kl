@@ -27,19 +27,19 @@ struct Vec2 {
 }
 
 struct Particle {
-    pos: Vec2
-    vel: Vec2
-    life: float
+    var pos: Vec2
+    var vel: Vec2
+    var life: float
 }
 
 class Emitter {
     origin: Vec2 = Vec2.zero()
     gravity: Vec2 = Vec2(0.0, -9.8)
-    particles: [Particle]
+    var particles: [Particle]
 
     fn burst(count: int) {
         for i in 0..count {
-            let dir = Vec2.from_angle(Random.float() * Math.TAU, 2.0 + Random.float() * 3.0)
+            dir = Vec2.from_angle(Random.float() * Math.TAU, 2.0 + Random.float() * 3.0)
             self.particles.push(Particle(self.origin, dir, 1.0 + Random.float()))
         }
     }
@@ -69,16 +69,16 @@ class Emitter {
 
 fn main() {
     Random.seed(7)
-    let e = Emitter()
+    e = Emitter()
     e.burst(10000)
-    let start = Time.now()
-    let dt = 1.0 / 60.0
+    start = Time.now()
+    dt = 1.0 / 60.0
     for frame in 0..120 {
         e.update(dt)
         if frame % 30 == 0 {
             println("frame {frame}: {len(e.particles)} particles, highest at {int(e.highest() * 100.0)} cm")
         }
     }
-    let ms = (Time.now() - start) * 1000.0
+    ms = (Time.now() - start) * 1000.0
     println("120 frames of 10000 particles took under a second: {ms < 1000.0}")
 }

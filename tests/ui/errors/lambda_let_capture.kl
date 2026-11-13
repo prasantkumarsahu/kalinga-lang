@@ -1,6 +1,6 @@
 fn main() {
-    let n = 0
-    let f = fn() {
+    n = 0
+    f = fn() {
         n += 1
     }
 }

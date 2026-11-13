@@ -71,12 +71,12 @@ fn main() {
 
     println(or_else(find_even([1, 3, 4]), -1))
     println(or_else(find_even([1, 3]), -1))
-    let m = Maybe.Just("hi")
+    m = Maybe.Just("hi")
     println(m)
-    let n: Maybe<str> = Maybe.Nothing
+    n: Maybe<str> = Maybe.Nothing
     println(n, m == n, m == Maybe.Just("hi"))
 
-    let e: [Either<int, str>] = [Either.Left(1), Either.Right("two")]
+    e: [Either<int, str>] = [Either.Left(1), Either.Right("two")]
     for x in e {
         match x {
             Left(n) => println("number", n),

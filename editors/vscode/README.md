@@ -11,7 +11,7 @@ compiler itself, so what the editor shows is exactly what the compiler sees:
   - members after `.`: fields and methods (including inherited ones and super-interfaces),
     string, array, map, `Result`, `Channel`, `Shared` and `Task` methods, generic classes
     with their type arguments filled in; `private` members only inside their own type
-  - enum variants after `Enum.`; `static fn`s, `const`s and `static var`s after `Type.`;
+  - enum variants after `Enum.`; `static fn`s and `static` values after `Type.`;
     the functions of `Math`, `Random`, `Time`, `Thread` and `Async`
   - variables in scope (including lambda parameters and `match` bindings), functions,
     classes and structs with constructor arguments, constants and built-ins; inside `{...}`
@@ -28,7 +28,7 @@ compiler itself, so what the editor shows is exactly what the compiler sees:
   it overrides or implements, so the program keeps compiling)
 - Outline (document symbols)
 - Quick fixes: mark a method `override fn`, remove a wrong `override`, add a missing
-  interface or abstract method
+  interface or abstract method, make a fixed variable or field `var`
 - Format Document (`kalinga fmt`)
 - Syntax highlighting, snippets (`main`, `fn`, `class`, `struct`, `match`, `gameclass`, ...),
   comment toggling, bracket matching and auto-indent

@@ -1,0 +1,3 @@
+tests/ui/errors/struct_fixed_field.kl:5:13: error: cannot change `x`: it is a fixed field of `P` (declare it `var x` to change it)
+5 |         self.x += 1
+  |             ^

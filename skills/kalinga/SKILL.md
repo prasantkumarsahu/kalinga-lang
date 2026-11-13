@@ -1,6 +1,6 @@
 ---
 name: kalinga
-description: Read, write, fix, explain and review code in Kalinga, the object-oriented language that compiles to Rust (`.kl` files, `kalinga` and `utkal` commands, `utkal.toml` projects). Use this skill whenever the user mentions Kalinga, a `.kl` file, utkal, or pastes code that uses `fn main()` with `println`, `init(...)`, `override fn`, `var`/`let` and `T?` optionals together — even if they only ask to "fix this error", "add a feature" or "port this to Kalinga". Kalinga looks like Swift, Kotlin and Rust but differs in many small ways, so do not write it from memory of those languages.
+description: Read, write, fix, explain and review code in Kalinga, the object-oriented language that compiles to Rust (`.kl` files, `kalinga` and `utkal` commands, `utkal.toml` projects). Use this skill whenever the user mentions Kalinga, a `.kl` file, utkal, or pastes code that uses `fn main()` with `println`, `init(...)`, `override fn`, `var` and `T?` optionals together — even if they only ask to "fix this error", "add a feature" or "port this to Kalinga". Kalinga looks like Swift, Kotlin and Rust but differs in many small ways, so do not write it from memory of those languages.
 ---
 
 # Kalinga
@@ -83,7 +83,7 @@ class Square : Shape {
 fn largest(shapes: [Shape]) -> Shape? {
     var best: Shape? = none
     for s in shapes {
-        if let b = best {
+        if b = best {
             if s.area() > b.area() {
                 best = s
             }
@@ -95,14 +95,14 @@ fn largest(shapes: [Shape]) -> Shape? {
 }
 
 fn main() {
-    let shapes: [Shape] = [Circle(1.5), Square()]
+    shapes: [Shape] = [Circle(1.5), Square()]
     for s in shapes {
         println("{s.name()}: {Math.round(s.area() * 100.0) / 100.0}")
     }
-    if let big = largest(shapes) {
+    if big = largest(shapes) {
         println("largest is the", big.name())
     }
-    let counts = {"circle": 1, "square": 1}
+    counts = {"circle": 1, "square": 1}
     println(counts, len(shapes))
 }
 ```
@@ -133,7 +133,12 @@ a compile error (or a wrong result) if missed.
   list `Show`, `Eq`, `Ord` too (`struct Version : Ord`).
 
 **Variables and types**
-- `let` is immutable, `var` is mutable; types follow a colon: `var total: float = 0.0`.
+- **Fixed by default.** `name = value` declares a fixed variable (no keyword); `var name =
+  value` declares one that can change. There is **no `let` and no `const`** (both are errors).
+  `name = value` declares only when no variable `name` is visible, otherwise it assigns (an
+  error for a fixed one); `name: T = value` always declares. Tuples: `(a, b) = pair`.
+- Types follow a colon: `var total: float = 0.0`.
+- An unused variable is a warning; a misspelt assignment (`totl = total + 1`) shows as one.
 - No implicit conversions: `float(n)`, `int(x)` (truncates), `str(v)`. A whole-number
   literal is accepted where a `float` is expected (`Vec2(600, 300)`), a variable is not.
 - `int` and `float` are 64-bit; integer overflow and division by zero stop the program.
@@ -143,9 +148,9 @@ a compile error (or a wrong result) if missed.
 
 **No null, no exceptions**
 - A missing value is `T?`, either a `T` or `none`. Unwrap with
-  `if let x = maybe { ... } else { ... }` or `while let`. There is no `!` unwrap, no `??`
-  and no `?.`. `if let` also works as a value:
-  `let n = if let x = maybe { x } else { 0 }`.
+  `if x = maybe { ... } else { ... }` or `while x = maybe { ... }` (`=` in a condition
+  always unwraps; compare with `==`). There is no `!` unwrap, no `??` and no `?.`. It also
+  works as a value: `n = if x = maybe { x } else { 0 }`.
 - Failure is `Result<T, E>`: `return Ok(v)` / `return Err(e)`; `value?` returns the error
   early (only inside a function that returns a `Result`); `match r { Ok(v) => ..., Err(e) => ... }`;
   `r.unwrap_or(d)`.
@@ -158,12 +163,14 @@ a compile error (or a wrong result) if missed.
 - Lambdas: `fn(x) => x * 2` or `fn(a: int, b: int) -> int { return a + b }`. There is no
   `|x|`, `x => ...` or `{ x in ... }` syntax. A function type is `fn(int) -> int`.
 - A lambda gets a copy of the outside variables it uses, except a `var` that some lambda
-  changes, which is shared (`var count = 0; let inc = fn() { count += 1 }` works).
-- Inside a method, `self` cannot be used in a lambda; copy it first: `let me = self`.
+  changes, which is shared (`var count = 0; inc = fn() { count += 1 }` works).
+- Inside a method, `self` cannot be used in a lambda; copy it first: `me = self`.
 
 **Classes, structs and interfaces**
-- Fields are written `name: Type` (no `let`/`var`; inside a class `var` starts a
-  `static var`); `init(...)` is the constructor; objects are created with no `new`:
+- Fields are **fixed** unless `var`: `name: Type` is set by its default or in its own
+  class's `init` only (not in methods, subclasses or outside, and not with `push`/`+=`);
+  `var name: Type` can change. Struct fields: fixed ones are set when the struct is built.
+  `init(...)` is the constructor; objects are created with no `new`:
   `Circle(1.5)`. A class without `init` is created as `Square()` using field defaults, and
   a subclass without its own `init` is created with its base class's.
 - Methods take no `self` parameter, but members are always reached through `self.`.
@@ -176,12 +183,15 @@ a compile error (or a wrong result) if missed.
   methods may have a default body (`fn greet() -> str { return "hi {self.name()}" }`), which
   classes get unless they override it. A subclass
   `init` calls `super(args)` first when the base has an `init`.
-- `private(set) balance: int` is readable anywhere but changed only inside its class or
+- `private(set) var balance: int` is readable anywhere but changed only inside its class or
   struct.
 - `#[deprecated("use g")]` on the line before a declaration makes each use a warning (the
   program still builds). It is the only attribute.
-- `private` members, `static fn` (called `Type.f()`), `const NAME: T = v` and
-  `static var name: T = v` members (used as `Type.NAME`). There are no global variables.
+- `private` members, `static fn` (called `Type.f()`), `static NAME: T = v` (fixed) and
+  `static var name: T = v` members (used as `Type.NAME`); top-level `NAME: T = v`. Their
+  values are set at compile time: literals, operators, other static values, `none`, array /
+  map / tuple literals, enum variants and struct values; **no calls or class objects** (for a
+  shared object: `static var boss: Enemy? = none`, set at run time). No global variables.
 - Classes are references (shared); `struct`s are values, copied on assignment, with
   `mut fn` for methods that change `self` and `op +(other: T) -> T` operators.
 - Arrays and maps are **values** too: `var b = a` copies.
@@ -204,7 +214,7 @@ a compile error (or a wrong result) if missed.
 - `enum Shape { Circle(r: float), Empty }`; construct as `Shape.Circle(1.0)`, match as
   `Circle(r) => ...` (no enum prefix needed in patterns). `match` must cover every case or
   have `_ =>`; arms on one line are separated by `,`.
-- `if` and `match` can be values (`let x = if a > b { a } else { b }`); then `else` is
+- `if` and `match` can be values (`x = if a > b { a } else { b }`); then `else` is
   required.
 
 **Generics**
@@ -234,9 +244,9 @@ fn min_max(xs: [int]) -> (int, int) {
 }
 
 fn main() {
-    let (lo, hi) = min_max([4, 9, 1])
-    let ages: {str: int} = {"Asha": 30}
-    let age = if let a = ages.get("Ravi") { a } else { -1 }
+    (lo, hi) = min_max([4, 9, 1])
+    ages: {str: int} = {"Asha": 30}
+    age = if a = ages.get("Ravi") { a } else { -1 }
     println(lo, hi, age)
 }
 ```
@@ -249,8 +259,8 @@ Results and `?`:
 
 ```kalinga
 fn parse_age(text: str) -> Result<int, str> {
-    let t = text.trim()
-    if let n = t.parse_int() {
+    t = text.trim()
+    if n = t.parse_int() {
         return if n >= 0 { Ok(n) } else { Err("negative: {n}") }
     }
     return Err("not a number: {text}")
@@ -307,10 +317,10 @@ fn main() {
     for x in [5, 2, 8, 1] {
         t = insert(t, x)
     }
-    let sorted = to_list(t, [])
+    sorted = to_list(t, [])
     println(sorted, sorted.map(fn(x) => x * 10).filter(fn(x) => x > 20))
     var calls = 0
-    let count = fn() {
+    count = fn() {
         calls += 1
     }
     count()
