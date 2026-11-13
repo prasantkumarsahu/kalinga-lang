@@ -165,7 +165,7 @@ class SignalCell<T> {
     }
 }
 
-/// A value that others can depend on: `let count = signal(0)`. Copies of it are the same
+/// A value that others can depend on: `count = signal(0)`. Copies of it are the same
 /// signal.
 struct Signal<T> {
     cell: SignalCell<T>
@@ -207,7 +207,7 @@ class ComputedCell<T> {
     var value: T
 }
 
-/// A value worked out from others: `let total = computed(fn() => a.get() + b.get())`.
+/// A value worked out from others: `total = computed(fn() => a.get() + b.get())`.
 struct Computed<T> {
     cell: ComputedCell<T>
     id: int
