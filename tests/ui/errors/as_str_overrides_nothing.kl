@@ -1,0 +1,11 @@
+class Dog {
+    name: str = "Rex"
+
+    override fn as_str() -> str {
+        return self.name
+    }
+}
+
+fn main() {
+    println(Dog().as_str())
+}

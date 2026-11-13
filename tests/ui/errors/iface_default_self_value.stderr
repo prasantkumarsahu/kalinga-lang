@@ -1,0 +1,3 @@
+tests/ui/errors/iface_default_self_value.kl:3:25: error: inside a default method of `A`, `self` can only call `A`'s methods
+3 |         return describe(self)
+  |                         ^^^^

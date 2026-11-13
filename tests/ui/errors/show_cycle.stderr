@@ -1,0 +1,3 @@
+tests/ui/errors/show_cycle.kl:3:5: error: `Node` cannot have a generated `as_str`: field `next` can lead back to a `Node`, so it would never finish; write `override fn as_str() -> str`
+3 |     next: Node? = none
+  |     ^^^^

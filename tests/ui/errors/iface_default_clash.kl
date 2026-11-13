@@ -1,0 +1,15 @@
+interface A {
+    fn hi() -> str {
+        return "a"
+    }
+}
+
+interface B {
+    fn hi() -> str {
+        return "b"
+    }
+}
+
+class C : A, B {}
+
+fn main() {}

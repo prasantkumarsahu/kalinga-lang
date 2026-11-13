@@ -1,0 +1,16 @@
+Dog(name: Rex, age: 3)
+dog: Dog(name: Rex, age: 3)
+Dog(name: Rex, age: 3)!
+Dog(name: Rex, age: 3)
+(1, 2)
+Animal(name: Generic)
+Cat(name: Tom, lives: 9)
+Puppy Animal(name: Bo)
+Owner(name: Ann, pets: [Dog(name: Rex, age: 3), Dog(name: Fido, age: 1)], best: none)
+Owner(name: Ann, pets: [Dog(name: Rex, age: 3), Dog(name: Fido, age: 1)], best: Dog(name: Rex, age: 3))
+[(0, 0), (3, 4)]
+none
+Walk(dog: Dog(name: Rex, age: 3), minutes: 30)
+Born(Dog(name: Rex, age: 3))
+(Dog(name: Rex, age: 3), 1)
+<(5, 6)>

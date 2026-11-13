@@ -1,0 +1,18 @@
+tests/ui/run/deprecated.kl:35:13: warning: `OldSize` is deprecated: use `Size`
+35 | fn width(s: OldSize) -> int {
+   |             ^^^^^^^
+tests/ui/run/deprecated.kl:40:13: warning: `hello` is deprecated: use `greet` instead
+40 |     println(hello())
+   |             ^^^^^
+tests/ui/run/deprecated.kl:43:15: warning: `Dog.bark` is deprecated: use `speak`
+43 |     println(d.bark())
+   |               ^^^^
+tests/ui/run/deprecated.kl:44:15: warning: `Dog.legs` is deprecated
+44 |     println(d.legs)
+   |               ^^^^
+tests/ui/run/deprecated.kl:46:13: warning: `OldSize` is deprecated: use `Size`
+46 |     let s = OldSize(2)
+   |             ^^^^^^^
+tests/ui/run/deprecated.kl:47:24: warning: `LIMIT` is deprecated
+47 |     println(width(s) + LIMIT)
+   |                        ^^^^^

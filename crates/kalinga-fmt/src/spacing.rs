@@ -49,9 +49,10 @@ enum Role {
 /// The line's text with standard spacing.
 pub fn render(line: &[Item]) -> String {
     let mut roles = roles(line);
-    // `class Dog : Animal, Show` and `interface Pet : Named`, but not the `:` of a bound
+    // `class Dog : Animal, Show`, `interface Pet : Named` and `struct V : Ord`, but not the `:` of a bound
     // inside `class Box<T: Show>`.
-    let header = matches!(line.first().and_then(Item::token), Some(Tok::Class | Tok::Abstract | Tok::Interface));
+    let header =
+        matches!(line.first().and_then(Item::token), Some(Tok::Class | Tok::Abstract | Tok::Interface | Tok::Struct));
     let mut depth = 0;
     let base_colon = line.iter().position(|i| {
         match i.token() {
@@ -175,8 +176,9 @@ fn spaced(a: &Item, ra: Role, b: &Item, rb: Role) -> bool {
     if rb == Role::Spaced {
         return true;
     }
-    let tight_after = matches!(ta, Tok::LParen | Tok::LBracket | Tok::Dot | Tok::DotDot | Tok::DotDotEq)
-        || matches!(ra, Role::Unary | Role::GenericOpen | Role::MapOpen);
+    let tight_after =
+        matches!(ta, Tok::LParen | Tok::LBracket | Tok::HashBracket | Tok::Dot | Tok::DotDot | Tok::DotDotEq)
+            || matches!(ra, Role::Unary | Role::GenericOpen | Role::MapOpen);
     let tight_before =
         matches!(tb, Tok::RParen | Tok::RBracket | Tok::Comma | Tok::Dot | Tok::Question | Tok::Colon | Tok::Semi)
             || matches!(tb, Tok::DotDot | Tok::DotDotEq)
@@ -185,8 +187,8 @@ fn spaced(a: &Item, ra: Role, b: &Item, rb: Role) -> bool {
         return false;
     }
     match tb {
-        // `f(x)`, `fn(x)`, `init(x)`, `super(x)`, `Channel<int>()`, `op +(o: V)`
-        Tok::LParen => !(names_call(ta) || ra == Role::GenericClose || ra == Role::OperatorName),
+        // `f(x)`, `fn(x)`, `init(x)`, `super(x)`, `Channel<int>()`, `op +(o: V)`, `private(set)`
+        Tok::LParen => !(names_call(ta) || ra == Role::GenericClose || ra == Role::OperatorName || *ta == Tok::Private),
         // `xs[0]`, `f()[0]`, `"abc"[1]`, but `features ["std"]`
         Tok::LBracket => {
             matches!(ta, Tok::Ident(n) if n == "features")

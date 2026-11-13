@@ -487,3 +487,22 @@ fn trigger_characters_only_open_a_list_where_they_mean_one() {
     assert!(!at("import \"std/|", "/").is_empty(), "`/` in an import path");
     assert!(at("fn main() {\n    let x = 4 /|\n}\n", "/").is_empty(), "`/` dividing");
 }
+
+#[test]
+fn classes_offer_the_default_methods_of_their_interfaces() {
+    let src = "interface Named {\n    fn name() -> str\n    fn greet() -> str {\n        return self.name()\n    }\n}\nclass Dog : Named {\n    override fn name() -> str {\n        return \"Rex\"\n    }\n}\nfn main() {\n    let d = Dog()\n    d.|\n}\n";
+    let items = complete(src);
+    assert_eq!(labels(&items), ["greet", "name"]);
+    assert!(
+        find(&items, "greet").detail.as_deref().unwrap_or("").contains("Named.greet"),
+        "{:?}",
+        find(&items, "greet").detail
+    );
+}
+
+#[test]
+fn classes_with_show_offer_the_generated_as_str() {
+    let src = "class Dog : Show {\n    name: str = \"Rex\"\n}\nfn main() {\n    let d = Dog()\n    d.|\n}\n";
+    let items = complete(src);
+    assert_eq!(labels(&items), ["as_str", "name"]);
+}

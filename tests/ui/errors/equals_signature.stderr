@@ -1,0 +1,3 @@
+tests/ui/errors/equals_signature.kl:2:14: error: override of `equals` must match `Eq.equals(other: Dog) -> bool`
+2 |     override fn equals(other: Dog) -> int {
+  |              ^^

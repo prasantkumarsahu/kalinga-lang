@@ -196,6 +196,7 @@ use std::rc::Rc;
 /// `runtime` test module below).
 const RUNTIME: &str = concat!(
     include_str!("../runtime/show.rs"),
+    include_str!("../runtime/compare.rs"),
     include_str!("../runtime/collections.rs"),
     include_str!("../runtime/random.rs"),
     include_str!("../runtime/threads.rs"),
@@ -215,6 +216,7 @@ mod runtime {
     use std::rc::Rc;
 
     include!("../runtime/show.rs");
+    include!("../runtime/compare.rs");
     include!("../runtime/collections.rs");
     include!("../runtime/random.rs");
     include!("../runtime/threads.rs");

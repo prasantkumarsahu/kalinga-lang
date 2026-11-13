@@ -1,0 +1,8 @@
+class Node : Show {
+    value: int = 0
+    next: Node? = none
+}
+
+fn main() {
+    println(Node())
+}

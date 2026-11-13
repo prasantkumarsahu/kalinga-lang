@@ -48,6 +48,9 @@ pub fn analyze(prog: &Program, m: &Model) -> (std::result::Result<TypedProgram, 
     for sname in &m.struct_order {
         c.struct_bodies(sname, &mut out, &mut errors);
     }
+    for i in &prog.interfaces {
+        c.interface_defaults(i, &mut out, &mut errors);
+    }
     c.static_values(prog, &mut out, &mut errors);
     for t in &prog.tests {
         let mut cx = Ctx::new(None, Type::Void, false);
@@ -136,6 +139,8 @@ struct Ctx {
     lambdas: Vec<LambdaFrame>,
     /// Type parameters in scope (generic function or type).
     tparams: Vec<String>,
+    /// Inside an interface's default method: the interface (with its own type parameters).
+    iface: Option<String>,
 }
 
 impl Ctx {
@@ -152,6 +157,7 @@ impl Ctx {
             loops: 0,
             lambdas: vec![],
             tparams: vec![],
+            iface: None,
         }
     }
 
@@ -312,6 +318,28 @@ impl Checker<'_> {
         }
     }
 
+    /// The default bodies of interface `decl`'s methods. `self` is the interface value there:
+    /// it can call the interface's methods, nothing else.
+    fn interface_defaults(&self, decl: &InterfaceDecl, out: &mut TypedProgram, errors: &mut Vec<Diagnostic>) {
+        let info = &self.m.interfaces[&decl.name];
+        *self.bounds.borrow_mut() = Bounds::new();
+        for meth in &decl.methods {
+            let Some(stmts) = &meth.body else { continue };
+            let Some((_, sig)) = info.methods.iter().find(|(n, _)| n == &meth.name) else { continue };
+            let mut cx = Ctx::new(None, sig.ret.clone(), false);
+            cx.tparams = info.tparams.clone();
+            cx.iface = Some(decl.name.clone());
+            let body =
+                BodyDecl { params: &meth.params, stmts, pos: meth.pos, name: meth.name.clone(), is_async: false };
+            match self.body(&mut cx, sig.clone(), body) {
+                Ok(b) => {
+                    out.iface_methods.insert((decl.name.clone(), meth.name.clone()), b);
+                }
+                Err(e) => errors.push(e),
+            }
+        }
+    }
+
     fn struct_bodies(&self, name: &str, out: &mut TypedProgram, errors: &mut Vec<Diagnostic>) {
         let info = &self.m.structs[name];
         *self.bounds.borrow_mut() = info.bounds.clone();
@@ -407,6 +435,9 @@ impl Checker<'_> {
         if !cx.lambdas.is_empty() && cx.class.is_some() {
             return err("`self` cannot be used inside a lambda; copy it first (`let me = self`) and use `me`", pos);
         }
+        if let Some(i) = &cx.iface {
+            return err(format!("inside a default method of `{}`, `self` can only call `{}`'s methods", i, i), pos);
+        }
         cx.class.clone().ok_or_else(|| Diagnostic::error("`self` is only available inside class methods", pos))
     }
 
@@ -477,17 +508,18 @@ impl Checker<'_> {
 
     /// Can `t` values be printed? A type parameter can with a `Show` bound.
     fn showable(&self, t: &Type) -> bool {
-        self.m.is_plain_with(t, &|p| self.param_has(p, |b| *b == Bound::Show))
+        self.m.showable_with(t, &|p| self.param_has(p, |b| *b == Bound::Show))
     }
 
     /// Can `t` values be compared with `==`? A type parameter can with `Eq` or `Ord`.
     fn comparable(&self, t: &Type) -> bool {
-        self.m.is_plain_with(t, &|p| self.param_has(p, |b| matches!(b, Bound::Eq | Bound::Ord)))
+        self.m.comparable_with(t, &|p| self.param_has(p, |b| matches!(b, Bound::Eq | Bound::Ord)))
     }
 
-    /// Is `t` a type parameter with an `Ord` bound?
-    fn ordered_param(&self, t: &Type) -> bool {
-        matches!(t, Type::Param(p) if self.param_has(p, |b| *b == Bound::Ord))
+    /// Can `t` values be ordered (`<`, `sort`)? Numbers, strings, booleans, objects whose
+    /// class has `Ord`, and type parameters with an `Ord` bound.
+    fn ordered(&self, t: &Type) -> bool {
+        self.m.ordered_with(t, &|p| self.param_has(p, |b| *b == Bound::Ord))
     }
 
     /// Does the type argument `t` meet the bound `b`?
@@ -495,7 +527,7 @@ impl Checker<'_> {
         match b {
             Bound::Show => self.showable(t),
             Bound::Eq => self.comparable(t),
-            Bound::Ord => matches!(t, Type::Int | Type::Float | Type::Str | Type::Bool) || self.ordered_param(t),
+            Bound::Ord => self.ordered(t),
             Bound::Interface(i, args) => self.assignable(t, &Type::Interface(i.clone(), args.clone())),
         }
     }
@@ -511,9 +543,13 @@ fn texpr(kind: TExprKind, ty: Type, pos: Span) -> TExpr {
     TExpr { kind, ty, pos }
 }
 
-/// "; add a bound: `<T: Eq>`" when `t` is a type parameter.
+/// "; add a bound: `<T: Eq>`" when `t` is a type parameter, "; add `: Eq` to `Dog`" for a class.
 fn bound_hint(t: &Type, bound: &str) -> String {
-    if let Type::Param(p) = t { format!("; add a bound: `<{}: {}>`", p, bound) } else { String::new() }
+    match t {
+        Type::Param(p) => format!("; add a bound: `<{}: {}>`", p, bound),
+        Type::Class(c) => format!("; add `: {}` to `{}`", bound.replace(" + ", ", "), c),
+        _ => String::new(),
+    }
 }
 
 /// Conservative check that a body returns on every path.

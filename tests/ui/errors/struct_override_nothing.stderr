@@ -1,0 +1,3 @@
+tests/ui/errors/struct_override_nothing.kl:4:14: error: `as_str` overrides nothing; add `: Show` to `Point`
+4 |     override fn as_str() -> str {
+  |              ^^

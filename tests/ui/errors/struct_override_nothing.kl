@@ -1,0 +1,10 @@
+struct Point {
+    x: int
+
+    override fn as_str() -> str {
+        return "p"
+    }
+}
+
+fn main() {
+}

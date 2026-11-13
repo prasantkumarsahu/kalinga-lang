@@ -1,0 +1,8 @@
+class Account {
+    private(set) history: [int] = []
+}
+
+fn main() {
+    let a = Account()
+    a.history.push(1)
+}

@@ -148,6 +148,13 @@ The rules behind it:
    concrete struct, so calls are direct (and can be inlined by the optimizer). Only
    classes that actually have subclasses pay for a virtual call.
 
+Printing and comparing objects go through small traits of the runtime, since Rust does not
+let a program give its own `PartialEq` to `Rc<RefCell<..>>`: `__KlShow` (printing, also for
+numbers, strings and containers), `__KlEq` (`==`) and `__KlOrd` (ordering). A class with
+`: Show`, `: Eq` or `: Ord` gets impls of them that call its `as_str`, `equals` or `compare`
+(written by the compiler from the fields, unless overridden). Comparisons of plain numbers
+and strings stay ordinary Rust `==` and `<`.
+
 ## Mapping statements and expressions
 
 | Kalinga | Rust |

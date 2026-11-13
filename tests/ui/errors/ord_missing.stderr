@@ -1,0 +1,3 @@
+tests/ui/errors/ord_missing.kl:7:9: error: `sort` works on arrays of int, float, str or bool, not `Dog`; add `: Ord` to `Dog`
+7 |     dogs.sort()
+  |         ^

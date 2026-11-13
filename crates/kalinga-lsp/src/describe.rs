@@ -1,5 +1,7 @@
 //! How symbols are shown: their signature as Kalinga code, and their `///` docs.
 
+use std::collections::HashSet;
+
 use kalinga_sema::builtins::{self, CONSTANTS, FUNCTIONS};
 use kalinga_sema::index::Symbol;
 use kalinga_sema::{Bounds, Model, Signature, Type};
@@ -124,7 +126,7 @@ fn member(m: &Model, owner: &str, name: &str) -> Option<String> {
     }
     if let Some(c) = m.classes.get(owner) {
         if let Some((_, t)) = c.fields.iter().find(|(n, _)| n == name) {
-            return Some(format!("{}: {}", name, t));
+            return Some(format!("{}{}: {}", access(&c.private_fields, &c.private_set_fields, name), name, t));
         }
         if let Some(sig) = c.methods.get(name) {
             return Some(format!("fn {}{}", name, params_and_ret(sig)));
@@ -134,7 +136,7 @@ fn member(m: &Model, owner: &str, name: &str) -> Option<String> {
     }
     let s = m.structs.get(owner)?;
     if let Some((_, t)) = s.fields.iter().find(|(n, _)| n == name) {
-        return Some(format!("{}: {}", name, t));
+        return Some(format!("{}{}: {}", access(&s.private_fields, &s.private_set_fields, name), name, t));
     }
     let meth = s.methods.get(name)?;
     let kw = match (meth.is_static, meth.is_mut) {
@@ -143,6 +145,17 @@ fn member(m: &Model, owner: &str, name: &str) -> Option<String> {
         (false, false) => "fn",
     };
     Some(format!("{} {}{}", kw, name, params_and_ret(&meth.sig)))
+}
+
+/// `private ` or `private(set) ` before a field, when it is one.
+fn access(private: &HashSet<String>, private_set: &HashSet<String>, name: &str) -> &'static str {
+    if private.contains(name) {
+        "private "
+    } else if private_set.contains(name) {
+        "private(set) "
+    } else {
+        ""
+    }
 }
 
 fn builtin(receiver: Option<&'static str>, name: &str) -> Option<Description> {

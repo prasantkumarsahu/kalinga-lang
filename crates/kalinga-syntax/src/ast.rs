@@ -36,6 +36,8 @@ pub struct BoundDecl {
 #[derive(Debug, Clone)]
 pub struct FnDecl {
     pub name: String,
+    /// `#[...]` lines written before it.
+    pub attrs: Vec<Attribute>,
     /// Type parameters: `fn first<T>(...)`.
     pub tparams: Vec<String>,
     /// Bounds on the type parameters that have them.
@@ -55,12 +57,24 @@ pub struct FnDecl {
     pub pos: Span,
 }
 
+/// `#[name]` or `#[name("text", ...)]` before a declaration. Only `deprecated` exists so far.
+#[derive(Debug, Clone)]
+pub struct Attribute {
+    pub name: String,
+    pub args: Vec<String>,
+    pub pos: Span,
+}
+
 #[derive(Debug, Clone)]
 pub struct FieldDecl {
     pub name: String,
+    /// `#[...]` lines written before it.
+    pub attrs: Vec<Attribute>,
     pub ty: TypeExpr,
     pub default: Option<Expr>,
     pub is_private: bool,
+    /// `private(set)`: readable anywhere, assignable only inside its class or struct.
+    pub is_private_set: bool,
     pub pos: Span,
 }
 
@@ -70,6 +84,8 @@ pub struct FieldDecl {
 #[derive(Debug, Clone)]
 pub struct StaticDecl {
     pub name: String,
+    /// `#[...]` lines written before it.
+    pub attrs: Vec<Attribute>,
     pub ty: TypeExpr,
     pub value: Expr,
     /// `static var` rather than `const`.
@@ -87,6 +103,8 @@ pub struct InitDecl {
 #[derive(Debug, Clone)]
 pub struct ClassDecl {
     pub name: String,
+    /// `#[...]` lines written before it.
+    pub attrs: Vec<Attribute>,
     /// Type parameters: `class Stack<T>`.
     pub tparams: Vec<String>,
     pub bounds: Vec<BoundDecl>,
@@ -106,14 +124,20 @@ pub struct ClassDecl {
 #[derive(Debug, Clone)]
 pub struct MethodSig {
     pub name: String,
+    /// `#[...]` lines written before it.
+    pub attrs: Vec<Attribute>,
     pub params: Vec<Param>,
     pub ret: TypeExpr,
+    /// A default body: classes implementing the interface get it unless they override it.
+    pub body: Option<Vec<Stmt>>,
     pub pos: Span,
 }
 
 #[derive(Debug, Clone)]
 pub struct InterfaceDecl {
     pub name: String,
+    /// `#[...]` lines written before it.
+    pub attrs: Vec<Attribute>,
     /// Type parameters: `interface Store<T>`.
     pub tparams: Vec<String>,
     /// Super-interfaces after `:`.
@@ -140,9 +164,13 @@ pub struct OpDecl {
 #[derive(Debug, Clone)]
 pub struct StructDecl {
     pub name: String,
+    /// `#[...]` lines written before it.
+    pub attrs: Vec<Attribute>,
     /// Type parameters: `struct Grid<T>`.
     pub tparams: Vec<String>,
     pub bounds: Vec<BoundDecl>,
+    /// The built-in interfaces listed after `:` (`struct Version : Ord`).
+    pub bases: Vec<(String, Span)>,
     pub fields: Vec<FieldDecl>,
     pub methods: Vec<FnDecl>,
     pub ops: Vec<OpDecl>,
@@ -182,6 +210,8 @@ pub struct VariantDecl {
 #[derive(Debug, Clone)]
 pub struct EnumDecl {
     pub name: String,
+    /// `#[...]` lines written before it.
+    pub attrs: Vec<Attribute>,
     /// Type parameters: `enum Tree<T>`.
     pub tparams: Vec<String>,
     pub bounds: Vec<BoundDecl>,

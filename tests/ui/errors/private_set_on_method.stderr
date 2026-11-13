@@ -1,0 +1,3 @@
+tests/ui/errors/private_set_on_method.kl:2:18: error: `private(set)` is only for fields; write `private fn` for a private method
+2 |     private(set) fn reset() {
+  |                  ^^

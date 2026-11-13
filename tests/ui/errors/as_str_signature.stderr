@@ -1,0 +1,3 @@
+tests/ui/errors/as_str_signature.kl:2:14: error: override of `as_str` must match `Show.as_str() -> str`
+2 |     override fn as_str() -> int {
+  |              ^^

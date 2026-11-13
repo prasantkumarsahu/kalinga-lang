@@ -10,12 +10,12 @@ use lsp_types::notification::{
 };
 use lsp_types::request::{
     CodeActionRequest, Completion, DocumentSymbolRequest, Formatting, GotoDefinition, HoverRequest,
-    PrepareRenameRequest, References, Rename, Request as LspRequest, SignatureHelpRequest,
+    PrepareRenameRequest, References, Rename, Request as LspRequest, SemanticTokensFullRequest, SignatureHelpRequest,
 };
 use lsp_types::*;
 
 use crate::world::World;
-use crate::{actions, completion, formatting, hover, navigation, signature};
+use crate::{actions, completion, formatting, hover, navigation, semantic, signature};
 
 type Fallible<T> = Result<T, Box<dyn Error + Send + Sync>>;
 
@@ -43,6 +43,13 @@ pub fn capabilities() -> ServerCapabilities {
         document_symbol_provider: Some(OneOf::Left(true)),
         code_action_provider: Some(CodeActionProviderCapability::Simple(true)),
         document_formatting_provider: Some(OneOf::Left(true)),
+        semantic_tokens_provider: Some(SemanticTokensServerCapabilities::SemanticTokensOptions(
+            SemanticTokensOptions {
+                legend: semantic::legend(),
+                full: Some(SemanticTokensFullOptions::Bool(true)),
+                ..SemanticTokensOptions::default()
+            },
+        )),
         ..ServerCapabilities::default()
     }
 }
@@ -135,6 +142,7 @@ fn dispatch(world: &mut World, req: Request) -> Result<serde_json::Value, (Error
         DocumentSymbolRequest::METHOD => answer::<DocumentSymbolRequest>(req, |p| navigation::symbols(world, p)),
         CodeActionRequest::METHOD => answer::<CodeActionRequest>(req, |p| actions::actions(world, p)),
         Formatting::METHOD => answer::<Formatting>(req, |p| formatting::format(world, p)),
+        SemanticTokensFullRequest::METHOD => answer::<SemanticTokensFullRequest>(req, |p| semantic::full(world, p)),
         _ => Err((ErrorCode::MethodNotFound, format!("unknown request `{}`", req.method))),
     }
 }

@@ -31,6 +31,7 @@ impl Model {
         let mut rules = vec![];
         let declared = (|| {
             let mut m = Model::empty(type_names(prog)?);
+            m.declare_attributes(prog)?;
             m.declare_enums(prog)?;
             m.declare_structs(prog)?;
             m.check_value_types(prog)?;
@@ -41,6 +42,11 @@ impl Model {
             rules.extend(check_tests(prog).err());
             m.declare_classes(prog)?;
             m.order_classes(prog)?;
+            m.add_generated_methods();
+            m.find_show_types();
+            for st in m.struct_order.clone() {
+                m.check_struct_generated(&st)?;
+            }
             Ok(m)
         })();
         let m = match declared {
@@ -75,6 +81,11 @@ impl Model {
             structs: HashMap::new(),
             struct_order: vec![],
             plain_structs: HashSet::new(),
+            deprecated: HashMap::new(),
+            show_enums: HashSet::new(),
+            show_structs: HashSet::new(),
+            eq_enums: HashSet::new(),
+            eq_structs: HashSet::new(),
             names,
         }
     }
@@ -208,6 +219,83 @@ impl Model {
         }
     }
 
+    /// Checks every `#[...]` (only `deprecated`, with at most one message, exists) and
+    /// records what is deprecated.
+    fn declare_attributes(&mut self, prog: &Program) -> Result<()> {
+        use crate::index::Symbol;
+        let member = |owner: &str, name: &str| Symbol::Member { owner: owner.to_string(), name: name.to_string() };
+        let mut marked: Vec<(Symbol, &[Attribute])> = vec![];
+        for f in &prog.functions {
+            marked.push((Symbol::Function(f.name.clone()), &f.attrs));
+        }
+        for c in &prog.consts {
+            marked.push((Symbol::Const(c.name.clone()), &c.attrs));
+        }
+        for e in &prog.enums {
+            marked.push((Symbol::Type(e.name.clone()), &e.attrs));
+        }
+        for i in &prog.interfaces {
+            marked.push((Symbol::Type(i.name.clone()), &i.attrs));
+            marked.extend(i.methods.iter().map(|m| (member(&i.name, &m.name), m.attrs.as_slice())));
+        }
+        for c in &prog.classes {
+            marked.push((Symbol::Type(c.name.clone()), &c.attrs));
+            marked.extend(c.fields.iter().map(|f| (member(&c.name, &f.name), f.attrs.as_slice())));
+            marked.extend(c.methods.iter().map(|f| (member(&c.name, &f.name), f.attrs.as_slice())));
+            marked.extend(c.statics.iter().map(|f| (member(&c.name, &f.name), f.attrs.as_slice())));
+        }
+        for s in &prog.structs {
+            marked.push((Symbol::Type(s.name.clone()), &s.attrs));
+            marked.extend(s.fields.iter().map(|f| (member(&s.name, &f.name), f.attrs.as_slice())));
+            marked.extend(s.methods.iter().map(|f| (member(&s.name, &f.name), f.attrs.as_slice())));
+            marked.extend(s.statics.iter().map(|f| (member(&s.name, &f.name), f.attrs.as_slice())));
+        }
+        for (symbol, attrs) in marked {
+            let mut seen = HashSet::new();
+            for a in attrs {
+                if a.name != "deprecated" {
+                    let what = format!("unknown attribute `{}`", a.name);
+                    return crate::suggest::unknown(what, a.pos, &a.name, ["deprecated"]);
+                }
+                if !seen.insert(a.name.as_str()) {
+                    return err(format!("`#[{}]` is written twice", a.name), a.pos);
+                }
+                if a.args.len() > 1 {
+                    return err("`#[deprecated]` takes at most one message: `#[deprecated(\"use g\")]`", a.pos);
+                }
+                self.deprecated.insert(symbol.clone(), a.args.first().cloned());
+            }
+        }
+        Ok(())
+    }
+
+    /// Like `find_plain_types`, for printing only: enums and structs can also hold objects
+    /// whose class has `Show`. Runs once classes are known.
+    fn find_show_types(&mut self) {
+        for eq in [false, true] {
+            let mut enums: HashSet<String> = self.enums.keys().cloned().collect();
+            let mut structs: HashSet<String> = self.structs.keys().cloned().collect();
+            loop {
+                let before = enums.len() + structs.len();
+                if eq {
+                    (self.eq_enums, self.eq_structs) = (enums.clone(), structs.clone());
+                } else {
+                    (self.show_enums, self.show_structs) = (enums.clone(), structs.clone());
+                }
+                let ok = |t: &Type| {
+                    if eq { self.comparable_with(t, &|_| true) } else { self.showable_with(t, &|_| true) }
+                };
+                enums.retain(|n| self.enums[n].variants.iter().all(|(_, fs)| fs.iter().all(|(_, t)| ok(t))));
+                // A struct listing `Show` / `Eq` prints / compares through its method.
+                let listed = |n: &str| self.struct_has(n, if eq { &Bound::Eq } else { &Bound::Show });
+                structs.retain(|n| listed(n) || self.structs[n].fields.iter().all(|(_, t)| ok(t)));
+                if enums.len() + structs.len() == before {
+                    break;
+                }
+            }
+        }
+    }
+
     fn declare_interfaces(&mut self, prog: &Program) -> Result<()> {
         for i in &prog.interfaces {
             self.check_tparams(&i.tparams, i.pos)?;
@@ -233,7 +321,8 @@ impl Model {
                     super_args.insert(b.clone(), targs);
                 }
             }
-            let info = InterfaceInfo { tparams: i.tparams.clone(), methods, supers, super_args };
+            let defaults = i.methods.iter().filter(|m| m.body.is_some()).map(|m| m.name.clone()).collect();
+            let info = InterfaceInfo { tparams: i.tparams.clone(), methods, supers, super_args, defaults };
             self.interfaces.insert(i.name.clone(), info);
             self.interface_order.push(i.name.clone());
         }
@@ -362,6 +451,29 @@ impl Model {
         Ok(())
     }
 
+    /// The methods classes get from the built-in interfaces they list (`as_str` for `Show`),
+    /// unless the class or a base class has written them. For `Show`, a subclass of a class
+    /// with a generated `as_str` gets its own (with its own name and fields); `equals` and
+    /// `compare` take the class that lists `Eq` / `Ord`, so subclasses inherit them. Parents
+    /// come first.
+    fn add_generated_methods(&mut self) {
+        for c in self.class_order.clone() {
+            for (cap, name) in CAPABILITIES {
+                let Some(b) = Bound::capability(cap).filter(|b| self.class_has(&c, b)) else { continue };
+                let written = match self.find_method(&c, name) {
+                    Some((owner, _)) => b != Bound::Show || !self.classes[&owner].generated.contains(*name),
+                    None => false,
+                };
+                if !written {
+                    let sig = self.capability_signature(&c, &b);
+                    let info = self.classes.get_mut(&c).expect("a declared class");
+                    info.methods.insert(name.to_string(), sig);
+                    info.generated.insert(name.to_string());
+                }
+            }
+        }
+    }
+
     /// Rejects inheritance cycles; orders classes parents first and links children.
     fn order_classes(&mut self, prog: &Program) -> Result<()> {
         for c in &prog.classes {
@@ -400,6 +512,7 @@ impl Model {
         }
         self.check_overrides(name)?;
         self.check_conformance(name)?;
+        self.check_generated(name)?;
         // Concrete classes must implement every inherited abstract method.
         if !info.decl.is_abstract {
             for (mname, owner, _) in self.method_table(name) {
@@ -448,6 +561,31 @@ impl Model {
                 }
                 continue;
             }
+            if inherited.is_none()
+                && let Some(cap) = self.capability_of(name, &meth.name)
+            {
+                // The method a built-in interface gives the class (`as_str` for `Show`).
+                let want = self.capability_signature(name, &cap);
+                if !meth.is_override {
+                    return err(
+                        format!("method `{}` implements `{}.{}`; mark it `override fn`", meth.name, cap, meth.name),
+                        meth.pos,
+                    );
+                }
+                if !want.same_shape(sig) {
+                    return err(
+                        format!("override of `{}` must match `{}.{}{}`", meth.name, cap, meth.name, want.describe()),
+                        meth.pos,
+                    );
+                }
+                continue;
+            }
+            if inherited.is_none()
+                && meth.is_override
+                && let Some((cap, _)) = CAPABILITIES.iter().find(|(_, m)| *m == meth.name)
+            {
+                return err(format!("`{}` overrides nothing; add `: {}` to `{}`", meth.name, cap, name), meth.pos);
+            }
             match (inherited, meth.is_override) {
                 (Some((owner, psig)), true) if !psig.same_shape(sig) => {
                     return err(
@@ -477,6 +615,23 @@ impl Model {
     /// implemented with the same signature, and not `private`.
     fn check_conformance(&self, name: &str) -> Result<()> {
         let info = &self.classes[name];
+        // The same default from two unrelated interfaces: the class must choose.
+        let mut defaults: HashMap<&str, String> = HashMap::new();
+        for i in self.all_interfaces(name) {
+            for m in &self.interfaces[&i].defaults {
+                if self.find_method(name, m).is_none()
+                    && let Some(other) = defaults.insert(m, i.clone())
+                {
+                    return err(
+                        format!(
+                            "`{}` gets a default `{}` from both `{}` and `{}`; write `override fn {}`",
+                            name, m, other, i, m
+                        ),
+                        info.decl.pos,
+                    );
+                }
+            }
+        }
         for direct in &info.interfaces {
             let dargs = info.interface_args.get(direct).cloned().unwrap_or_default();
             for iname in self.iface_closure(direct) {
@@ -485,6 +640,7 @@ impl Model {
                 for (mname, isig) in &self.interfaces[&iname].methods {
                     let isig = &subst_sig(isig, &map);
                     match self.find_method(name, mname) {
+                        None if self.interfaces[&iname].defaults.contains(mname) => {}
                         None => {
                             return err(
                                 format!("`{}` does not implement `{}.{}{}`", name, iname, mname, isig.describe()),
@@ -505,6 +661,79 @@ impl Model {
                         }
                         _ => {}
                     }
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
+impl Model {
+    /// A struct's generated `as_str` / `equals` / `compare` uses every field, so each must
+    /// be showable / comparable / ordered.
+    fn check_struct_generated(&self, name: &str) -> Result<()> {
+        let info = &self.structs[name];
+        for (cap, method) in CAPABILITIES {
+            if !info.generated.contains(*method) {
+                continue;
+            }
+            let write = format!("write `override fn {}{}`", method, info.methods[*method].sig.describe());
+            for ((f, t), d) in info.fields.iter().zip(&info.decl.fields) {
+                let (ok, what) = match *cap {
+                    "Show" => (self.showable_with(t, &|_| false), "shown"),
+                    "Eq" => (self.comparable_with(t, &|_| false), "compared"),
+                    _ => (self.ordered_with(t, &|_| false), "ordered"),
+                };
+                if !ok {
+                    return err(
+                        format!("field `{}` of type `{}` cannot be {}; {} in `{}`", f, t, what, write, name),
+                        d.pos,
+                    );
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// A generated `as_str` / `equals` / `compare` uses every field, so each must be
+    /// showable / comparable / ordered, and none may lead back to an object of this class
+    /// (it would never finish).
+    fn check_generated(&self, name: &str) -> Result<()> {
+        let info = &self.classes[name];
+        for (cap, method) in CAPABILITIES {
+            if !info.generated.contains(*method) {
+                continue;
+            }
+            let sig = &info.methods[*method];
+            let write = format!("write `override fn {}{}`", method, sig.describe());
+            for (f, t, owner) in self.all_fields(name) {
+                // Point at the field when this class declares it, else at the class.
+                let pos =
+                    info.decl.fields.iter().find(|d| d.name == f && owner == name).map_or(info.decl.pos, |d| d.pos);
+                if self.reaches_class(&t, name, &mut HashSet::new()) {
+                    return err(
+                        format!(
+                            "`{}` cannot have a generated `{}`: field `{}` can lead back to a `{}`, so it would never finish; {}",
+                            name, method, f, name, write
+                        ),
+                        pos,
+                    );
+                }
+                let (ok, what) = match *cap {
+                    "Show" => (self.showable_with(&t, &|_| false), "shown"),
+                    "Eq" => (self.comparable_with(&t, &|_| false), "compared"),
+                    _ => (self.ordered_with(&t, &|_| false), "ordered"),
+                };
+                if !ok {
+                    let give = if matches!(t, Type::Class(_)) {
+                        format!("give `{}` `: {}`, or ", t, cap)
+                    } else {
+                        String::new()
+                    };
+                    return err(
+                        format!("field `{}` of type `{}` cannot be {}; {}{} in `{}`", f, t, what, give, write, name),
+                        pos,
+                    );
                 }
             }
         }
@@ -615,7 +844,8 @@ fn struct_info(st: &StructDecl, names: &TypeNames) -> Result<StructInfo> {
         }
         fields.push((f.name.clone(), ty));
     }
-    let methods = struct_methods(st, &fields, &resolve)?;
+    let mut methods = struct_methods(st, &fields, &resolve)?;
+    let (capabilities, generated) = struct_capabilities(st, names, &mut methods)?;
     let ops = struct_ops(st, &resolve)?;
     let taken = |n: &str| fields.iter().any(|(f, _)| f == n) || methods.contains_key(n);
     let static_values = static_values(&st.name, &st.statics, &st.tparams, &taken, &resolve)?;
@@ -625,10 +855,87 @@ fn struct_info(st: &StructDecl, names: &TypeNames) -> Result<StructInfo> {
         bounds: resolve_bounds(&st.bounds, names, &st.tparams)?,
         fields,
         private_fields: st.fields.iter().filter(|f| f.is_private).map(|f| f.name.clone()).collect(),
+        private_set_fields: st.fields.iter().filter(|f| f.is_private_set).map(|f| f.name.clone()).collect(),
         methods,
         ops,
+        capabilities,
+        generated,
         static_values,
     })
+}
+
+/// The built-in interfaces a struct lists (`struct Version : Ord`), and the methods the
+/// compiler writes for it: those the struct does not write itself with `override fn`.
+fn struct_capabilities(
+    st: &StructDecl,
+    names: &TypeNames,
+    methods: &mut HashMap<String, StructMethod>,
+) -> Result<(Vec<Bound>, HashSet<String>)> {
+    let mut caps = vec![];
+    for (b, pos) in &st.bases {
+        let Some(cap) = Bound::capability(b).filter(|_| !names.contains(b)) else {
+            let what = format!(
+                "structs cannot extend classes or implement interfaces; after `:` a struct can only list `Show`, `Eq` and `Ord` (found `{}`)",
+                b
+            );
+            return crate::suggest::unknown(what, *pos, b, ["Show", "Eq", "Ord"]);
+        };
+        if caps.contains(&cap) {
+            return err(format!("interface `{}` listed twice", b), *pos);
+        }
+        if !st.tparams.is_empty() {
+            return err(format!("generic structs cannot list `{}` yet", b), *pos);
+        }
+        caps.push(cap);
+    }
+    let has = |b: &Bound| caps.contains(b) || (*b == Bound::Eq && caps.contains(&Bound::Ord));
+    let me = || ("other".to_string(), Type::Struct(st.name.clone(), vec![]));
+    let mut generated = HashSet::new();
+    for (cap, name) in CAPABILITIES {
+        let b = Bound::capability(cap).expect("a built-in interface");
+        let want = match b {
+            Bound::Show => Signature { params: vec![], ret: Type::Str },
+            Bound::Eq => Signature { params: vec![me()], ret: Type::Bool },
+            _ => Signature { params: vec![me()], ret: Type::Int },
+        };
+        let written = st.methods.iter().find(|m| m.name == *name);
+        match written {
+            Some(m) if has(&b) => {
+                if !m.is_override {
+                    return err(
+                        format!("method `{}` implements `{}.{}`; mark it `override fn`", name, cap, name),
+                        m.pos,
+                    );
+                }
+                if m.is_static || m.is_mut || !methods[*name].sig.same_shape(&want) {
+                    return err(
+                        format!("override of `{}` must match `{}.{}{}`", name, cap, name, want.describe()),
+                        m.pos,
+                    );
+                }
+            }
+            Some(m) if m.is_override => {
+                return err(format!("`{}` overrides nothing; add `: {}` to `{}`", name, cap, st.name), m.pos);
+            }
+            None if has(&b) => {
+                let sig =
+                    StructMethod { sig: want, is_mut: false, is_async: false, is_static: false, is_private: false };
+                methods.insert(name.to_string(), sig);
+                generated.insert(name.to_string());
+            }
+            _ => {}
+        }
+    }
+    if let Some(m) = st.methods.iter().find(|m| m.is_override && !CAPABILITIES.iter().any(|(_, n)| *n == m.name)) {
+        return err(
+            format!(
+                "`{}` is marked override, but structs have no base class; only `as_str`, `equals` and `compare` can be",
+                m.name
+            ),
+            m.pos,
+        );
+    }
+    Ok((caps, generated))
 }
 
 fn struct_methods(
@@ -692,7 +999,7 @@ fn struct_ops(st: &StructDecl, resolve: &dyn Fn(&TypeExpr) -> Result<Type>) -> R
 
 fn class_info(c: &ClassDecl, names: &TypeNames) -> Result<ClassInfo> {
     let resolve = |t: &TypeExpr| resolve_type(t, names, &c.tparams);
-    let (parent, interfaces, interface_args) = class_bases(c, names, &resolve)?;
+    let (parent, interfaces, interface_args, capabilities) = class_bases(c, names, &resolve)?;
     let fields = class_fields(c, &resolve)?;
     let mut methods = HashMap::new();
     let mut statics = HashMap::new();
@@ -724,11 +1031,14 @@ fn class_info(c: &ClassDecl, names: &TypeNames) -> Result<ClassInfo> {
         methods,
         statics,
         private_fields: c.fields.iter().filter(|f| f.is_private).map(|f| f.name.clone()).collect(),
+        private_set_fields: c.fields.iter().filter(|f| f.is_private_set).map(|f| f.name.clone()).collect(),
         private_methods: names_where(|m| m.is_private),
         abstract_methods: names_where(|m| m.is_abstract),
         async_statics: names_where(|m| m.is_async),
         init,
         children: vec![],
+        capabilities,
+        generated: HashSet::new(),
         tparams: c.tparams.clone(),
         bounds: resolve_bounds(&c.bounds, names, &c.tparams)?,
         static_values,
@@ -742,7 +1052,7 @@ fn class_bases(
     c: &ClassDecl,
     names: &TypeNames,
     resolve: &dyn Fn(&TypeExpr) -> Result<Type>,
-) -> Result<(Option<String>, Vec<String>, HashMap<String, Vec<Type>>)> {
+) -> Result<(Option<String>, Vec<String>, HashMap<String, Vec<Type>>, Vec<Bound>)> {
     for ((b, pos), args) in c.bases.iter().zip(&c.base_args) {
         if names.generic.contains_key(b) || (names.classes.contains(b) && !args.is_empty()) {
             return err(format!("`{}` is generic and cannot be extended (yet)", b), *pos);
@@ -751,6 +1061,7 @@ fn class_bases(
     let mut parent = None;
     let mut interfaces = Vec::new();
     let mut interface_args = HashMap::new();
+    let mut capabilities = Vec::new();
     for ((b, pos), args) in c.bases.iter().zip(&c.base_args) {
         if names.classes.contains(b) {
             if parent.is_some() {
@@ -774,11 +1085,18 @@ fn class_bases(
             if let Type::Interface(_, targs) = resolve(&TypeExpr::Named(b.clone(), args.clone(), *pos))? {
                 interface_args.insert(b.clone(), targs);
             }
+        } else if let Some(cap) = Bound::capability(b).filter(|_| !names.contains(b)) {
+            // A built-in interface, unless the program declares its own type with that name.
+            if capabilities.contains(&cap) {
+                return err(format!("interface `{}` listed twice", b), *pos);
+            }
+            capabilities.push(cap);
         } else {
-            return err(format!("unknown class or interface `{}`", b), *pos);
+            let known = names.classes.iter().chain(&names.ifaces).map(String::as_str).chain(["Show", "Eq", "Ord"]);
+            return crate::suggest::unknown(format!("unknown class or interface `{}`", b), *pos, b, known);
         }
     }
-    Ok((parent, interfaces, interface_args))
+    Ok((parent, interfaces, interface_args, capabilities))
 }
 
 fn class_fields(c: &ClassDecl, resolve: &dyn Fn(&TypeExpr) -> Result<Type>) -> Result<Vec<(String, Type)>> {

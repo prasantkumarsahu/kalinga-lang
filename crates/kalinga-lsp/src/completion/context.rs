@@ -224,8 +224,14 @@ fn opener(header: &[kalinga_syntax::token::Token], text: &str) -> Opener {
 /// The source text of the tokens from `from` to the end of `header`, on their line.
 fn source_between(text: &str, header: &[kalinga_syntax::token::Token], from: usize) -> String {
     let (Some(first), Some(last)) = (header.get(from), header.last()) else { return String::new() };
-    let line = crate::text::line(text, first.pos.line - 1);
-    line.chars().skip(first.pos.col - 1).take(last.pos.col + last.pos.len - first.pos.col).collect()
+    let line = crate::text::line(text, first.pos.line.saturating_sub(1));
+    // A header broken over lines: the rest of the first line.
+    let len = if last.pos.line == first.pos.line {
+        (last.pos.col + last.pos.len).saturating_sub(first.pos.col)
+    } else {
+        usize::MAX
+    };
+    line.chars().skip(first.pos.col.saturating_sub(1)).take(len).collect()
 }
 
 #[cfg(test)]

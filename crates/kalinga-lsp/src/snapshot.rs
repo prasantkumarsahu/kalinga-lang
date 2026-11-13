@@ -8,7 +8,7 @@ use kalinga_sema::index::Symbol;
 use kalinga_sema::{Model, Type};
 use kalinga_syntax::ast::*;
 use kalinga_syntax::error::Span;
-use kalinga_syntax::token::{Tok, Token};
+use kalinga_syntax::token::{StrPart, Tok, Token};
 use kalinga_syntax::{lexer, visit};
 
 /// A name in the source and what it stands for.
@@ -63,7 +63,7 @@ pub struct Snapshot {
 impl Snapshot {
     pub fn new(analysis: Analysis) -> Snapshot {
         let tokens: Vec<Vec<Token>> = (0..analysis.sources.len() as u32)
-            .map(|id| lexer::lex(analysis.sources.file(id).1, id).unwrap_or_default())
+            .map(|id| with_interpolations(lexer::lex(analysis.sources.file(id).1, id).unwrap_or_default()))
             .collect();
         let finder = Finder { tokens: &tokens };
         let mut decls = vec![];
@@ -177,9 +177,11 @@ impl Snapshot {
     pub fn docs(&self, start: Span) -> Option<String> {
         let source = self.source(start.file);
         let lines: Vec<&str> = source.lines().take(start.line.saturating_sub(1)).collect();
+        // `/// docs` may come before `#[...]` lines.
         let doc: Vec<&str> = lines
             .iter()
             .rev()
+            .skip_while(|l| l.trim_start().starts_with("#["))
             .take_while(|l| l.trim_start().starts_with("///"))
             .map(|l| {
                 let text = l.trim_start().trim_start_matches("///");
@@ -217,6 +219,26 @@ fn replace_word(text: &str, word: &str, with: &str) -> String {
 /// Finds a name's exact span from where its expression or declaration starts.
 struct Finder<'a> {
     tokens: &'a [Vec<Token>],
+}
+
+/// The tokens with the code inside each string's `{...}` added after the string, in
+/// order, so names there are found where they are written.
+fn with_interpolations(tokens: Vec<Token>) -> Vec<Token> {
+    let mut out = Vec::with_capacity(tokens.len());
+    for t in tokens {
+        let parts = match &t.tok {
+            Tok::InterpStr(parts) => parts.clone(),
+            _ => vec![],
+        };
+        out.push(t);
+        for p in parts {
+            if let StrPart::Code(code, at) = p {
+                let inner = lexer::lex_at(&code, at).unwrap_or_default();
+                out.extend(with_interpolations(inner).into_iter().filter(|t| t.tok != Tok::Eof));
+            }
+        }
+    }
+    out
 }
 
 impl Finder<'_> {

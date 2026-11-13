@@ -1,0 +1,12 @@
+class Leash {
+    length: int = 2
+}
+
+class Dog : Show {
+    name: str = "Rex"
+    leash: Leash = Leash()
+}
+
+fn main() {
+    println(Dog())
+}

@@ -8,6 +8,9 @@
       "include": "#comments"
     },
     {
+      "include": "#attributes"
+    },
+    {
       "include": "#strings"
     },
     {
@@ -29,13 +32,43 @@
       "include": "#calls"
     },
     {
+      "include": "#parameters"
+    },
+    {
       "include": "#numbers"
     },
     {
       "include": "#operators"
+    },
+    {
+      "include": "#identifiers"
     }
   ],
   "repository": {
+    "attributes": {
+      "comment": "`#[deprecated(\"use g\")]` before a declaration",
+      "begin": "(#\\[)\\s*([A-Za-z_][A-Za-z0-9_]*)",
+      "beginCaptures": {
+        "1": {
+          "name": "punctuation.definition.annotation.kalinga"
+        },
+        "2": {
+          "name": "entity.name.function.decorator.kalinga"
+        }
+      },
+      "end": "\\]",
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.definition.annotation.kalinga"
+        }
+      },
+      "name": "meta.annotation.kalinga",
+      "patterns": [
+        {
+          "include": "#strings"
+        }
+      ]
+    },
     "comments": {
       "patterns": [
         {
@@ -64,17 +97,17 @@
         },
         {
           "name": "meta.interpolation.kalinga",
-          "contentName": "source.kalinga.embedded",
+          "contentName": "meta.embedded.line.kalinga",
           "begin": "\\{",
           "end": "\\}",
           "beginCaptures": {
             "0": {
-              "name": "punctuation.section.interpolation.begin.kalinga"
+              "name": "punctuation.section.embedded.begin.kalinga"
             }
           },
           "endCaptures": {
             "0": {
-              "name": "punctuation.section.interpolation.end.kalinga"
+              "name": "punctuation.section.embedded.end.kalinga"
             }
           },
           "patterns": [
@@ -129,8 +162,8 @@
           }
         },
         {
-          "comment": "class fields: `name: type` at the start of a line, optionally `private`",
-          "match": "^\\s*(?:(private)\\s+)?([a-z_][A-Za-z0-9_]*)\\s*(?=:)",
+          "comment": "class fields: `name: type` at the start of a line, optionally `private` or `private(set)`",
+          "match": "^\\s*(?:(private(?:\\(set\\))?)\\s+)?([a-z_][A-Za-z0-9_]*)\\s*(?=:)",
           "captures": {
             "1": {
               "name": "storage.modifier.kalinga"
@@ -238,6 +271,15 @@
         }
       ]
     },
+    "parameters": {
+      "comment": "`name: Type` after `(` or `,`: a parameter (or a named argument)",
+      "match": "(?<=\\(|,)\\s*([a-z_][A-Za-z0-9_]*)\\s*(?=:(?!:))",
+      "captures": {
+        "1": {
+          "name": "variable.parameter.kalinga"
+        }
+      }
+    },
     "numbers": {
       "patterns": [
         {
@@ -321,6 +363,11 @@
           "include": "source.rust"
         }
       ]
+    },
+    "identifiers": {
+      "comment": "any other name: a variable (the language server refines it)",
+      "name": "variable.other.readwrite.kalinga",
+      "match": "\\b[a-z_][A-Za-z0-9_]*\\b"
     }
   }
 }

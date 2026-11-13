@@ -18,6 +18,12 @@ pub fn hover(world: &mut World, params: HoverParams) -> Option<Hover> {
         if let Some(owner) = &d.owner {
             md.push_str(&format!("\n\nin `{}`", owner));
         }
+        if let Some(note) = snap.model().and_then(|m| m.deprecated.get(&name.symbol)) {
+            match note {
+                Some(note) => md.push_str(&format!("\n\n**Deprecated:** {}", snap.show(note))),
+                None => md.push_str("\n\n**Deprecated.**"),
+            }
+        }
         if let Some(docs) = &d.docs {
             md.push_str(&format!("\n\n---\n\n{}", docs));
         }

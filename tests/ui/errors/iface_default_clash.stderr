@@ -1,0 +1,3 @@
+tests/ui/errors/iface_default_clash.kl:13:1: error: `C` gets a default `hi` from both `A` and `B`; write `override fn hi`
+13 | class C : A, B {}
+   | ^^^^^

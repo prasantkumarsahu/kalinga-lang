@@ -478,6 +478,11 @@ impl Lexer {
                 self.brackets.push('[');
                 Tok::LBracket
             }
+            ('#', Some('[')) => {
+                self.bump();
+                self.brackets.push('[');
+                Tok::HashBracket
+            }
             (']', _) => {
                 self.brackets.pop();
                 Tok::RBracket

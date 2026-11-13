@@ -1,0 +1,11 @@
+interface A {
+    fn hi() -> str {
+        return describe(self)
+    }
+}
+
+fn describe(a: A) -> str {
+    return "x"
+}
+
+fn main() {}

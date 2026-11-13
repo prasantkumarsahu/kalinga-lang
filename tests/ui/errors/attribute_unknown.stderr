@@ -1,0 +1,4 @@
+tests/ui/errors/attribute_unknown.kl:1:3: error: unknown attribute `depricated`
+1 | #[depricated]
+  |   ^^^^^^^^^^
+  = help: did you mean `deprecated`?

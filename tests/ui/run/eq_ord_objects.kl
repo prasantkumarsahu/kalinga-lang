@@ -1,0 +1,128 @@
+// `: Eq` and `: Ord` compare objects, through generated or hand-written `equals` / `compare`.
+
+class Point : Show, Eq {
+    x: int
+    y: int
+
+    init(x: int, y: int) {
+        self.x = x
+        self.y = y
+    }
+}
+
+class User : Show, Eq {
+    id: int
+    name: str
+
+    init(id: int, name: str) {
+        self.id = id
+        self.name = name
+    }
+
+    // Users are the same user when their ids match, whatever the name.
+    override fn equals(other: User) -> bool {
+        return self.id == other.id
+    }
+}
+
+class Version : Show, Ord {
+    major: int
+    minor: int
+
+    init(major: int, minor: int) {
+        self.major = major
+        self.minor = minor
+    }
+}
+
+class Job : Show, Ord {
+    title: str
+    priority: int
+
+    init(title: str, priority: int) {
+        self.title = title
+        self.priority = priority
+    }
+
+    // Higher priority first.
+    override fn compare(other: Job) -> int {
+        return other.priority - self.priority
+    }
+}
+
+class Shape : Eq {
+    sides: int
+
+    init(sides: int) {
+        self.sides = sides
+    }
+}
+
+class Square : Shape {
+    init() {
+        super(4)
+    }
+}
+
+struct Pin {
+    at: Point
+    label: str
+}
+
+fn biggest<T: Ord>(items: [T]) -> T {
+    var best = items[0]
+    for x in items {
+        if x > best {
+            best = x
+        }
+    }
+    return best
+}
+
+fn count<T: Eq>(items: [T], x: T) -> int {
+    var n = 0
+    for i in items {
+        if i == x {
+            n += 1
+        }
+    }
+    return n
+}
+
+fn main() {
+    let a = Point(1, 2)
+    println(a == Point(1, 2))
+    println(a != Point(2, 1))
+    println(a == a)
+    println(a.equals(Point(1, 2)))
+    println([Point(0, 0), a].contains(Point(1, 2)))
+    assert_eq(a, Point(1, 2))
+
+    println(User(1, "Ann") == User(1, "Annie"))
+    println(User(1, "Ann") == User(2, "Ann"))
+
+    let maybe: Point? = Point(1, 2)
+    let other: Point? = Point(1, 2)
+    println(maybe == other)
+    println(Pin(a, "home") == Pin(Point(1, 2), "home"))
+    println((a, 1) == (Point(1, 2), 1))
+
+    println(Version(1, 2) < Version(1, 10))
+    println(Version(2, 0) >= Version(1, 99))
+    println(Version(1, 2).compare(Version(1, 2)))
+    var versions = [Version(1, 10), Version(0, 9), Version(1, 2)]
+    versions.sort()
+    println(versions)
+    println(biggest(versions))
+    println(Version(3, 0) == Version(3, 0))
+
+    var tasks = [Job("sleep", 1), Job("ship", 9), Job("eat", 5)]
+    tasks.sort()
+    println(tasks)
+
+    let shapes: [Shape] = [Square(), Shape(3)]
+    println(shapes[0] == Shape(4))
+    println(count(shapes, Square()))
+    println(count([1, 2, 1], 1))
+    println(biggest(["pear", "apple"]))
+}

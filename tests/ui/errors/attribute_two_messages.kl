@@ -1,0 +1,6 @@
+#[deprecated("a", "b")]
+fn old() {
+}
+
+fn main() {
+}

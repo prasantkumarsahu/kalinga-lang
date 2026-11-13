@@ -84,7 +84,7 @@ fn lines(pieces: Vec<Piece>) -> Vec<Line> {
             }
             Piece::Token(tok, text) => {
                 match tok {
-                    Tok::LParen | Tok::LBracket | Tok::LBrace => depth += 1,
+                    Tok::LParen | Tok::LBracket | Tok::HashBracket | Tok::LBrace => depth += 1,
                     Tok::RParen | Tok::RBracket | Tok::RBrace => depth -= 1,
                     _ => {}
                 }
@@ -141,7 +141,7 @@ impl Formatter {
         for item in &line[leading_closers..] {
             if let Item::Token(tok, _) = item {
                 match tok {
-                    Tok::LParen | Tok::LBracket | Tok::LBrace => self.open.push(indent + 1),
+                    Tok::LParen | Tok::LBracket | Tok::HashBracket | Tok::LBrace => self.open.push(indent + 1),
                     Tok::RParen | Tok::RBracket | Tok::RBrace => {
                         self.open.pop();
                     }
@@ -161,7 +161,7 @@ impl Formatter {
         let last = line.iter().rev().find_map(Item::token);
         let multiline_rust = matches!(last, Some(Tok::RustBlock(body)) if body.contains('\n'));
         self.closed_item = self.open.is_empty() && (leading_closers > 0 || multiline_rust);
-        self.opened = matches!(last, Some(Tok::LBrace | Tok::LParen | Tok::LBracket));
+        self.opened = matches!(last, Some(Tok::LBrace | Tok::LParen | Tok::LBracket | Tok::HashBracket));
     }
 
     /// Writes the blank line before the current one, if it gets one: a blank line in the

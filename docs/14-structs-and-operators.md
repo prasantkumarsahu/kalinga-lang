@@ -157,6 +157,50 @@ Vec2(x: 1.0, y: 9.5) Vec2(x: -1.0, y: -9.5) 1.0
 - `op -()` with no parameter is unary minus.
 - `+=`, `-=`, `*=`, `/=` and `%=` work when the operator returns the struct's own type.
 
+## Show, Eq and Ord
+
+Structs print and compare with `==` on their own when their fields can. They may also list
+`Show`, `Eq` and `Ord` (and nothing else) after `:`, like [classes](09-classes.md#printing-objects-show):
+`Ord` gives a struct an order (`<`, `sort`), and `override fn as_str`, `equals` or
+`compare` changes how it prints or compares:
+
+```kalinga
+struct Version : Ord {
+    major: int
+    minor: int
+}
+
+struct Money : Show, Eq {
+    cents: int
+    currency: str
+
+    override fn as_str() -> str {
+        return "{self.cents / 100}.{self.cents % 100} {self.currency}"
+    }
+
+    override fn equals(other: Money) -> bool {
+        return self.currency == other.currency && self.cents == other.cents
+    }
+}
+
+fn main() {
+    var vs = [Version(1, 10), Version(0, 1), Version(1, 2)]
+    vs.sort()
+    println(vs)
+    println(Version(2, 0) > Version(1, 9))
+    let m = Money(1250, "EUR")
+    println("{m}, {m == Money(1250, "USD")}")
+}
+```
+
+```text
+[Version(major: 0, minor: 1), Version(major: 1, minor: 2), Version(major: 1, minor: 10)]
+true
+12.50 EUR, false
+```
+
+Generic structs cannot list them yet.
+
 ## A game-style example
 
 Structs, operators and the [standard library](15-standard-library.md) together:

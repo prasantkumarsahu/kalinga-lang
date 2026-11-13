@@ -1,0 +1,106 @@
+// `: Show` gives a class a printed form, generated from its fields or written by hand.
+
+class Dog : Show {
+    name: str
+    age: int
+
+    init(name: str, age: int) {
+        self.name = name
+        self.age = age
+    }
+}
+
+class Point : Show {
+    x: int
+    y: int
+
+    init(x: int, y: int) {
+        self.x = x
+        self.y = y
+    }
+
+    override fn as_str() -> str {
+        return "({self.x}, {self.y})"
+    }
+}
+
+class Animal : Show {
+    name: str
+
+    init(name: str) {
+        self.name = name
+    }
+}
+
+class Cat : Animal {
+    lives: int = 9
+
+    init(name: str) {
+        super(name)
+    }
+}
+
+class Puppy : Animal {
+    init(name: str) {
+        super(name)
+    }
+
+    override fn as_str() -> str {
+        return "Puppy " + super.as_str()
+    }
+}
+
+class Owner : Show {
+    name: str
+    pets: [Dog]
+    best: Dog?
+
+    init(name: str) {
+        self.name = name
+        self.pets = []
+        self.best = none
+    }
+}
+
+struct Walk {
+    dog: Dog
+    minutes: int
+}
+
+enum Event {
+    Born(dog: Dog)
+    Nothing
+}
+
+fn describe<T: Show>(x: T) -> str {
+    return "<{x}>"
+}
+
+fn main() {
+    let rex = Dog("Rex", 3)
+    println(rex)
+    println("dog: {rex}")
+    println(str(rex) + "!")
+    println(rex.as_str())
+    println(Point(1, 2))
+
+    let animals: [Animal] = [Animal("Generic"), Cat("Tom"), Puppy("Bo")]
+    for a in animals {
+        println(a)
+    }
+
+    let o = Owner("Ann")
+    o.pets.push(rex)
+    o.pets.push(Dog("Fido", 1))
+    println(o)
+    o.best = rex
+    println(o)
+
+    println([Point(0, 0), Point(3, 4)])
+    let maybe: Dog? = none
+    println(maybe)
+    println(Walk(rex, 30))
+    println(Event.Born(rex))
+    println((rex, 1))
+    println(describe(Point(5, 6)))
+}

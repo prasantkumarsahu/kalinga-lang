@@ -62,7 +62,10 @@
       {
         "language": "kalinga",
         "scopeName": "source.kalinga",
-        "path": "./syntaxes/kalinga.tmLanguage.json"
+        "path": "./syntaxes/kalinga.tmLanguage.json",
+        "tokenTypes": {
+          "meta.embedded.line.kalinga": "other"
+        }
       }
     ],
     "snippets": [
@@ -151,6 +154,7 @@
     ],
     "configurationDefaults": {
       "[kalinga]": {
+        "editor.semanticHighlighting.enabled": true,
         "editor.quickSuggestions": {
           "other": "on",
           "comments": "off",

@@ -79,6 +79,17 @@ impl Checker<'_> {
     }
 
     fn self_method_call(&self, cx: &mut Ctx, recv: &Expr, name: &str, args: &[Expr], pos: Span) -> Result<TExpr> {
+        // In an interface's default method: the interface's own methods (and its supers').
+        if let Some(i) = cx.iface.clone() {
+            let own: Vec<Type> = self.m.interfaces[&i].tparams.iter().map(|t| Type::Param(t.clone())).collect();
+            let Some(sig) = self.m.interface_method_of(&i, &own, name) else {
+                let closure = self.m.iface_closure(&i);
+                let methods = closure.iter().flat_map(|x| self.m.interfaces[x].methods.iter().map(|(n, _)| n.as_str()));
+                return unknown(format!("interface `{}` has no method `{}`", i, name), pos, name, methods);
+            };
+            let args = self.args(cx, &sig, args, pos, name)?;
+            return Ok(texpr(TExprKind::Call { callee: Callee::SelfMethod(name.to_string()), args }, sig.ret, pos));
+        }
         if let Some(st) = cx.strukt.clone() {
             if cx.is_static {
                 return err("`self` is not available in a `static fn`", pos);
@@ -95,6 +106,8 @@ impl Checker<'_> {
             None if self.m.find_static(&class, name).is_some() => {
                 return err(format!("`{}` is a `static fn`; call it as `{}.{}(...)`", name, class, name), pos);
             }
+            // A default from one of the class's interfaces.
+            None if let Some((_, s)) = self.m.default_method(&class, name) => s,
             None => {
                 if let Some(Type::Func(ps, r)) = self.func_field(&class, name) {
                     let ft = self.field_type(cx, &class, name, pos)?;
@@ -130,6 +143,13 @@ impl Checker<'_> {
             }
             None if self.m.find_static(c, name).is_some() => {
                 return err(format!("`{}` is a `static fn`; call it as `{}.{}(...)`", name, c, name), pos);
+            }
+            // A default from one of the class's interfaces, called through that interface.
+            None if let Some((iface, sig)) = self.m.default_method(c, name) => {
+                let args = self.args(cx, &sig, args, pos, name)?;
+                let dispatch = self.m.declaring_interface(&iface, name).or(Some(iface));
+                let callee = Callee::Method { recv: Box::new(recv_t), name: name.to_string(), dispatch };
+                return Ok(texpr(TExprKind::Call { callee, args }, sig.ret, pos));
             }
             None => {
                 if let Some(Type::Func(ps, r)) = self.func_field(c, name) {
@@ -336,7 +356,7 @@ impl Checker<'_> {
                 if !args.is_empty() {
                     return err("`sort` takes no arguments (use `sort_by(fn(a, b) => ...)` for a custom order)", pos);
                 }
-                if !(matches!(*elem, Type::Int | Type::Str | Type::Bool | Type::Float) || self.ordered_param(&elem)) {
+                if !self.ordered(&elem) {
                     let hint = bound_hint(&elem, "Ord");
                     let what = if hint.is_empty() { "; use `sort_by`".to_string() } else { hint };
                     return err(

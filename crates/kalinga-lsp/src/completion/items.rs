@@ -107,6 +107,16 @@ fn class_members(snap: &Snapshot, m: &Model, c: &str, targs: &[Type], on_self: b
             }
         }
     }
+    // Default methods the class gets from its interfaces.
+    for i in m.all_interfaces(c) {
+        for name in &m.interfaces[&i].defaults {
+            if let Some((iface, sig)) = m.default_method(c, name)
+                && seen.insert(name.clone())
+            {
+                out.push(method_item(snap, &iface, name, &sig));
+            }
+        }
+    }
     out
 }
 

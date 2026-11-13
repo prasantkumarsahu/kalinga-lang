@@ -51,8 +51,9 @@ Nessie is imaginary
 ## Features
 
 - **Simple syntax**: no semicolons, `let`/`var`, `"string {interpolation}"`, type inference.
-- **Objects**: classes, single inheritance, interfaces (which can extend each other),
-  `abstract`, `private`, `static`, downcasting with `is`/`as`.
+- **Objects**: classes, single inheritance, interfaces (which can extend each other and
+  have default methods), `abstract`, `private`, `private(set)`, `static`, downcasting with
+  `is`/`as`; `: Show`, `: Eq`, `: Ord` to print, compare and sort objects.
 - **Data**: arrays, sorted maps `{K: V}`, optionals `T?` instead of null, enums with data
   and exhaustive `match`.
 - **Functions**: lambdas, function types, `map`/`filter`/`sort_by`, generics.

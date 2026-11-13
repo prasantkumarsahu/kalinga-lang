@@ -36,6 +36,27 @@ impl std::fmt::Display for Bound {
 /// The bounds of each type parameter that has some.
 pub type Bounds = HashMap<String, Vec<Bound>>;
 
+/// The built-in interfaces a class can list (`class Dog : Show`), and the method each one
+/// gives it; the compiler writes the method from the fields unless the class overrides it.
+pub const CAPABILITIES: &[(&str, &str)] = &[("Show", "as_str"), ("Eq", "equals"), ("Ord", "compare")];
+
+impl Bound {
+    /// The built-in interface named `name` that a class can list, if there is one.
+    pub fn capability(name: &str) -> Option<Bound> {
+        match name {
+            "Show" => Some(Bound::Show),
+            "Eq" => Some(Bound::Eq),
+            "Ord" => Some(Bound::Ord),
+            _ => None,
+        }
+    }
+
+    /// The method a built-in interface gives a class.
+    pub fn method(&self) -> Option<&'static str> {
+        CAPABILITIES.iter().find(|(n, _)| *n == self.to_string()).map(|(_, m)| *m)
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct ClassInfo {
     pub decl: ClassDecl,
@@ -49,12 +70,18 @@ pub struct ClassInfo {
     /// `static fn`s: not inherited through objects, called as `Class.name(...)`.
     pub statics: HashMap<String, Signature>,
     pub private_fields: HashSet<String>,
+    /// `private(set)` fields: assignable only inside the class that declares them.
+    pub private_set_fields: HashSet<String>,
     pub private_methods: HashSet<String>,
     pub abstract_methods: HashSet<String>,
     /// `static async fn`s.
     pub async_statics: HashSet<String>,
     pub init: Option<Signature>,
     pub children: Vec<String>,
+    /// Built-in interfaces listed after `:` (`class Dog : Show`).
+    pub capabilities: Vec<Bound>,
+    /// Methods the compiler writes for this class (from `capabilities`), not the user.
+    pub generated: HashSet<String>,
     /// Type parameters of a generic class (empty otherwise).
     pub tparams: Vec<String>,
     pub bounds: Bounds,
@@ -80,6 +107,8 @@ pub struct InterfaceInfo {
     pub supers: Vec<String>,
     /// The type arguments of each generic super-interface (in terms of `tparams`).
     pub super_args: HashMap<String, Vec<Type>>,
+    /// Methods declared here with a default body.
+    pub defaults: HashSet<String>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -129,8 +158,14 @@ pub struct StructInfo {
     pub bounds: Bounds,
     pub fields: Vec<(String, Type)>,
     pub private_fields: HashSet<String>,
+    /// `private(set)` fields: assignable only inside the struct.
+    pub private_set_fields: HashSet<String>,
     pub methods: HashMap<String, StructMethod>,
     pub ops: Vec<StructOp>,
+    /// Built-in interfaces listed after `:` (`struct Version : Ord`).
+    pub capabilities: Vec<Bound>,
+    /// Methods the compiler writes from the fields (`compare` for `Ord`), not the user.
+    pub generated: HashSet<String>,
     /// `const` and `static var` members, in declaration order.
     pub static_values: Vec<(String, StaticInfo)>,
 }
@@ -197,7 +232,17 @@ pub struct Model {
     pub struct_order: Vec<String>,
     /// Structs whose fields can all be printed and compared.
     pub plain_structs: HashSet<String>,
+    /// Enums and structs that can be printed: the plain ones, and those holding objects whose
+    /// class has `Show`.
+    pub show_enums: HashSet<String>,
+    pub show_structs: HashSet<String>,
+    /// Enums and structs that can be compared with `==`: the plain ones, and those holding
+    /// objects whose class has `Eq`.
+    pub eq_enums: HashSet<String>,
+    pub eq_structs: HashSet<String>,
     pub names: TypeNames,
+    /// Declarations marked `#[deprecated]`, with the message, if any.
+    pub deprecated: HashMap<crate::index::Symbol, Option<String>>,
 }
 
 pub const BUILTINS: &[&str] =
@@ -381,6 +426,22 @@ impl Model {
         None
     }
 
+    /// A method `class` gets from a default body in one of its interfaces (when neither it nor
+    /// an ancestor defines the method): (the interface that declares it, the signature with
+    /// the class's type arguments filled in).
+    pub fn default_method(&self, class: &str, method: &str) -> Option<(String, Signature)> {
+        if self.find_method(class, method).is_some() {
+            return None;
+        }
+        self.all_interfaces(class).into_iter().find_map(|i| {
+            if !self.interfaces[&i].defaults.contains(method) {
+                return None;
+            }
+            let args = self.class_iface_args(class, &i).unwrap_or_default();
+            self.interface_method_of(&i, &args, method).map(|sig| (i, sig))
+        })
+    }
+
     /// The type arguments with which `class` (or an ancestor) implements `target`.
     pub fn class_iface_args(&self, class: &str, target: &str) -> Option<Vec<Type>> {
         for a in self.ancestors(class) {
@@ -456,6 +517,150 @@ impl Model {
     /// Maps a generic class's type parameters to concrete arguments.
     pub fn bindings(&self, class: &str, args: &[Type]) -> HashMap<String, Type> {
         self.classes[class].tparams.iter().cloned().zip(args.iter().cloned()).collect()
+    }
+
+    /// Whether class `c` (or a base class) lists the built-in interface `b`.
+    /// `Ord` includes `Eq`.
+    pub fn class_has(&self, c: &str, b: &Bound) -> bool {
+        self.capability_root(c, b).is_some()
+    }
+
+    /// Whether struct `st` lists the built-in interface `b` (`Ord` includes `Eq`).
+    pub fn struct_has(&self, st: &str, b: &Bound) -> bool {
+        self.structs
+            .get(st)
+            .is_some_and(|s| s.capabilities.contains(b) || (*b == Bound::Eq && s.capabilities.contains(&Bound::Ord)))
+    }
+
+    /// Whether struct `st` lists `b` and writes its method itself (`override fn equals`).
+    pub fn struct_writes(&self, st: &str, b: &Bound) -> bool {
+        self.struct_has(st, b) && b.method().is_some_and(|m| !self.structs[st].generated.contains(m))
+    }
+
+    /// The first class from the root down to `c` that lists `b` (or `Ord`, for `Eq`): the
+    /// type of the `other` parameter of its `equals` / `compare`.
+    pub fn capability_root(&self, c: &str, b: &Bound) -> Option<String> {
+        if !self.classes.contains_key(c) {
+            return None;
+        }
+        let lists = |a: &String| {
+            let caps = &self.classes[a].capabilities;
+            caps.contains(b) || (*b == Bound::Eq && caps.contains(&Bound::Ord))
+        };
+        self.ancestors(c).into_iter().rev().find(lists)
+    }
+
+    /// The built-in interface whose method `method` class `c` gets, if any.
+    pub fn capability_of(&self, c: &str, method: &str) -> Option<Bound> {
+        CAPABILITIES
+            .iter()
+            .filter(|(_, m)| *m == method)
+            .filter_map(|(n, _)| Bound::capability(n))
+            .find(|b| self.class_has(c, b))
+    }
+
+    /// The signature of the method the built-in interface `b` gives class `c`.
+    pub fn capability_signature(&self, c: &str, b: &Bound) -> Signature {
+        let other = || vec![("other".to_string(), Type::Class(self.capability_root(c, b).unwrap_or(c.to_string())))];
+        match b {
+            Bound::Show => Signature { params: vec![], ret: Type::Str },
+            Bound::Eq => Signature { params: other(), ret: Type::Bool },
+            Bound::Ord => Signature { params: other(), ret: Type::Int },
+            Bound::Interface(..) => unreachable!("only built-in interfaces give methods"),
+        }
+    }
+
+    /// Values that can be compared with `==`: what `is_plain_with` allows, and objects whose
+    /// class has `Eq` (also inside arrays, optionals, maps, tuples, results, structs, enums).
+    pub fn comparable_with(&self, t: &Type, param: &dyn Fn(&str) -> bool) -> bool {
+        let cmp = |t: &Type| self.comparable_with(t, param);
+        match t {
+            Type::Class(c) => self.class_has(c, &Bound::Eq),
+            Type::Array(i) | Type::Optional(i) => cmp(i),
+            Type::Map(k, v) => self.is_plain_with(k, param) && cmp(v),
+            Type::Tuple(parts) => parts.iter().all(cmp),
+            Type::Result(t, e) => (**t == Type::Void || cmp(t)) && cmp(e),
+            Type::Struct(st, args) => {
+                (self.plain_structs.contains(st) || self.eq_structs.contains(st) || self.struct_has(st, &Bound::Eq))
+                    && args.iter().all(cmp)
+            }
+            Type::Enum(e, args) => (self.plain_enums.contains(e) || self.eq_enums.contains(e)) && args.iter().all(cmp),
+            other => self.is_plain_with(other, param),
+        }
+    }
+
+    /// Values that can be ordered with `<` and `sort`: numbers, strings, booleans and objects
+    /// whose class has `Ord`.
+    pub fn ordered_with(&self, t: &Type, param: &dyn Fn(&str) -> bool) -> bool {
+        match t {
+            Type::Int | Type::Float | Type::Str | Type::Bool => true,
+            Type::Class(c) => self.class_has(c, &Bound::Ord),
+            Type::Struct(st, _) => self.struct_has(st, &Bound::Ord),
+            Type::Param(p) => param(p),
+            _ => false,
+        }
+    }
+
+    /// Values that can be printed: what `is_plain_with` allows, and objects whose class has
+    /// `Show` (also inside arrays, optionals, maps, tuples and results).
+    pub fn showable_with(&self, t: &Type, param: &dyn Fn(&str) -> bool) -> bool {
+        let show = |t: &Type| self.showable_with(t, param);
+        match t {
+            Type::Class(c) => self.class_has(c, &Bound::Show),
+            Type::Array(i) | Type::Optional(i) => show(i),
+            Type::Map(k, v) => self.is_plain_with(k, param) && show(v),
+            Type::Tuple(parts) => parts.iter().all(show),
+            Type::Result(t, e) => (**t == Type::Void || show(t)) && show(e),
+            Type::Struct(st, args) => {
+                (self.plain_structs.contains(st) || self.show_structs.contains(st) || self.struct_has(st, &Bound::Show))
+                    && args.iter().all(show)
+            }
+            Type::Enum(e, args) => {
+                (self.plain_enums.contains(e) || self.show_enums.contains(e)) && args.iter().all(show)
+            }
+            other => self.is_plain_with(other, param),
+        }
+    }
+
+    /// Can a value of type `t` lead to an object of class `c`, directly or through the
+    /// fields of the objects and structs it holds? A generated `as_str` for `c` would then
+    /// print forever.
+    pub fn reaches_class(&self, t: &Type, c: &str, seen: &mut HashSet<String>) -> bool {
+        match t {
+            Type::Array(i) | Type::Optional(i) => self.reaches_class(i, c, seen),
+            Type::Map(_, v) => self.reaches_class(v, c, seen),
+            Type::Tuple(parts) => parts.iter().any(|p| self.reaches_class(p, c, seen)),
+            Type::Result(a, e) => self.reaches_class(a, c, seen) || self.reaches_class(e, c, seen),
+            Type::Struct(st, args) => {
+                if !seen.insert(format!("struct {}", st)) {
+                    return false;
+                }
+                let map = self.struct_bindings(st, args);
+                self.structs[st].fields.iter().any(|(_, ft)| self.reaches_class(&subst(ft, &map), c, seen))
+            }
+            Type::Class(d) => {
+                // A `d` field can hold a `c` when `c` is `d` or derives from it, and the reverse.
+                if self.is_subclass(c, d) || self.is_subclass(d, c) {
+                    return true;
+                }
+                if !seen.insert(d.clone()) {
+                    return false;
+                }
+                let mut classes = vec![d.clone()];
+                let mut i = 0;
+                while i < classes.len() {
+                    classes.extend(self.classes[&classes[i]].children.iter().cloned());
+                    i += 1;
+                }
+                classes.iter().any(|x| self.all_fields(x).iter().any(|(_, ft, _)| self.reaches_class(ft, c, seen)))
+            }
+            Type::Interface(i, _) => {
+                let implementers: Vec<String> =
+                    self.class_order.iter().filter(|x| self.all_interfaces(x).contains(i)).cloned().collect();
+                implementers.into_iter().any(|x| self.reaches_class(&Type::Class(x), c, seen))
+            }
+            _ => false,
+        }
     }
 
     /// Values that can be printed and compared with `==`.

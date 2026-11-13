@@ -4,13 +4,13 @@ use crate::token::{StrPart, Tok, Token};
 
 /// Parses a file's tokens; all syntax errors are reported, one per declaration.
 pub fn parse(tokens: Vec<Token>) -> std::result::Result<Program, Vec<Diagnostic>> {
-    Parser { tokens, i: 0 }.program()
+    Parser { tokens, i: 0, pending: vec![] }.program()
 }
 
 /// Parses the expression inside a `{...}` string interpolation.
 fn parse_embedded(code: &str, at: Span) -> Result<Expr> {
     let tokens = crate::lexer::lex_at(code, at)?;
-    let mut p = Parser { tokens, i: 0 };
+    let mut p = Parser { tokens, i: 0, pending: vec![] };
     let e = p.expr()?;
     p.skip_newlines();
     if !p.check(&Tok::Eof) {
@@ -24,6 +24,8 @@ struct Mods {
     is_mut: bool,
     is_async: bool,
     is_private: bool,
+    /// `private(set)`, on fields only.
+    is_private_set: bool,
     is_static: bool,
     is_abstract: bool,
     is_override: bool,
@@ -32,6 +34,8 @@ struct Mods {
 struct Parser {
     tokens: Vec<Token>,
     i: usize,
+    /// Attributes read before the declaration being parsed, which takes them.
+    pending: Vec<Attribute>,
 }
 
 impl Parser {
@@ -112,8 +116,9 @@ impl Parser {
         let mut errors = vec![];
         self.skip_newlines();
         while !self.check(&Tok::Eof) {
-            if let Err(e) = self.item(&mut prog) {
+            if let Err(e) = self.item(&mut prog).and_then(|()| self.no_pending()) {
                 errors.push(e);
+                self.pending.clear();
                 self.skip_to_next_item();
             }
             self.skip_newlines();
@@ -130,6 +135,7 @@ impl Parser {
             let starts_item = matches!(
                 self.peek(),
                 Tok::Fn
+                    | Tok::HashBracket
                     | Tok::Async
                     | Tok::Class
                     | Tok::Abstract
@@ -149,8 +155,51 @@ impl Parser {
         }
     }
 
+    /// `#[name]` / `#[name("text", ...)]` lines, kept for the declaration that follows.
+    fn attributes(&mut self) -> Result<()> {
+        self.no_pending()?;
+        while self.check(&Tok::HashBracket) {
+            self.advance();
+            let (name, pos) = self.ident("an attribute name, like `deprecated`")?;
+            let mut args = vec![];
+            if self.eat(&Tok::LParen) {
+                while !self.check(&Tok::RParen) {
+                    match self.advance().tok {
+                        Tok::Str(s) => args.push(s),
+                        other => {
+                            return err(
+                                format!("attribute arguments are plain strings in quotes, found {}", other.describe()),
+                                pos,
+                            );
+                        }
+                    }
+                    if !self.eat(&Tok::Comma) {
+                        break;
+                    }
+                }
+                self.expect(Tok::RParen, "`)`")?;
+            }
+            self.expect(Tok::RBracket, "`]` to close the attribute")?;
+            self.skip_newlines();
+            self.pending.push(Attribute { name, args, pos });
+        }
+        Ok(())
+    }
+
+    /// Attributes not taken by a declaration: they were written before something else.
+    fn no_pending(&self) -> Result<()> {
+        match self.pending.first() {
+            Some(a) => err(
+                "an attribute goes right before a `fn`, `class`, `struct`, `interface`, `enum`, `const` or field",
+                a.pos,
+            ),
+            None => Ok(()),
+        }
+    }
+
     /// One top-level declaration.
     fn item(&mut self, prog: &mut Program) -> Result<()> {
+        self.attributes()?;
         match self.peek() {
             Tok::Fn => prog.functions.push(self.function(Mods::default())?),
             Tok::Async => {
@@ -319,6 +368,10 @@ impl Parser {
     }
 
     fn function(&mut self, mods: Mods) -> Result<FnDecl> {
+        if mods.is_private_set {
+            return err("`private(set)` is only for fields; write `private fn` for a private method", self.pos());
+        }
+        let attrs = std::mem::take(&mut self.pending);
         let pos = self.expect(Tok::Fn, "`fn`")?;
         let (name, _) = self.ident("function name")?;
         let (tparams, bounds) = self.tparams()?;
@@ -335,6 +388,7 @@ impl Parser {
         };
         Ok(FnDecl {
             name,
+            attrs,
             tparams,
             bounds,
             params,
@@ -472,7 +526,23 @@ impl Parser {
         let mut m = Mods::default();
         loop {
             let pos = self.pos();
+            let next = |k: usize| self.tokens.get(self.i + k).map(|t| &t.tok);
+            let private_set = self.peek() == &Tok::Private
+                && next(1) == Some(&Tok::LParen)
+                && next(2) == Some(&Tok::Ident("set".into()))
+                && next(3) == Some(&Tok::RParen);
+            if private_set {
+                if m.is_private || m.is_private_set {
+                    return err("`private` written twice", pos);
+                }
+                m.is_private_set = true;
+                for _ in 0..4 {
+                    self.advance();
+                }
+                continue;
+            }
             let flag = match self.peek() {
+                Tok::Private if m.is_private_set => return err("`private` written twice", pos),
                 Tok::Private => &mut m.is_private,
                 Tok::Static => &mut m.is_static,
                 Tok::Abstract => &mut m.is_abstract,
@@ -489,6 +559,7 @@ impl Parser {
     }
 
     fn class(&mut self, is_abstract: bool) -> Result<ClassDecl> {
+        let attrs = std::mem::take(&mut self.pending);
         let pos = self.expect(Tok::Class, "`class`")?;
         let (name, _) = self.ident("class name")?;
         let (tparams, bounds) = self.tparams()?;
@@ -496,6 +567,7 @@ impl Parser {
         self.expect(Tok::LBrace, "`{` to start class body")?;
         let mut class = ClassDecl {
             name,
+            attrs,
             tparams,
             bounds,
             bases,
@@ -509,6 +581,7 @@ impl Parser {
         };
         self.skip_newlines();
         while !self.check(&Tok::RBrace) {
+            self.attributes()?;
             let mpos = self.pos();
             let mods = self.modifiers()?;
             if let Some(st) = self.static_member(&mods, mpos)? {
@@ -518,13 +591,21 @@ impl Parser {
             match self.peek().clone() {
                 Tok::Ident(fname) => {
                     if mods.is_static || mods.is_abstract || mods.is_override {
-                        return err("fields can only be marked `private`", mpos);
+                        return err("fields can only be marked `private` or `private(set)`", mpos);
                     }
                     let fpos = self.advance().pos;
                     self.expect(Tok::Colon, "`:` and a type after field name")?;
                     let ty = self.ty()?;
                     let default = if self.eat(&Tok::Assign) { Some(self.expr()?) } else { None };
-                    class.fields.push(FieldDecl { name: fname, ty, default, is_private: mods.is_private, pos: fpos });
+                    class.fields.push(FieldDecl {
+                        name: fname,
+                        attrs: std::mem::take(&mut self.pending),
+                        ty,
+                        default,
+                        is_private: mods.is_private,
+                        is_private_set: mods.is_private_set,
+                        pos: fpos,
+                    });
                     self.end_of_statement()?;
                 }
                 Tok::Init => {
@@ -552,6 +633,7 @@ impl Parser {
                 }
             }
         }
+        self.no_pending()?;
         self.expect(Tok::RBrace, "`}`")?;
         Ok(class)
     }
@@ -581,6 +663,7 @@ impl Parser {
     /// The rest of `const NAME: Type = value` / `static var name: Type = value`, after
     /// `const` / `var`.
     fn static_decl(&mut self, mutable: bool, pos: Span) -> Result<StaticDecl> {
+        let attrs = std::mem::take(&mut self.pending);
         let (kw, what) = if mutable { ("static var", "variable") } else { ("const", "constant") };
         let (name, _) = self.ident(&format!("a {} name after `{}`", what, kw))?;
         if !self.eat(&Tok::Colon) {
@@ -592,10 +675,11 @@ impl Parser {
         }
         let value = self.expr()?;
         self.end_of_statement()?;
-        Ok(StaticDecl { name, ty, value, mutable, pos })
+        Ok(StaticDecl { name, attrs, ty, value, mutable, pos })
     }
 
     fn interface(&mut self) -> Result<InterfaceDecl> {
+        let attrs = std::mem::take(&mut self.pending);
         let pos = self.expect(Tok::Interface, "`interface`")?;
         let (name, _) = self.ident("interface name")?;
         let tpos = self.pos();
@@ -608,51 +692,83 @@ impl Parser {
         self.skip_newlines();
         let mut methods = Vec::new();
         while !self.check(&Tok::RBrace) {
-            let mpos = self.expect(Tok::Fn, "`fn` (interfaces only contain method signatures)")?;
+            self.attributes()?;
+            let attrs = std::mem::take(&mut self.pending);
+            let mpos = self.expect(Tok::Fn, "`fn` (interfaces contain methods)")?;
             let (mname, _) = self.ident("method name")?;
             let params = self.params()?;
             let ret = self.ret_type()?;
-            methods.push(MethodSig { name: mname, params, ret, pos: mpos });
-            self.end_of_statement()?;
+            if self.check(&Tok::LBrace) {
+                let body = self.block()?;
+                methods.push(MethodSig { name: mname, attrs, params, ret, body: Some(body), pos: mpos });
+                self.skip_newlines();
+            } else {
+                methods.push(MethodSig { name: mname, attrs, params, ret, body: None, pos: mpos });
+                self.end_of_statement()?;
+            }
         }
+        self.no_pending()?;
         self.expect(Tok::RBrace, "`}`")?;
-        Ok(InterfaceDecl { name, tparams, bases, base_args, methods, pos })
+        Ok(InterfaceDecl { name, attrs, tparams, bases, base_args, methods, pos })
+    }
+
+    /// `op +(other: T) -> T { ... }` in a struct body, if the member is one.
+    fn struct_op(&mut self, pos: Span) -> Result<Option<OpDecl>> {
+        if self.peek() != &Tok::Ident("op".into()) {
+            return Ok(None);
+        }
+        let op = match self.tokens.get(self.i + 1).map(|t| &t.tok) {
+            Some(Tok::Plus) => BinOp::Add,
+            Some(Tok::Minus) => BinOp::Sub,
+            Some(Tok::Star) => BinOp::Mul,
+            Some(Tok::Slash) => BinOp::Div,
+            Some(Tok::Percent) => BinOp::Rem,
+            _ => return Ok(None),
+        };
+        self.advance();
+        self.advance();
+        let params = self.params()?;
+        let ret = self.ret_type()?;
+        let body = self.block()?;
+        self.skip_newlines();
+        Ok(Some(OpDecl { op, params, ret, body, pos }))
     }
 
     fn struct_decl(&mut self) -> Result<StructDecl> {
+        let attrs = std::mem::take(&mut self.pending);
         let pos = self.expect(Tok::Struct, "`struct`")?;
         let (name, _) = self.ident("struct name")?;
         let (tparams, bounds) = self.tparams()?;
-        if self.check(&Tok::Colon) {
-            return err("structs cannot extend classes or implement interfaces (use a class for that)", self.pos());
+        // `struct Version : Ord`: only the built-in `Show`, `Eq` and `Ord` (checked later).
+        let mut bases = vec![];
+        if self.eat(&Tok::Colon) {
+            loop {
+                bases.push(self.ident("`Show`, `Eq` or `Ord`")?);
+                if !self.eat(&Tok::Comma) {
+                    break;
+                }
+            }
         }
         self.expect(Tok::LBrace, "`{` to start struct body")?;
-        let mut s =
-            StructDecl { name, tparams, bounds, fields: vec![], methods: vec![], ops: vec![], statics: vec![], pos };
+        let mut s = StructDecl {
+            name,
+            attrs,
+            tparams,
+            bounds,
+            bases,
+            fields: vec![],
+            methods: vec![],
+            ops: vec![],
+            statics: vec![],
+            pos,
+        };
         self.skip_newlines();
         while !self.check(&Tok::RBrace) {
+            self.attributes()?;
             let mpos = self.pos();
-            // `op +(other: T) -> T { ... }`
-            if self.peek() == &Tok::Ident("op".into()) {
-                let next = self.tokens.get(self.i + 1).map(|t| t.tok.clone());
-                let op = match next {
-                    Some(Tok::Plus) => Some(BinOp::Add),
-                    Some(Tok::Minus) => Some(BinOp::Sub),
-                    Some(Tok::Star) => Some(BinOp::Mul),
-                    Some(Tok::Slash) => Some(BinOp::Div),
-                    Some(Tok::Percent) => Some(BinOp::Rem),
-                    _ => None,
-                };
-                if let Some(op) = op {
-                    self.advance();
-                    self.advance();
-                    let params = self.params()?;
-                    let ret = self.ret_type()?;
-                    let body = self.block()?;
-                    s.ops.push(OpDecl { op, params, ret, body, pos: mpos });
-                    self.skip_newlines();
-                    continue;
-                }
+            if let Some(o) = self.struct_op(mpos)? {
+                s.ops.push(o);
+                continue;
             }
             // `mut fn` (a method that changes `self`)
             let mut is_mut = false;
@@ -670,21 +786,28 @@ impl Parser {
             match self.peek().clone() {
                 Tok::Ident(fname) if !is_mut => {
                     if mods.is_static || mods.is_abstract || mods.is_override || mods.is_async {
-                        return err("fields can only be marked `private`", mpos);
+                        return err("fields can only be marked `private` or `private(set)`", mpos);
                     }
                     let fpos = self.advance().pos;
                     self.expect(Tok::Colon, "`:` and a type after field name")?;
                     let ty = self.ty()?;
                     let default = if self.eat(&Tok::Assign) { Some(self.expr()?) } else { None };
-                    s.fields.push(FieldDecl { name: fname, ty, default, is_private: mods.is_private, pos: fpos });
+                    s.fields.push(FieldDecl {
+                        name: fname,
+                        attrs: std::mem::take(&mut self.pending),
+                        ty,
+                        default,
+                        is_private: mods.is_private,
+                        is_private_set: mods.is_private_set,
+                        pos: fpos,
+                    });
                     self.end_of_statement()?;
                 }
                 Tok::Fn => {
-                    if mods.is_abstract || mods.is_override {
-                        return err(
-                            "struct methods cannot be `abstract` or `override` (structs have no inheritance)",
-                            mpos,
-                        );
+                    // `override` is checked later: it marks `as_str`, `equals` and `compare` of
+                    // a struct that lists `Show`, `Eq` or `Ord`.
+                    if mods.is_abstract {
+                        return err("struct methods cannot be `abstract` (structs have no inheritance)", mpos);
                     }
                     if mods.is_mut && mods.is_static {
                         return err("a `static fn` has no `self`, so it cannot be `mut`", mpos);
@@ -706,11 +829,13 @@ impl Parser {
                 }
             }
         }
+        self.no_pending()?;
         self.expect(Tok::RBrace, "`}`")?;
         Ok(s)
     }
 
     fn enum_decl(&mut self) -> Result<EnumDecl> {
+        let attrs = std::mem::take(&mut self.pending);
         let pos = self.expect(Tok::Enum, "`enum`")?;
         let (name, _) = self.ident("enum name")?;
         let (tparams, bounds) = self.tparams()?;
@@ -728,7 +853,7 @@ impl Parser {
             }
         }
         self.expect(Tok::RBrace, "`}`")?;
-        Ok(EnumDecl { name, tparams, bounds, variants, pos })
+        Ok(EnumDecl { name, attrs, tparams, bounds, variants, pos })
     }
 
     fn pattern(&mut self) -> Result<Pattern> {

@@ -1,0 +1,3 @@
+tests/ui/errors/ord_field_not_ordered.kl:3:5: error: field `members` of type `[str]` cannot be ordered; write `override fn compare(other: Team) -> int` in `Team`
+3 |     members: [str] = []
+  |     ^^^^^^^
