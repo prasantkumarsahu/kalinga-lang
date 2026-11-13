@@ -182,7 +182,7 @@ Language Server Protocol (Neovim, Helix, Zed, Emacs, ...) can use it by running
 - Errors as you type, all of them at once: every broken class rule and every type error,
   not only the first; errors inside imported files appear on the `import` line
 - Completion: members after `.` (inherited ones too; `private` ones only inside their
-  type), enum variants after `Enum.`, `static fn`s, constants and static variables after
+  type), enum variants after `Enum.`, `static fn`s, `static` values and `static var`s after
   `Type.`, library functions after `Math.` and the others, variables in scope (including
   lambda parameters and `match` bindings), functions, constructors with their arguments,
   types after `:`, `->` and `<`, `match` arm patterns, `override fn` stubs in a class
@@ -219,13 +219,13 @@ Type the prefix and press Tab:
 | `init` | constructor |
 | `meth` | method |
 | `override` | overriding method |
-| `if`, `ife`, `iflet` | `if`, `if/else`, `if let` |
+| `if`, `ife`, `ifopt` | `if`, `if/else`, `if name = optional` |
 | `while`, `for`, `forr` | loops (`forr` = range loop) |
 | `pr` | `print(...)` |
 | `enum`, `match` | enum declaration, match statement |
 | `lam`, `lamb` | short lambda, block lambda |
 | `aclass`, `gclass`, `sfn` | abstract class, generic class, static method |
-| `ifas` | `if let d = x as Class { }` |
+| `ifas` | `if d = x as Class { }` |
 | `struct`, `mfn`, `op` | struct, `mut fn`, operator |
 | `userust`, `usecrate`, `extern` | Rust interop declarations |
 | `gameloop` | a frame loop with delta time |

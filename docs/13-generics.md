@@ -97,7 +97,7 @@ The type arguments come from (in order of preference):
 
 1. Explicit arguments: `Stack<str>()`.
 2. The constructor's arguments: `Pair(1, "a")` is a `Pair<int, str>`.
-3. The expected type: `let s: Stack<int> = Stack()`.
+3. The expected type: `s: Stack<int> = Stack()`.
 
 If none of these says what `T` is, the compiler asks you to write it:
 

@@ -41,7 +41,7 @@ Read these in order the first time. Each chapter builds on the previous one.
 | 4 | [Functions](04-functions.md) | Parameters, return values, recursion, built-in functions |
 | 5 | [Arrays and Strings](05-arrays-and-strings.md) | Lists of values, text, string interpolation |
 | 6 | [Maps](06-maps.md) | `{K: V}` dictionaries |
-| 7 | [Optionals](07-optionals.md) | `T?`, `none` and `if let` — Kalinga's replacement for null |
+| 7 | [Optionals](07-optionals.md) | `T?`, `none` and `if name = value` — Kalinga's replacement for null |
 | 8 | [Enums and match](08-enums-and-match.md) | Variants with data, exhaustive `match` |
 | 9 | [Classes](09-classes.md) | Fields, `init`, methods, `self`, `private`, `static` |
 | 10 | [Inheritance](10-inheritance.md) | `class B : A`, `override`, `super`, abstract classes, `is`/`as` |

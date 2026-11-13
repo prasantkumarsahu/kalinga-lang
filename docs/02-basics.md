@@ -82,10 +82,13 @@ fn main() {
 
 ## Variables
 
-| Keyword | Meaning |
+A variable is declared by giving it a value. With no keyword it is **fixed**: it keeps that
+value. `var` makes one that can change.
+
+| Written | Meaning |
 |---|---|
-| `let` | Immutable: the value can never be reassigned |
-| `var` | Mutable: the value can be reassigned |
+| `name = value` | A fixed variable: it can never be given another value |
+| `var name = value` | A changeable variable |
 
 ```kalinga
 fn main() {
@@ -101,7 +104,8 @@ fn main() {
 3.14159 2
 ```
 
-Trying to change a `let` variable is a compile error:
+`name = value` declares a new variable when no variable `name` is visible; when one is, it
+changes that one. Changing a fixed variable is a compile error:
 
 ```kalinga error
 fn main() {
@@ -116,7 +120,11 @@ main.kl:3:5: error: cannot change `x`: it is fixed (declare it `var x` to change
   |     ^
 ```
 
-Prefer `let`. Use `var` only when a value really needs to change.
+Prefer fixed variables. Use `var` only when a value really needs to change. A variable
+that is declared and never used gets a warning, which also catches a misspelt name
+(`totl = total + 1` declares a new `totl` instead of changing `total`).
+
+`name: Type = value` always declares a new variable, even when an outer `name` exists.
 
 ### Type annotations
 
@@ -163,10 +171,10 @@ inner
 - Class and interface names must start with an uppercase letter (`Animal`, `Show`).
 - By convention, variables, functions and methods use `snake_case`.
 
-## Constants
+## Fixed values
 
-`const` at the top level of a file names a value the whole program can use. Its type is
-written out, like a field's:
+`NAME: Type = value` at the top level of a file names a value the whole program can use. Its
+type is written out, like a field's:
 
 ```kalinga
 MAX_LIVES: int = 3
@@ -182,9 +190,14 @@ fn main() {
 Space Rocks 3 19.62
 ```
 
-A constant cannot be changed, and constants are written in `UPPER_CASE` by convention.
-Classes and structs can have their own constants, and variables shared by the whole type
-(see [Classes](09-classes.md#constants-and-static-variables)).
+A top-level value cannot be changed, and is written in `UPPER_CASE` by convention. It is
+set when the program is compiled, so it must be a **constant expression**: literals,
+arithmetic on them, other top-level and `static` values, `none`, arrays, maps and tuples of
+those, enum variants and structs built from them. Calling a function or building a class
+object there is an error.
+
+Classes and structs can have their own fixed values (`static`), and variables shared by the
+whole type (`static var`) (see [Classes](09-classes.md#static-values-and-static-variables)).
 
 ## Types
 
@@ -203,7 +216,7 @@ Classes and structs can have their own constants, and variables shared by the wh
 Notes:
 
 - A float literal needs digits on both sides of the dot: `2.0`, not `2.`.
-- Where a `float` is expected, a whole-number literal is that float: `let speed: float = 3`
+- Where a `float` is expected, a whole-number literal is that float: `speed: float = 3`
   and `Vec2(600, 300)` work. This is only for literals; a variable needs `float(n)`.
 - Underscores in numbers are ignored: `1_000` is `1000`.
 - String escapes: `\n` newline, `\t` tab, `\r`, `\0`, `\\` backslash, `\"` quote.

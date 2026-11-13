@@ -85,9 +85,9 @@ fn main() {
 
 `while true { }` is an endless loop; leave it with `break` or `return`.
 
-### while let
+### while name = value
 
-`while let name = value` repeats while an optional value is not `none`, with `name` holding
+`while name = value` repeats while an optional value is not `none`, with `name` holding
 the value inside (see [Optionals](07-optionals.md)):
 
 ```kalinga

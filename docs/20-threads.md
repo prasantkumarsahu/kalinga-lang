@@ -69,7 +69,7 @@ fn main() {
 main.kl:7:22: error: `Thread.spawn` cannot use `p` here: a `Player` cannot move to another thread (pass plain values, a `Channel` or a `Shared`)
 ```
 
-Copy what the thread needs into a value first (`let hp = p.hp`), or describe the data with a
+Copy what the thread needs into a value first (`hp = p.hp`), or describe the data with a
 `struct`.
 
 ## Channels

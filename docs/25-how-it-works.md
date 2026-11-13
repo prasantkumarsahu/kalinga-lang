@@ -159,13 +159,13 @@ and strings stay ordinary Rust `==` and `<`.
 
 | Kalinga | Rust |
 |---|---|
-| `let x = 1` / `var x = 1` | `let x: i64 = 1` / `let mut x: i64 = 1` |
+| `x = 1` / `var x = 1` | `let x: i64 = 1` / `let mut x: i64 = 1` |
 | `while true { }` | `loop { }` |
 | `for i in a..b` | `for i in a..b` |
 | `for ch in s` | `for c in s.chars() { let ch = c.to_string(); ... }` |
 | `"a" + b` | `format!("{}{}", "a", b)` |
 | `xs[i]` | `xs[__idx(i)]` — rejects negative indexes, then Rust checks the length |
-| `if let v = opt { }` | `if let Some(v) = opt { }` |
+| `if v = opt { }` | `if let Some(v) = opt { }` |
 | `fn main()` | `fn kl_main()`, started by a generated `main` on a 256 MB stack thread |
 | `"a {x} b"` | `format!("a {} b", show(x))` |
 | `match e { V(x) => ... }` | `match e { E::V(x) => ... }` |

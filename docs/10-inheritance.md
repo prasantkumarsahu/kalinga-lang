@@ -220,7 +220,7 @@ Bella moos
 Generic makes a sound
 ```
 
-When mixing subclasses in one array, annotate the array's type (`let farm: [Animal] = ...`).
+When mixing subclasses in one array, annotate the array's type (`farm: [Animal] = ...`).
 Without it, the type is taken from the first element.
 
 The conversion is automatic only one way: a `Cat` is always an `Animal`, but an `Animal`
@@ -229,7 +229,7 @@ might not be a `Cat`. To go the other way, ask — see `is` and `as` below.
 ## Checking the real class: is and as
 
 - `x is Cat` is `true` when the object is a `Cat` (or a subclass of `Cat`).
-- `x as Cat` gives a `Cat?`: the same object seen as a `Cat`, or `none`. Use it with `if let`.
+- `x as Cat` gives a `Cat?`: the same object seen as a `Cat`, or `none`. Use it with `if c = x as Cat { ... }`.
 
 ```kalinga
 class Animal {

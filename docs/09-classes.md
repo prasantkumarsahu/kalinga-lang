@@ -47,7 +47,7 @@ The parts of a class:
 
 | Part | Syntax | Notes |
 |---|---|---|
-| Field | `name: type` or `name: type = default` | Every object gets its own copy |
+| Field | `name: type`, `var name: type`, with `= default` or without | Every object gets its own copy |
 | Constructor | `init(params) { ... }` | Optional, at most one per class |
 | Method | `fn name(params) -> type { ... }` | Same rules as functions |
 | `self` | `self.field`, `self.method()` | The object the method was called on |
@@ -111,6 +111,63 @@ fn main() {
 ```
 
 Defaults are filled in first, then `init` runs, so `init` only needs to set what differs.
+
+## Fixed and `var` fields
+
+Like variables, fields are **fixed** unless they are declared `var`. A fixed field gets its
+value from its default or from its own class's `init` (as often as `init` likes), and never
+changes after that. A `var` field can be changed by methods and by other code:
+
+```kalinga
+class User {
+    name: str
+    var score: int = 0
+
+    init(name: str) {
+        self.name = name
+    }
+
+    fn win() {
+        self.score += 10
+    }
+}
+
+fn main() {
+    u = User("Asha")
+    u.win()
+    println(u.name, u.score)
+}
+```
+
+```text
+Asha 10
+```
+
+Changing a fixed field anywhere else — a method, a subclass (even its `init`), outside
+code — is an error, and so is changing it in place (`push`, `sort`, `m[k] = v`):
+
+```kalinga error
+class User {
+    name: str
+
+    init(name: str) {
+        self.name = name
+    }
+
+    fn rename(to: str) {
+        self.name = to
+    }
+}
+
+fn main() {}
+```
+
+```text
+main.kl:9:13: error: cannot change `name`: it is a fixed field of `User`, set only in its `init` (declare it `var name` to change it)
+```
+
+A fixed field that holds an object always refers to the same object, but that object's own
+`var` fields can still change.
 
 ## Methods and self
 
@@ -267,7 +324,7 @@ Changing it from outside is a compile error, and so is changing it from a subcla
 error: `balance` can only be changed inside `Account` (it is `private(set)`)
 ```
 
-Struct fields can be `private(set)` too; only the struct's own `mut fn` methods change them.
+Struct fields can be `private(set) var` too; only the struct's own `mut fn` methods change them.
 
 ## Printing objects: `Show`
 
@@ -423,11 +480,11 @@ fn main() {
 Static methods are handy as named constructors ("factories") and for helpers that do not
 need an object.
 
-## Constants and static variables
+## Static values and static variables
 
 A class or struct can hold values that belong to the type rather than to one object:
 
-- `const NAME: Type = value` is a constant, used as `Type.NAME`.
+- `static NAME: Type = value` is a fixed value, used as `Type.NAME`.
 - `static var name: Type = value` is one variable shared by the whole type, used and
   changed as `Type.name`.
 
@@ -457,12 +514,15 @@ fn main() {
 Rules:
 
 - The type is always written out, as for fields.
-- A constant's value is computed each time it is used, so a constant that holds an object
-  gives a new object each time. Use `static var` for one shared object.
-- A `static var` gets its starting value the first time it is used. Each thread has its
+- `static` means the value is set when the program is compiled, so it must be a
+  **constant expression**: literals, arithmetic and comparisons on them, other `static` and
+  top-level values, `none`, arrays, maps and tuples of those, enum variants and structs built
+  from them. A function call or a class object (`Enemy()`) is an error; for a shared object,
+  write `static var boss: Enemy? = none` and set it when the program runs.
+- A `static var` starts at its value and can be changed at run time. Each thread has its
   own copy (see [Threads](20-threads.md)).
-- A value cannot be defined in terms of itself (`const A: int = A + 1`).
-- Generic classes and structs cannot have constants or static variables (yet).
+- A value cannot be defined in terms of itself (`static A: int = A + 1`).
+- Generic classes and structs cannot have `static` members (yet).
 
 ## Objects are references
 
@@ -490,8 +550,8 @@ fn main() {
 true
 ```
 
-`let` makes the *variable* fixed — it will always point at the same object — but the
-object's fields can still change. (Compare arrays and strings, which are copied.)
+A fixed variable always points at the same object, but the object's `var` fields can
+still change. (Compare arrays and strings, which are copied.)
 
 ## Fields that hold objects
 
@@ -560,7 +620,8 @@ stored inline, and supports operators.
 ## Rules at a glance
 
 - Class names start with an uppercase letter.
-- Fields and methods are public unless marked `private`; `private(set)` fields are
+- Fields are fixed (set by their default or `init`) unless declared `var`.
+- Fields and methods are public unless marked `private`; `private(set) var` fields are
   readable everywhere and changed only inside the class.
 - `: Show`, `: Eq` and `: Ord` make objects printable and comparable (`as_str`, `equals`,
   `compare`, generated from the fields unless overridden).

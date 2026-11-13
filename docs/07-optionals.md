@@ -23,11 +23,11 @@ Kali
 ```
 
 `none` on its own has no type, so a variable holding it needs an annotation:
-`let x = none` is an error, `let x: int? = none` is fine.
+`x = none` is an error, `x: int? = none` is fine.
 
-## Using the value: if let
+## Using the value: if name = value
 
-You cannot use an `int?` where an `int` is needed. Unwrap it with `if let`:
+You cannot use an `int?` where an `int` is needed. Unwrap it with `if name = value`:
 
 ```kalinga
 fn find_index(items: [str], target: str) -> int? {
@@ -59,9 +59,11 @@ green is at 1
 no pink
 ```
 
-Inside the first block, `i` is a plain `int`. It only exists inside that block.
+Inside the first block, `i` is a plain `int`. It only exists inside that block. In a
+condition, `=` always unwraps an optional; to compare, write `==` (`if i = 5` is an
+error).
 
-`if let` also works as a value, with an `else` (like [`if`](03-control-flow.md)):
+`if name = value` also works as a value, with an `else` (like [`if`](03-control-flow.md)):
 
 ```kalinga
 fn main() {
@@ -76,8 +78,8 @@ fn main() {
 31 0
 ```
 
-`while let` works the same way and repeats until the value is `none` (see
-[Control flow](03-control-flow.md#while-let)).
+`while name = value` works the same way and repeats until the value is `none` (see
+[Control flow](03-control-flow.md#while-name--value)).
 
 ## Comparing with none
 

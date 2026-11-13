@@ -150,8 +150,9 @@ fn main() {
 1 2 1
 ```
 
-- Only variables declared with `var` can be changed this way; changing a `let` is an
-  error, inside a lambda or not.
+- Only variables declared with `var` can be changed this way; changing a fixed variable
+  is an error, inside a lambda or not. Inside a lambda, `count = count + 1` changes an
+  outer `var count`; with no outer `count` it declares the lambda's own fixed variable.
 - Each call of `make_counter` makes a new `count`, so every counter has its own.
 - A variable shared like this cannot be used by a lambda that runs on another thread
   (`Thread.spawn`, `par_map`); use a `Shared` there ([chapter 20](20-threads.md)).
@@ -180,7 +181,7 @@ fn main() {
 ```
 
 Inside a method, `self` cannot be used in a lambda directly. Copy it to a variable first:
-`let me = self`, then use `me` in the lambda.
+`me = self`, then use `me` in the lambda.
 
 ## Functions in fields
 

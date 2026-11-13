@@ -33,8 +33,10 @@ Vec2(x: 3.0, y: 4.0) Vec2(x: 10.0, y: 4.0) true
   leaves `x` and `y` at their defaults.
 - Structs have no `init`. For other ways to build one, write a `static fn` (below).
 - A struct whose fields are all printable can be printed and compared with `==`.
-- Changing a field needs a `var`: `let a = ...; a.x = 1.0` is an error, because `a` is a
-  value, not a reference.
+- Struct fields are fixed unless declared `var`: a fixed field is set when the struct is
+  built and never changes, even in a `mut fn`. Changing a `var` field also needs a `var`
+  struct: `a = Vec2(1.0, 2.0); a.x = 3.0` is an error, because `a` is a value, not a
+  reference.
 
 ### Struct or class?
 
@@ -50,7 +52,7 @@ are built about four times faster — the same as hand-written Rust.
 
 ## Methods
 
-Methods read the struct through `self`. A method that **changes** the struct must be
+Methods read the struct through `self`. A method that **changes** a `var` field must be
 declared `mut fn`, and can only be called on something that can change (a `var`, an array
 element, a field of an object):
 
@@ -91,7 +93,7 @@ Forgetting `mut` is caught by the compiler:
 
 ```kalinga error
 struct Counter {
-    n: int
+    var n: int
 
     fn add(k: int) {
         self.n += k

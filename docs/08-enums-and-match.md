@@ -346,7 +346,7 @@ Node(a, Leaf, Leaf)
 
 - `Tree.Node(x, ...)` learns `T` from its values. A variant without values, like
   `Tree.Leaf`, takes it from where it goes: `var t: Tree<int> = Tree.Leaf`, or a parameter
-  or return type. Alone (`let t = Tree.Leaf`) it is an error that asks for the type.
+  or return type. Alone (`t = Tree.Leaf`) it is an error that asks for the type.
 - A generic enum prints and compares with `==` when its type arguments do.
 
 ---

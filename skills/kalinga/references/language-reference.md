@@ -30,10 +30,13 @@ A newline does **not** end a statement when it follows an operator, `,`, `.`, `:
 ## Keywords
 
 ```text
-fn  class  struct  interface  enum  const  import  use  extern  init  override  private  static  abstract
-let  var  if  else  while  for  in  match  return  break  continue  async  await
+fn  class  struct  interface  enum  import  use  extern  init  override  private  static  abstract
+var  if  else  while  for  in  match  return  break  continue  async  await
 true  false  none  self  super  as  is
 ```
+
+`let` and `const` are reserved: they were removed in 0.7, and using them is an error that
+says what to write instead (`kalinga fix` rewrites old code).
 
 Contextual words (only special in one place): `mut` before `fn` and `op` before an
 operator inside a struct; `rust` and `crate` after `use` and `rust` after `extern fn ... =`;
@@ -103,17 +106,18 @@ Assignment operators (statements only): `=` `+=` `-=` `*=` `/=` `%=` (`+=` works
 ## Statements
 
 ```text
-let NAME [: TYPE] = EXPR
-var NAME [: TYPE] = EXPR
-let (NAME, NAME, ...) = TUPLE_EXPR                   or `var`: one variable per part
+NAME = EXPR                    a new fixed variable, when no variable NAME is visible
+NAME: TYPE = EXPR              always a new fixed variable
+var NAME [: TYPE] = EXPR       a new changeable variable
+(NAME, NAME, ...) = TUPLE_EXPR                       or `var (...)`: one variable per part
 TARGET = EXPR                  TARGET is a var, self.field, obj.field or a[i]
 TARGET op= EXPR
 if EXPR { ... } [else if EXPR { ... }] [else { ... }]
-if let NAME = OPTIONAL_EXPR { ... } [else { ... }]
+if NAME = OPTIONAL_EXPR { ... } [else { ... }]
 match EXPR { PATTERN => STATEMENT_OR_BLOCK ... }     arms on one line need `,` between them
     PATTERN = Variant | Variant(name, _, ...) | Enum.Variant(...) | INT | STRING | true | false | _
 while EXPR { ... }
-while let NAME = OPTIONAL_EXPR { ... }
+while NAME = OPTIONAL_EXPR { ... }
 for NAME in EXPR..EXPR { ... }                       EXPR..=EXPR includes the end
 for NAME in ARRAY_OR_STR_OR_MAP { ... }              a map gives its keys
 for INDEX, NAME in ARRAY_OR_STR { ... }              position from 0, then element
@@ -131,15 +135,16 @@ EXPR                           usually a call
 fn NAME(PARAM, ...) [-> TYPE] { ... }
     PARAM = NAME: TYPE
 async fn NAME(PARAM, ...) [-> TYPE] { ... }          calling it gives Async<TYPE>
-const NAME: TYPE = EXPR                              a constant
+NAME: TYPE = EXPR                                    a fixed value, set at compile time
 
 import "FILE.kl"                                     a file, relative to this one
 import "std/MODULE"                                  a standard module
 import "PACKAGE[/FILE]" [as ALIAS]                   a utkal package; ALIAS.Name
 
 [abstract] class NAME[<T, ...>] [: BASE_OR_INTERFACE, ...] {   also Show, Eq, Ord
-    [private | private(set)] FIELD: TYPE [= EXPR]       private(set): changed only inside
-    const NAME: TYPE = EXPR                          a constant, used as Class.NAME
+    [private] [var] FIELD: TYPE [= EXPR]             fixed unless `var`: set by its default or init
+    private(set) var FIELD: TYPE [= EXPR]            changed only inside the class
+    static NAME: TYPE = EXPR                         a fixed value, set at compile time: Class.NAME
     static var NAME: TYPE = EXPR                     one variable for the class, Class.NAME
     init(PARAM, ...) { ... }                         at most one
     [private] [static] fn NAME(PARAM, ...) [-> TYPE] { ... }
@@ -152,8 +157,8 @@ import "PACKAGE[/FILE]" [as ALIAS]                   a utkal package; ALIAS.Name
 }
 
 struct NAME[<T, ...>] [: Show | Eq | Ord, ...] {      only these built-in interfaces
-    [private | private(set)] FIELD: TYPE [= EXPR]
-    const NAME: TYPE = EXPR                          a constant, used as Struct.NAME
+    [private | private(set)] [var] FIELD: TYPE [= EXPR]    fixed unless `var`; private(set) needs `var`
+    static NAME: TYPE = EXPR                         a fixed value, set at compile time: Struct.NAME
     static var NAME: TYPE = EXPR                     one variable for the struct, Struct.NAME
     [private] [static] fn NAME(PARAM, ...) [-> TYPE] { ... }
     [private] mut fn NAME(PARAM, ...) [-> TYPE] { ... }     may change `self`
@@ -259,15 +264,19 @@ Library functions: `Math.*`, `Random.*` and `Time.*` (chapter 15), `Time.wait(s)
 ## Grammar (EBNF)
 
 ```text
-program     = { import | use | extern | { attribute } ( function | class | struct | interface | enum | const ) | test } ;
+program     = { import | use | extern | { attribute } ( function | class | struct | interface | enum | value ) | test } ;
 attribute   = "#[" IDENT [ "(" [ STRING { "," STRING } ] ")" ] "]" ;   (* before items and members *)
 test        = "test" "fn" IDENT "(" ")" block ;
-const       = "const" IDENT ":" type "=" expr ;
+value       = IDENT ":" type "=" const_expr ;                    (* a top-level fixed value *)
+static      = "static" [ "var" ] IDENT ":" type "=" const_expr ;
+const_expr  = expr ;    (* literals, operators, static and top-level values, none, [..], {..}, (..),
+                           enum variants and struct values of those; no calls or class objects *)
+field       = { modifier } [ "var" ] IDENT ":" type [ "=" expr ] ;
 import      = "import" STRING [ "as" IDENT ] ;
 use         = "use" ( "rust" STRING | "crate" STRING "=" STRING [ "features" "[" STRING { "," STRING } "]" ] ) ;
 extern      = "extern" ( "type" IDENT | "fn" IDENT params [ "->" type ] [ "=" ( STRING | "rust" RUST_BLOCK ) ] ) ;
-struct      = "struct" IDENT [ tparams ] [ ":" IDENT { "," IDENT } ] "{" { { modifier } IDENT ":" type [ "=" expr ]
-            | const | "static" "var" IDENT ":" type "=" expr
+struct      = "struct" IDENT [ tparams ] [ ":" IDENT { "," IDENT } ] "{" { field
+            | static
             | [ "mut" ] { modifier } "fn" IDENT params [ "->" type ] block
             | "op" ( "+" | "-" | "*" | "/" | "%" ) params "->" type block } "}" ;
 function    = [ "async" ] "fn" IDENT [ tparams ] params [ "->" type ] block ;
@@ -277,9 +286,9 @@ params      = "(" [ param { "," param } [ "," ] ] ")" ;
 param       = IDENT ":" type ;
 class       = [ "abstract" ] "class" IDENT [ tparams ] [ ":" base_ref { "," base_ref } ] "{" { member } "}" ;
 base_ref    = IDENT [ "<" type { "," type } ">" ] ;
-member      = { modifier } IDENT ":" type [ "=" expr ]
+member      = field
             | "init" params block
-            | const | "static" "var" IDENT ":" type "=" expr
+            | static
             | { modifier } "fn" IDENT params [ "->" type ] ( block | (* abstract *) ) ;
 modifier    = "private" | "private" "(" "set" ")" | "static" | "abstract" | "override" | "async" ;
 interface   = "interface" IDENT [ tparams ] [ ":" base_ref { "," base_ref } ] "{" { "fn" IDENT params [ "->" type ] [ block ] } "}" ;
@@ -291,10 +300,12 @@ base        = "int" | "float" | "bool" | "str" | "void" | [ IDENT "." ] IDENT [ 
             | "(" type "," type { "," type } ")" ;                      (* tuple *)
 
 block       = "{" { statement } "}" ;
-statement   = ( "let" | "var" ) IDENT [ ":" type ] "=" expr
+statement   = [ "var" ] IDENT [ ":" type ] "=" expr            (* no `var` or type: a declaration only
+                                                                   when no variable IDENT is visible *)
+            | [ "var" ] "(" IDENT { "," IDENT } ")" "=" expr
             | expr [ assign_op expr ]
-            | "if" ( expr | "let" IDENT "=" expr ) block [ "else" ( block | if_stmt ) ]
-            | "while" [ "let" IDENT "=" ] expr block
+            | "if" ( expr | IDENT "=" expr ) block [ "else" ( block | if_stmt ) ]
+            | "while" [ IDENT "=" ] expr block
             | "for" IDENT [ "," IDENT ] "in" expr [ ( ".." | "..=" ) expr ] block
             | "match" expr "{" { pattern "=>" ( block | statement ) [ "," ] } "}"
             | "return" [ expr ] | "break" | "continue" ;
@@ -315,7 +326,7 @@ primary     = INT | FLOAT | STRING | "true" | "false" | "none" | "self"
             | IDENT [ "<" type { "," type } ">" ] [ args ]
             | "super" ( args | "." IDENT args )
             | "fn" "(" [ IDENT [ ":" type ] { "," IDENT [ ":" type ] } ] ")" [ "->" type ] ( "=>" expr | block )
-            | "if" [ "let" IDENT "=" ] expr value_block "else" ( value_block | (* if expression *) )
+            | "if" [ IDENT "=" ] expr value_block "else" ( value_block | (* if expression *) )
             | "match" expr "{" { pattern "=>" ( value_block | expr ) [ "," ] } "}"
             | "(" expr ")" | "(" expr "," expr { "," expr } ")" | "[" [ expr { "," expr } [ "," ] ] "]"
             | "{" [ expr ":" expr { "," expr ":" expr } [ "," ] ] "}" ;

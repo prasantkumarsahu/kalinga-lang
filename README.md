@@ -50,7 +50,7 @@ Nessie is imaginary
 
 ## Features
 
-- **Simple syntax**: no semicolons, `let`/`var`, `"string {interpolation}"`, type inference.
+- **Simple syntax**: no semicolons, fixed by default (`x = 1`) with `var` for what changes, `"string {interpolation}"`, type inference.
 - **Objects**: classes, single inheritance, interfaces (which can extend each other and
   have default methods), `abstract`, `private`, `private(set)`, `static`, downcasting with
   `is`/`as`; `: Show`, `: Eq`, `: Ord` to print, compare and sort objects.
@@ -154,19 +154,19 @@ to `.claude/skills/kalinga` in a project.
 
 | Feature | Syntax |
 |---|---|
-| Variables | `let x = 1` (immutable), `var y = 2` (mutable), `let z: float = 1.0` |
+| Variables | `x = 1` (fixed), `var y = 2` (changeable), `z: float = 1.0`, `(a, b) = pair` |
 | Types | `int` (64-bit), `float`, `bool`, `str`, `[T]` arrays, `{K: V}` maps, `T?` optionals, `fn(A) -> B`, classes, interfaces, enums |
 | Functions | `fn add(a: int, b: int) -> int { return a + b }`, generic `fn first<T>(xs: [T]) -> T?` |
 | Lambdas | `fn(x: int) -> int { return x * 2 }`, `fn(x) => x * 2`; named functions are values |
 | Strings | `"Hi {name}"` interpolation, `{{` `}}` for literal braces |
 | Control flow | `if / else if / else`, `while cond { }`, `for i in 0..10 { }`, `for x in array { }`, `for k in map { }`, `for ch in "text" { }`, `match`, `break`, `continue` |
 | Enums | `enum Shape { Circle(r: float), Empty }`, `Shape.Circle(1.0)`, `match s { Circle(r) => ... }` |
-| Optionals | `var o: int? = none`, `if let v = o { } else { }`, `o == none` |
-| Classes | fields with optional defaults, `init(...)`, methods, `self`, `private`, `static fn`, generic `class Stack<T>` |
+| Optionals | `var o: int? = none`, `if v = o { } else { }`, `o == none` |
+| Classes | fixed fields and `var` fields, with optional defaults, `init(...)`, methods, `self`, `private`, `static fn`, generic `class Stack<T>` |
 | Inheritance | `class B : A` — single base class; `override fn`; `super(...)`, `super.method()`; `abstract class` / `abstract fn`; `x is B`, `x as B` |
 | Interfaces | `interface I : J { fn m() -> str }`, `class C : Base, I, J`; interfaces work as types |
 | Modules | `import "lib/shapes.kl"`, `import "std/game"`, `import "mathx" as mx` (packages) |
-| Errors | `fn f() -> Result<int, str>`, `return Err("...")`, `let v = f()?`, `match r { Ok(v) => ... Err(e) => ... }` |
+| Errors | `fn f() -> Result<int, str>`, `return Err("...")`, `v = f()?`, `match r { Ok(v) => ... Err(e) => ... }` |
 | Threads | `Thread.spawn(fn() => work())` → `Task<T>`, `.join()`; `Channel<T>()`, `Shared(0)`, `xs.par_map(f)` |
 | Async | `async fn load() -> int { await Time.wait(0.5) ... }`, `await job`, `Async.all([...])`, `Async.spawn(job)` |
 | Structs | `struct Vec2 { x: float, y: float }`, `mut fn`, `op +(o: Vec2) -> Vec2`, `2.0 * v`, generic `struct Grid<T>`, `static ORIGIN: Vec2 = ...` |
@@ -181,8 +181,8 @@ Statements end at a newline (`;` is optional). Comments use `//` and `/* */`.
 
 ## Safety
 
-- No null: absence is an explicit `T?` that must be unwrapped with `if let`.
-- Immutable by default; assigning to a `let` variable is a compile error.
+- No null: absence is an explicit `T?` that must be unwrapped with `if v = o`.
+- Fixed by default: variables and fields change only when declared `var`.
 - No implicit conversions: `"n=" + 5` is an error, write `"n=" + str(5)`.
 - Array indexing is bounds-checked; integer overflow and division by zero stop the program with a `runtime error:` message instead of corrupting memory.
 - Failures that are part of normal use are `Result` values the compiler makes you handle.

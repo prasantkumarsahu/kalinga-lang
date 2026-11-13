@@ -118,7 +118,7 @@ fn main() {
 ```
 
 - `alias.Name` works for functions, classes, structs, enums and interfaces, in code and in
-  types (`let b: mx.Vec2`).
+  types (`b: mx.Vec2 = ...`).
 - A plain `import "mathx"` brings the names in directly. Inside a file, a name is looked up
   in its own package (or project) first, then in the packages it imports.
 - When two plainly imported packages both have the name you use, the compiler asks you to
