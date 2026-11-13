@@ -360,7 +360,15 @@ pub fn check(file: &str, source: &str) -> Result<()> {
     compile(file, source, Purpose::Check).map(|_| ())
 }
 
-fn compile(file: &str, source: &str, purpose: Purpose) -> Result<(String, Native)> {
+/// A loaded and type-checked program, ready for a code generator.
+struct Checked {
+    program: kalinga_syntax::ast::Program,
+    model: kalinga_sema::Model,
+    typed: kalinga_sema::tast::TypedProgram,
+    files: Vec<String>,
+}
+
+fn check_program(file: &str, source: &str, purpose: Purpose) -> Result<Checked> {
     let (program, map) = load(file, source)?;
     let model = match kalinga_sema::Model::build(&program, purpose == Purpose::Program) {
         Ok(m) => m,
@@ -376,14 +384,102 @@ fn compile(file: &str, source: &str, purpose: Purpose) -> Result<(String, Native
         eprintln!("{}", map.render(&on_name(&map, d, &name)));
     }
     let files: Vec<String> = map.files.iter().map(|(name, _)| name.clone()).collect();
-    let target = kalinga_codegen::Target { tests: purpose == Purpose::Tests, files: &files };
-    let rust = kalinga_codegen::generate(&program, &model, &typed, &target);
+    Ok(Checked { program, model, typed, files })
+}
+
+fn compile(file: &str, source: &str, purpose: Purpose) -> Result<(String, Native)> {
+    let c = check_program(file, source, purpose)?;
+    let target = kalinga_codegen::Target { tests: purpose == Purpose::Tests, files: &c.files };
+    let rust = kalinga_codegen::generate(&c.program, &c.model, &c.typed, &target);
+    let program = &c.program;
     let native = Native {
         crates: program.crates.clone(),
         uses_rust: !program.rust_files.is_empty() || !program.extern_fns.is_empty() || !program.crates.is_empty(),
         main_thread: program.main_thread,
     };
     Ok((rust, native))
+}
+
+/// Compiles Kalinga source (plus its imports) to JavaScript, for web builds; with `tests`,
+/// a program that runs the root file's `test fn`s.
+pub fn to_js(file: &str, source: &str, tests: bool) -> Result<String> {
+    let purpose = if tests { Purpose::Tests } else { Purpose::Program };
+    let c = check_program(file, source, purpose)?;
+    let target = kalinga_codegen_js::Target { tests, files: &c.files };
+    Ok(kalinga_codegen_js::generate(&c.program, &c.model, &c.typed, &target))
+}
+
+/// Compiles `input` to JavaScript and runs it with Node.js (`kalinga run --web`), or its
+/// `test fn`s with `tests`; returns the exit code.
+pub fn run_web(input: &Path, tests: bool) -> Result<i32> {
+    let source = std::fs::read_to_string(input).map_err(DriverError::io("read", input))?;
+    let js = to_js(&input.display().to_string(), &source, tests)?;
+    let work = std::env::temp_dir().join("kalinga-build");
+    std::fs::create_dir_all(&work).map_err(DriverError::io("create", &work))?;
+    let suffix = if tests { "_tests" } else { "" };
+    let path = work.join(format!("{}{}.js", build_name(input), suffix));
+    std::fs::write(&path, js).map_err(DriverError::io("write", &path))?;
+    let status = Command::new("node")
+        .arg("--stack-size=65500")
+        .arg(&path)
+        .status()
+        .map_err(DriverError::tool_missing("node"))?;
+    Ok(status.code().unwrap_or(1))
+}
+
+/// Compiles `input` for the browser: `dir/app.js`, `dir/index.html` loading it, and every
+/// `.css` file next to `input` (linked from the page). `dir` defaults to `dist` next to
+/// `input`.
+pub fn build_web(input: &Path, dir: Option<PathBuf>) -> Result<PathBuf> {
+    let source = std::fs::read_to_string(input).map_err(DriverError::io("read", input))?;
+    let js = to_js(&input.display().to_string(), &source, false)?;
+    let base = input.parent().filter(|p| !p.as_os_str().is_empty()).unwrap_or(Path::new("."));
+    let dir = dir.unwrap_or_else(|| base.join("dist"));
+    std::fs::create_dir_all(&dir).map_err(DriverError::io("create", &dir))?;
+    let app = dir.join("app.js");
+    std::fs::write(&app, js).map_err(DriverError::io("write", &app))?;
+    let mut styles = vec![];
+    if let Ok(entries) = std::fs::read_dir(base) {
+        let mut css: Vec<PathBuf> =
+            entries.flatten().map(|e| e.path()).filter(|p| p.extension().is_some_and(|x| x == "css")).collect();
+        css.sort();
+        for from in css {
+            let Some(name) = from.file_name() else { continue };
+            let to = dir.join(name);
+            std::fs::copy(&from, &to).map_err(DriverError::io("copy", &from))?;
+            styles.push(name.to_string_lossy().into_owned());
+        }
+    }
+    let title = input.file_stem().and_then(|s| s.to_str()).unwrap_or("app");
+    let links: String = styles
+        .iter()
+        .map(|s| {
+            format!(
+                "  <link rel=\"stylesheet\" href=\"{}\">
+",
+                s
+            )
+        })
+        .collect();
+    let html = format!(
+        "<!doctype html>
+<html>
+<head>
+  <meta charset=\"utf-8\">
+  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">
+  <title>{}</title>
+{}</head>
+<body>
+  <div id=\"app\"></div>
+  <script src=\"app.js\"></script>
+</body>
+</html>
+",
+        title, links
+    );
+    let index = dir.join("index.html");
+    std::fs::write(&index, html).map_err(DriverError::io("write", &index))?;
+    Ok(dir)
 }
 
 /// `d` moved onto the first `name` at or after where it points (a use is recorded where its

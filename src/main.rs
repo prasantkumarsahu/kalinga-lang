@@ -10,6 +10,10 @@ usage:
   kalinga build <file.kl> [-o <exe>]   compile to a native executable
   kalinga test  <file.kl>              run the file's `test fn`s and report which fail
   kalinga emit  <file.kl>              print the generated Rust code
+                --web                  with run, build, test or emit: compile to JavaScript
+                                       (run and test use Node.js; build writes a folder,
+                                       `dist` by default, with index.html, app.js and the
+                                       .css files next to the program)
   kalinga check <file.kl> [--stdin]    report errors only; `fn main()` is optional, so files
                                        meant to be imported can be checked (--stdin reads the
                                        source from stdin)
@@ -87,7 +91,9 @@ fn fix(args: &[String]) -> CliResult<i32> {
 }
 
 fn main() {
-    let args: Vec<String> = std::env::args().skip(1).collect();
+    let mut args: Vec<String> = std::env::args().skip(1).collect();
+    let web = args.iter().any(|a| a == "--web");
+    args.retain(|a| a != "--web");
     if let Some("-v" | "-version" | "--version" | "version") = args.first().map(String::as_str) {
         println!("kalinga {}", env!("CARGO_PKG_VERSION"));
         return;
@@ -108,6 +114,8 @@ fn main() {
     };
 
     let result: CliResult<i32> = match cmd {
+        "run" if web => driver::run_web(&file, false).map_err(Into::into),
+        "test" if web => driver::run_web(&file, true).map_err(Into::into),
         "run" => driver::run(&file).map_err(Into::into),
         "test" => driver::test(&file).map_err(Into::into),
         "build" => {
@@ -125,9 +133,22 @@ fn main() {
                 }
                 None => None,
             };
-            let out = out.or_else(|| Some(file.with_extension(std::env::consts::EXE_EXTENSION)));
-            driver::build(&file, out).map_err(Into::into).map(|exe| {
-                println!("built {}", exe.display());
+            if web {
+                driver::build_web(&file, out).map_err(Into::into).map(|dir| {
+                    println!("built {}", dir.join("index.html").display());
+                    0
+                })
+            } else {
+                let out = out.or_else(|| Some(file.with_extension(std::env::consts::EXE_EXTENSION)));
+                driver::build(&file, out).map_err(Into::into).map(|exe| {
+                    println!("built {}", exe.display());
+                    0
+                })
+            }
+        }
+        "emit" if web => {
+            read(&file).and_then(|src| Ok(driver::to_js(&file.display().to_string(), &src, false)?)).map(|js| {
+                print!("{}", js);
                 0
             })
         }

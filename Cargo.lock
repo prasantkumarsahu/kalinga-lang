@@ -184,10 +184,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "kalinga-codegen-js"
+version = "0.7.0"
+dependencies = [
+ "kalinga-sema",
+ "kalinga-syntax",
+]
+
+[[package]]
 name = "kalinga-driver"
 version = "0.7.0"
 dependencies = [
  "kalinga-codegen",
+ "kalinga-codegen-js",
  "kalinga-fmt",
  "kalinga-project",
  "kalinga-sema",

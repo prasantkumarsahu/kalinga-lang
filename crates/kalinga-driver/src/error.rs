@@ -98,7 +98,8 @@ impl fmt::Display for DriverError {
                 write!(f, "cannot copy {} to {}: {}", from.display(), to.display(), source)
             }
             DriverError::ToolMissing { tool, source } => {
-                write!(f, "cannot run `{}` (is Rust installed and on PATH?): {}", tool, source)
+                let needs = if *tool == "node" { "Node.js (https://nodejs.org)" } else { "Rust" };
+                write!(f, "cannot run `{}` (is {} installed and on PATH?): {}", tool, needs, source)
             }
             DriverError::Run { exe, source } => write!(f, "cannot run {}: {}", exe.display(), source),
             DriverError::UnknownHost => f.write_str("cannot tell the Rust target platform (`rustc -vV`)"),

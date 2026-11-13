@@ -9,6 +9,10 @@
 //!
 //! `BLESS=1 cargo test --test ui` rewrites the snapshots from the current output. Tests
 //! whose first line is `// ui: network` (they download crates) run only with `--ignored`.
+//!
+//! `ui_web` runs the same programs again as JavaScript (`kalinga run --web`, with Node.js)
+//! and compares them with the same snapshots, so both backends behave alike. Programs
+//! using what a browser does not have (threads, files, Rust code) are listed in `NOT_WEB`.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -24,6 +28,16 @@ const EXAMPLES: &[(&str, &str)] = &[
     ("examples/particles.kl", "particles"),
     ("examples/shapes/main.kl", "shapes"),
     ("examples/interop/main.kl", "interop"),
+];
+
+/// Programs the web pass skips: they use threads, files or Rust code.
+const NOT_WEB: &[&str] = &[
+    "tests/ui/interop/main.kl",
+    "tests/ui/run/async.kl",
+    "tests/ui/run/inline_rust.kl",
+    "tests/ui/run/std_fs.kl",
+    "tests/ui/run/threads.kl",
+    "tests/ui/runtime/thread_fail.kl",
 ];
 
 #[derive(Clone, Copy, PartialEq)]
@@ -92,14 +106,19 @@ fn normalize(bytes: &[u8]) -> String {
     text.lines().filter(|l| !l.starts_with("building with cargo")).map(|l| format!("{}\n", l)).collect()
 }
 
-fn run(case: &Case) -> Outcome {
+fn run(case: &Case, web: bool) -> Outcome {
     let cmd = match case.mode {
         Mode::Run => "run",
         Mode::Check => "check",
         Mode::Test => "test",
     };
     let source = case.source.to_str().unwrap().replace('\\', "/");
-    let out = Command::new(env!("CARGO_BIN_EXE_kalinga")).args([cmd, &source]).output().expect("failed to run kalinga");
+    let mut command = Command::new(env!("CARGO_BIN_EXE_kalinga"));
+    command.args([cmd, &source]);
+    if web {
+        command.arg("--web");
+    }
+    let out = command.output().expect("failed to run kalinga");
     Outcome { stdout: normalize(&out.stdout), stderr: normalize(&out.stderr), exit: out.status.code().unwrap_or(-1) }
 }
 
@@ -142,16 +161,22 @@ fn bless(case: &Case, got: &Outcome) {
     );
 }
 
-fn run_all(network: bool) {
-    let blessing = std::env::var_os("BLESS").is_some();
-    let queue = Mutex::new(cases().into_iter().filter(|c| c.network == network).collect::<Vec<_>>());
+fn run_all(network: bool, web: bool) {
+    let blessing = std::env::var_os("BLESS").is_some() && !web;
+    let wanted = |c: &Case| {
+        let path = c.source.to_str().unwrap().replace('\\', "/");
+        c.network == network
+            && (!web
+                || (c.mode != Mode::Check && c.source.starts_with("tests/ui") && !NOT_WEB.contains(&path.as_str())))
+    };
+    let queue = Mutex::new(cases().into_iter().filter(wanted).collect::<Vec<_>>());
     let failures = Mutex::new(vec![]);
     let workers = std::thread::available_parallelism().map_or(4, |n| n.get());
     std::thread::scope(|s| {
         for _ in 0..workers {
             s.spawn(|| {
                 while let Some(case) = queue.lock().unwrap().pop() {
-                    let got = run(&case);
+                    let got = run(&case, web);
                     if blessing {
                         bless(&case, &got);
                     } else if let Some(f) = compare(&case, &got) {
@@ -172,12 +197,22 @@ fn run_all(network: bool) {
 
 #[test]
 fn ui() {
-    run_all(false);
+    run_all(false, false);
+}
+
+/// The same programs compiled to JavaScript and run with Node.js (skipped without Node).
+#[test]
+fn ui_web() {
+    if Command::new("node").arg("--version").output().is_err() {
+        eprintln!("skipping the web UI tests: Node.js is not installed");
+        return;
+    }
+    run_all(false, true);
 }
 
 /// Downloads crates the first time: `cargo test --test ui -- --ignored`.
 #[test]
 #[ignore]
 fn ui_network() {
-    run_all(true);
+    run_all(true, false);
 }
