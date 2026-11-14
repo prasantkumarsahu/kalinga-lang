@@ -228,8 +228,12 @@ page sees 7
 
 `import "std/web"` needs a web build: `kalinga build --web app.kl` writes
 `dist/index.html`, `dist/app.js` and every `.css` file next to `app.kl`;
-`kalinga run --web app.kl` runs it under Node.js on a stand-in page. `std/web` does not
-use `std/reactive`; import both to keep the page up to date.
+`kalinga run --web app.kl` runs it under Node.js on a stand-in page;
+`kalinga serve app.kl` serves it at `http://localhost:8080` and rebuilds on every change.
+`utkal new site --web` makes a web project (`target = "web"` and `styles = ["styles.css"]`
+in `utkal.toml`), where `utkal build/run/test/check` build for the web without `--web`
+and `utkal serve` serves it. `std/web` does not use `std/reactive`; import both to keep
+the page up to date.
 
 ```kalinga
 import "std/reactive"
@@ -238,17 +242,23 @@ import "std/web"
 fn main() {
     app = Document.app()
     count = signal(0)
-    shown = app.append(Document.create("p"))
+    shown = app.append(Document.create(Tag.P))
     effect(fn() {
         shown.set_text("Clicked {count.get()} times")
     })
-    plus = app.append(Document.create("button"))
+    plus = app.append(Document.create(Tag.Button))
     plus.set_text("+1")
-    plus.on("click", fn(e: Event) { count.update(fn(n) => n + 1) })
+    plus.on(EventKind.Click, fn(e: Event) { count.update(fn(n) => n + 1) })
 }
 ```
 
-- `Document`: `app()` (the `<div id="app">`), `body()`, `create(tag)`, `text(text)`,
+- Fixed lists are enums, not strings: `Document.create(Tag.Div)` (`Tag.Other("details")`
+  for others), `el.on(EventKind.Click, ...)` (`EventKind.Other("name")`), `e.key()` gives a
+  `Key` (`Key.Enter`, `Key.Space`, `Key.Char("a")`, `Key.Other("F5")`), `e.button()` a
+  `MouseButton`, `e.kind()` an `EventKind`, `Document.input(InputType.Checkbox)`,
+  `Http.send(Method.Put, ...)`. Match them with `_ =>` for the rest (no binding
+  catch-all).
+- `Document`: `app()` (the `<div id="app">`), `body()`, `create(tag)`, `input(kind)`, `text(text)`,
   `find(selector)` (`Element?`), `find_all`, `add_styles(css)`, `title()`, `set_title`.
 - `Element`: `text`/`set_text`, `html`, `tag`, `attr` (`str?`)/`set_attr`/`remove_attr`,
   `add_class`/`remove_class`/`toggle_class(name, on)`/`has_class`, `set_style`/

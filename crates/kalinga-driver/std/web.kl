@@ -14,6 +14,169 @@ extern type JsListener
 /// An HTTP response's headers.
 extern type JsHeaders
 
+/// The kinds of events `on` listens for; `Other("name")` for any other event.
+enum EventKind {
+    /// A click (or a tap, or Enter on a button).
+    Click
+    DoubleClick
+    /// The right button, or a long press: the browser is about to show a menu.
+    ContextMenu
+    /// The text of an input, text area or select changed (on every key).
+    Input
+    /// An input's value changed and the user left it (or picked an option).
+    Change
+    /// A form is being sent.
+    Submit
+    KeyDown
+    KeyUp
+    Focus
+    Blur
+    MouseDown
+    MouseUp
+    MouseMove
+    MouseEnter
+    MouseLeave
+    /// The mouse wheel or a touchpad scrolled.
+    Wheel
+    /// The element (or page) was scrolled.
+    Scroll
+    PointerDown
+    PointerUp
+    PointerMove
+    TouchStart
+    TouchMove
+    TouchEnd
+    DragStart
+    DragOver
+    Drop
+    /// An image (or the page) finished loading.
+    Load
+    /// Any other event, by its browser name: `EventKind.Other("animationend")`.
+    Other(name: str)
+}
+
+/// The kinds of elements `Document.create` makes; `Other("name")` for any other tag.
+enum Tag {
+    Div
+    Span
+    P
+    H1
+    H2
+    H3
+    H4
+    H5
+    H6
+    /// A link: set its `href` with `set_attr`.
+    A
+    Button
+    /// A text box; `set_attr("type", "checkbox")` (or `"number"`, `"password"`, ...) for others.
+    Input
+    TextArea
+    Select
+    /// A choice inside a `Select`.
+    Option
+    Label
+    Form
+    Ul
+    Ol
+    Li
+    /// An image: set its `src` with `set_attr`.
+    Img
+    Section
+    Header
+    Footer
+    Nav
+    Main
+    Article
+    Aside
+    Table
+    Thead
+    Tbody
+    Tr
+    Th
+    Td
+    Pre
+    Code
+    Strong
+    Em
+    Br
+    Hr
+    Canvas
+    Video
+    Audio
+    /// A text node (from `Document.text`).
+    Text
+    /// Any other tag: `Tag.Other("details")`.
+    Other(name: str)
+}
+
+/// The kinds of `Tag.Input`, for `Document.input`.
+enum InputType {
+    Text
+    Number
+    Password
+    Email
+    Search
+    Url
+    Tel
+    Checkbox
+    Radio
+    /// A slider.
+    Range
+    Date
+    Time
+    Color
+    File
+    Hidden
+}
+
+/// A key of the keyboard, from `Event.key()`.
+enum Key {
+    Enter
+    Escape
+    Tab
+    Backspace
+    Delete
+    Space
+    ArrowUp
+    ArrowDown
+    ArrowLeft
+    ArrowRight
+    Home
+    End
+    PageUp
+    PageDown
+    Shift
+    Control
+    Alt
+    /// The Windows or Command key.
+    Meta
+    /// A key that types a character: `Key.Char("a")`, `Key.Char("7")`.
+    Char(text: str)
+    /// Any other key, by its browser name: `Key.Other("F5")`.
+    Other(name: str)
+}
+
+/// A mouse button, from `Event.button()`.
+enum MouseButton {
+    Left
+    Middle
+    Right
+    /// The back and forward buttons some mice have (3, 4).
+    Other(number: int)
+}
+
+/// An HTTP method, for `Http.send`.
+enum Method {
+    Get
+    Post
+    Put
+    Patch
+    Delete
+    Head
+    Options
+}
+
 /// An element (or text node) of the page.
 struct Element {
     node: JsNode
@@ -33,9 +196,9 @@ struct Element {
         return web_html(self.node)
     }
 
-    /// The element's tag in lowercase (`"div"`); `"#text"` for text.
-    fn tag() -> str {
-        return web_tag(self.node)
+    /// What kind of element it is: `Tag.Div`, `Tag.Button`, ...; `Tag.Text` for text.
+    fn tag() -> Tag {
+        return web_tag_of(web_tag(self.node))
     }
 
     /// An attribute's value, or `none` when it is not set.
@@ -142,9 +305,9 @@ struct Element {
         return web_find_all(self.node, selector).map(fn(n) => Element(n))
     }
 
-    /// Calls `handler` on every `kind` event (`"click"`, `"input"`, `"keydown"`, ...).
-    fn on(kind: str, handler: fn(Event)) -> Listener {
-        return Listener(web_on(self.node, kind, fn(e: JsEvent) { handler(Event(e)) }))
+    /// Calls `handler` on every event of this kind: `el.on(EventKind.Click, fn(e: Event) { ... })`.
+    fn on(kind: EventKind, handler: fn(Event)) -> Listener {
+        return Listener(web_on(self.node, web_event_name(kind), fn(e: JsEvent) { handler(Event(e)) }))
     }
 
     fn focus() {
@@ -157,8 +320,8 @@ struct Element {
     }
 
     /// Sends an event of this kind to the element (useful in tests).
-    fn trigger(kind: str) {
-        web_trigger(self.node, kind)
+    fn trigger(kind: EventKind) {
+        web_trigger(self.node, web_event_name(kind))
     }
 }
 
@@ -166,14 +329,14 @@ struct Element {
 struct Event {
     event: JsEvent
 
-    /// `"click"`, `"input"`, ...
-    fn kind() -> str {
-        return web_ev_str(self.event, "type")
+    /// What kind of event it is: `EventKind.Click`, `EventKind.Input`, ...
+    fn kind() -> EventKind {
+        return web_event_kind(web_ev_str(self.event, "type"))
     }
 
-    /// The key of a keyboard event: `"a"`, `"Enter"`, `"ArrowLeft"`.
-    fn key() -> str {
-        return web_ev_str(self.event, "key")
+    /// The key of a keyboard event: `Key.Enter`, `Key.ArrowLeft`, `Key.Char("a")`.
+    fn key() -> Key {
+        return web_key_of(web_ev_str(self.event, "key"))
     }
 
     /// The value of the input the event happened on.
@@ -190,9 +353,15 @@ struct Event {
         return web_ev_num(self.event, "clientY")
     }
 
-    /// The mouse button: 0 left, 1 middle, 2 right.
-    fn button() -> int {
-        return int(web_ev_num(self.event, "button"))
+    /// The mouse button of a mouse event.
+    fn button() -> MouseButton {
+        number = int(web_ev_num(self.event, "button"))
+        return match number {
+            0 => MouseButton.Left
+            1 => MouseButton.Middle
+            2 => MouseButton.Right
+            _ => MouseButton.Other(number)
+        }
     }
 
     /// The element the event happened on.
@@ -226,9 +395,19 @@ struct Listener {
 
 /// The page.
 class Document {
-    /// A new element: `Document.create("button")`.
-    static fn create(tag: str) -> Element {
-        return Element(web_create(tag))
+    /// A new element: `Document.create(Tag.Button)` (an empty text node for `Tag.Text`).
+    static fn create(tag: Tag) -> Element {
+        return match tag {
+            Tag.Text => Document.text("")
+            _ => Element(web_create(web_tag_name(tag)))
+        }
+    }
+
+    /// A new `<input>` of this kind: `Document.input(InputType.Checkbox)`.
+    static fn input(kind: InputType) -> Element {
+        el = Document.create(Tag.Input)
+        el.set_attr("type", "{kind}".lower())
+        return el
     }
 
     /// A new text node.
@@ -332,17 +511,18 @@ struct Response {
 class Http {
     /// `GET url`.
     static async fn get(url: str) -> Result<Response, str> {
-        return await Http.send("GET", url, "", {})
+        return await Http.send(Method.Get, url, "", {})
     }
 
     /// `POST url` with `body`.
     static async fn post(url: str, body: str) -> Result<Response, str> {
-        return await Http.send("POST", url, body, {})
+        return await Http.send(Method.Post, url, body, {})
     }
 
-    /// Any request; `body` is left out when it is empty.
-    static async fn send(method: str, url: str, body: str, headers: {str: str}) -> Result<Response, str> {
-        answer = await web_fetch(method, url, body, headers)
+    /// Any request: `Http.send(Method.Put, url, body, {"Content-Type": "application/json"})`;
+    /// `body` is left out when it is empty.
+    static async fn send(method: Method, url: str, body: str, headers: {str: str}) -> Result<Response, str> {
+        answer = await web_fetch(web_method_name(method), url, body, headers)
         reply = answer?
         return Ok(Response(web_res_status(reply), web_res_text(reply), web_res_headers(reply)))
     }
@@ -459,6 +639,195 @@ extern fn web_children(n: JsNode) -> [JsNode] = js { return [...n.children]; }
 extern fn web_find(n: JsNode, selector: str) -> JsNode? = js { return n.querySelector(selector); }
 extern fn web_find_all(n: JsNode, selector: str) -> [JsNode] = js { return [...n.querySelectorAll(selector)]; }
 extern fn web_focus(n: JsNode) = js { n.focus(); }
+
+/// The browser's name of an event kind (`"click"`).
+fn web_event_name(kind: EventKind) -> str {
+    return match kind {
+        EventKind.Click => "click"
+        EventKind.DoubleClick => "dblclick"
+        EventKind.ContextMenu => "contextmenu"
+        EventKind.Input => "input"
+        EventKind.Change => "change"
+        EventKind.Submit => "submit"
+        EventKind.KeyDown => "keydown"
+        EventKind.KeyUp => "keyup"
+        EventKind.Focus => "focus"
+        EventKind.Blur => "blur"
+        EventKind.MouseDown => "mousedown"
+        EventKind.MouseUp => "mouseup"
+        EventKind.MouseMove => "mousemove"
+        EventKind.MouseEnter => "mouseenter"
+        EventKind.MouseLeave => "mouseleave"
+        EventKind.Wheel => "wheel"
+        EventKind.Scroll => "scroll"
+        EventKind.PointerDown => "pointerdown"
+        EventKind.PointerUp => "pointerup"
+        EventKind.PointerMove => "pointermove"
+        EventKind.TouchStart => "touchstart"
+        EventKind.TouchMove => "touchmove"
+        EventKind.TouchEnd => "touchend"
+        EventKind.DragStart => "dragstart"
+        EventKind.DragOver => "dragover"
+        EventKind.Drop => "drop"
+        EventKind.Load => "load"
+        EventKind.Other(name) => name
+    }
+}
+
+/// The event kind with the browser's name `name`.
+fn web_event_kind(name: str) -> EventKind {
+    kinds = [
+        EventKind.Click,
+        EventKind.DoubleClick,
+        EventKind.ContextMenu,
+        EventKind.Input,
+        EventKind.Change,
+        EventKind.Submit,
+        EventKind.KeyDown,
+        EventKind.KeyUp,
+        EventKind.Focus,
+        EventKind.Blur,
+        EventKind.MouseDown,
+        EventKind.MouseUp,
+        EventKind.MouseMove,
+        EventKind.MouseEnter,
+        EventKind.MouseLeave,
+        EventKind.Wheel,
+        EventKind.Scroll,
+        EventKind.PointerDown,
+        EventKind.PointerUp,
+        EventKind.PointerMove,
+        EventKind.TouchStart,
+        EventKind.TouchMove,
+        EventKind.TouchEnd,
+        EventKind.DragStart,
+        EventKind.DragOver,
+        EventKind.Drop,
+        EventKind.Load,
+    ]
+    for k in kinds {
+        if web_event_name(k) == name {
+            return k
+        }
+    }
+    return EventKind.Other(name)
+}
+
+/// Every tag but `Other`, in the order of `Tag`.
+fn web_tags() -> [Tag] {
+    return [
+        Tag.Div,
+        Tag.Span,
+        Tag.P,
+        Tag.H1,
+        Tag.H2,
+        Tag.H3,
+        Tag.H4,
+        Tag.H5,
+        Tag.H6,
+        Tag.A,
+        Tag.Button,
+        Tag.Input,
+        Tag.TextArea,
+        Tag.Select,
+        Tag.Option,
+        Tag.Label,
+        Tag.Form,
+        Tag.Ul,
+        Tag.Ol,
+        Tag.Li,
+        Tag.Img,
+        Tag.Section,
+        Tag.Header,
+        Tag.Footer,
+        Tag.Nav,
+        Tag.Main,
+        Tag.Article,
+        Tag.Aside,
+        Tag.Table,
+        Tag.Thead,
+        Tag.Tbody,
+        Tag.Tr,
+        Tag.Th,
+        Tag.Td,
+        Tag.Pre,
+        Tag.Code,
+        Tag.Strong,
+        Tag.Em,
+        Tag.Br,
+        Tag.Hr,
+        Tag.Canvas,
+        Tag.Video,
+        Tag.Audio,
+        Tag.Text,
+    ]
+}
+
+/// The HTML name of a tag (`"div"`; `"#text"` for text).
+fn web_tag_name(tag: Tag) -> str {
+    return match tag {
+        Tag.Text => "#text"
+        Tag.Other(name) => name.lower()
+        _ => "{tag}".lower()
+    }
+}
+
+/// The tag with the HTML name `name`.
+fn web_tag_of(name: str) -> Tag {
+    for t in web_tags() {
+        if web_tag_name(t) == name {
+            return t
+        }
+    }
+    return Tag.Other(name)
+}
+
+/// The key with the browser's name `name` (`"Enter"`, `"a"`, `" "`).
+fn web_key_of(name: str) -> Key {
+    named = [
+        Key.Enter,
+        Key.Escape,
+        Key.Tab,
+        Key.Backspace,
+        Key.Delete,
+        Key.ArrowUp,
+        Key.ArrowDown,
+        Key.ArrowLeft,
+        Key.ArrowRight,
+        Key.Home,
+        Key.End,
+        Key.PageUp,
+        Key.PageDown,
+        Key.Shift,
+        Key.Control,
+        Key.Alt,
+        Key.Meta,
+    ]
+    if name == " " {
+        return Key.Space
+    }
+    for k in named {
+        if "{k}" == name {
+            return k
+        }
+    }
+    if len(name) == 1 {
+        return Key.Char(name)
+    }
+    return Key.Other(name)
+}
+
+fn web_method_name(method: Method) -> str {
+    return match method {
+        Method.Get => "GET"
+        Method.Post => "POST"
+        Method.Put => "PUT"
+        Method.Patch => "PATCH"
+        Method.Delete => "DELETE"
+        Method.Head => "HEAD"
+        Method.Options => "OPTIONS"
+    }
+}
 
 extern fn web_trigger(n: JsNode, kind: str) = js {
     if (kind === "click" && typeof n.click === "function") n.click();

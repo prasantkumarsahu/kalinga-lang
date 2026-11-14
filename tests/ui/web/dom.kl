@@ -3,11 +3,11 @@ import "std/web"
 
 fn main() {
     app = Document.app()
-    list = app.append(Document.create("ul"))
+    list = app.append(Document.create(Tag.Ul))
     list.add_class("items")
     list.set_attr("data-kind", "fruit")
     for name in ["apple", "pear"] {
-        li = list.append(Document.create("li"))
+        li = list.append(Document.create(Tag.Li))
         li.set_text(name)
     }
     first = list.children()[0]
@@ -17,10 +17,10 @@ fn main() {
     println(len(Document.find_all("ul.items li")), first.has_class("done"), list.attr("data-kind"), list.attr("x"))
 
     // Events: handlers get an `Event`; listeners can be removed.
-    button = app.append(Document.create("button"))
+    button = app.append(Document.create(Tag.Button))
     button.set_text("+1")
     var clicks = 0
-    listener = button.on("click", fn(e: Event) {
+    listener = button.on(EventKind.Click, fn(e: Event) {
         clicks += 1
         if t = e.target() {
             println("{e.kind()} on {t.tag()}: {clicks}")
@@ -32,15 +32,15 @@ fn main() {
     button.click()
 
     // Events reach the elements around the one they happen on, unless stopped.
-    app.on("click", fn(e: Event) { println("app saw a click") })
+    app.on(EventKind.Click, fn(e: Event) { println("app saw a click") })
     button.click()
-    first.on("click", fn(e: Event) { e.stop() })
+    first.on(EventKind.Click, fn(e: Event) { e.stop() })
     first.click()
 
-    input = app.append(Document.create("input"))
-    input.on("input", fn(e: Event) { println("typed {e.value()}") })
+    input = app.append(Document.create(Tag.Input))
+    input.on(EventKind.Input, fn(e: Event) { println("typed {e.value()}") })
     input.set_value("hello")
-    input.trigger("input")
+    input.trigger(EventKind.Input)
 
     first.remove()
     list.clear()
@@ -54,5 +54,30 @@ fn main() {
     println(Location.path(), Window.width())
     Document.set_title("Shop")
     println(Document.title())
+
+    // Typed names: tags, input kinds, keys and events of any other kind.
+    box = app.append(Document.input(InputType.Checkbox))
+    println(box.attr("type"), box.tag(), Document.create(Tag.Other("details")).tag(), Document.text("hi").tag())
+    box.on(EventKind.KeyDown, fn(e: Event) {
+        match e.key() {
+            Key.Enter => println("enter")
+            Key.Space => println("space")
+            Key.Char(c) => println("char {c}")
+            Key.Other(name) => println("other {name}")
+            _ => println("named {e.key()}")
+        }
+    })
+    for k in ["Enter", " ", "a", "F5", "ArrowLeft"] {
+        press(box.node, k)
+    }
+    box.on(EventKind.Other("custom"), fn(e: Event) { println("custom: {e.kind()}") })
+    box.trigger(EventKind.Other("custom"))
     Timer.after(0.01, fn() { println("timer ran") })
+}
+
+/// Sends a `keydown` of `key` to `n`.
+extern fn press(n: JsNode, key: str) = js {
+    const e = new Event("keydown", { bubbles: true });
+    e.key = key;
+    n.dispatchEvent(e);
 }

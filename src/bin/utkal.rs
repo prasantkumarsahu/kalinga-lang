@@ -12,14 +12,18 @@ type CliResult<T> = Result<T, Box<dyn std::error::Error>>;
 const USAGE: &str = "utkal — the Kalinga package manager
 
 usage:
-  utkal new <name> [--lib]          create a project (an app, or a library with --lib)
+  utkal new <name> [--lib | --web]  create a project (an app, a library with --lib, or a
+                                    web app with --web)
   utkal add <name> --git <url> [--tag <t> | --branch <b> | --rev <commit> | --version <req>]
   utkal add <name> --path <folder>  add a Kalinga package
   utkal add <crate> --rust <version> [--features a,b]
                                     add a Rust crate from crates.io
   utkal remove <name>               remove a package or Rust crate
-  utkal build                       compile src/main.kl to target/<name>
-  utkal run [args...]               build and run
+  utkal build                       compile src/main.kl to target/<name> (a web app:
+                                    to dist/, with index.html, app.js and the styles)
+  utkal run [args...]               build and run (a web app runs with Node.js)
+  utkal serve [--port <n>]          build a web app, serve it at http://localhost:8080 and
+                                    build again (reloading the page) on every change
   utkal check                       report errors (src/main.kl or src/lib.kl)
   utkal fix                         update src/ and tests/ for this Kalinga version
   utkal fmt [--check]               lay out src/ and tests/ in the standard style
@@ -44,6 +48,7 @@ fn main() {
             0
         }),
         Some("run") => run(&rest),
+        Some("serve") => serve(&rest),
         Some("check") => check(),
         Some("fix") => fix(),
         Some("fmt") => fmt(rest.contains(&"--check")),
@@ -75,9 +80,13 @@ fn project_dir() -> CliResult<PathBuf> {
 
 fn new(args: &[&str]) -> CliResult<i32> {
     let Some(name) = args.first().filter(|a| !a.starts_with('-')) else {
-        return Err("usage: utkal new <name> [--lib]".into());
+        return Err("usage: utkal new <name> [--lib | --web]".into());
     };
     let lib = args.contains(&"--lib");
+    let web = args.contains(&"--web");
+    if lib && web {
+        return Err("choose one of `--lib` and `--web`".into());
+    }
     let dir = PathBuf::from(name);
     let pkg = dir.file_name().and_then(|n| n.to_str()).unwrap_or(name).to_string();
     if !project::valid_package_name(&pkg) {
@@ -94,16 +103,21 @@ fn new(args: &[&str]) -> CliResult<i32> {
     let write =
         |p: PathBuf, text: &str| std::fs::write(&p, text).map_err(|e| format!("cannot write {}: {}", p.display(), e));
     std::fs::create_dir_all(&src).map_err(|e| format!("cannot create {}: {}", src.display(), e))?;
+    let web_lines = if web { "target = \"web\"\nstyles = [\"styles.css\"]\n" } else { "" };
     write(
         dir.join(MANIFEST),
         &format!(
-            "[package]\nname = \"{}\"\nversion = \"0.1.0\"\nkalinga = \"{}\"\n\n[dependencies]\n\n[rust-dependencies]\n",
+            "[package]\nname = \"{}\"\nversion = \"0.1.0\"\nkalinga = \"{}\"\n{}\n[dependencies]\n\n[rust-dependencies]\n",
             pkg,
-            language_version()
+            language_version(),
+            web_lines
         ),
     )?;
-    write(dir.join(".gitignore"), "target/\n")?;
-    if lib {
+    write(dir.join(".gitignore"), if web { "target/\ndist/\n" } else { "target/\n" })?;
+    if web {
+        write(src.join("main.kl"), WEB_MAIN)?;
+        write(dir.join("styles.css"), WEB_STYLES)?;
+    } else if lib {
         write(
             src.join("lib.kl"),
             "// The public part of this package: other projects use it with\n// `import \"NAME\"` once they `utkal add` it.\n\nfn greet(who: str) -> str {\n    return \"Hello, {who}!\"\n}\n"
@@ -118,9 +132,58 @@ fn new(args: &[&str]) -> CliResult<i32> {
     } else {
         write(src.join("main.kl"), "fn main() {\n    println(\"Hello from Kalinga!\")\n}\n")?;
     }
-    println!("created {} `{}` in {}", if lib { "library" } else { "app" }, pkg, dir.display());
+    let kind = if lib {
+        "library"
+    } else if web {
+        "web app"
+    } else {
+        "app"
+    };
+    println!("created {} `{}` in {}", kind, pkg, dir.display());
+    if web {
+        println!("run `utkal serve` in it and open http://localhost:8080");
+    }
     Ok(0)
 }
+
+/// `src/main.kl` of `utkal new --web`.
+const WEB_MAIN: &str = r#"// `utkal serve` builds this page and opens it at http://localhost:8080; it builds again
+// on every change. `std/web` makes the elements; `std/reactive` keeps them up to date.
+import "std/reactive"
+import "std/web"
+
+fn main() {
+    app = Document.app()
+    count = signal(0)
+
+    title = app.append(Document.create(Tag.H1))
+    title.set_text("Hello from Kalinga!")
+
+    shown = app.append(Document.create(Tag.P))
+    effect(fn() {
+        shown.set_text("Clicked {count.get()} times")
+    })
+
+    button = app.append(Document.create(Tag.Button))
+    button.set_text("Click me")
+    button.on(EventKind.Click, fn(e: Event) { count.update(fn(n) => n + 1) })
+}
+"#;
+
+/// `styles.css` of `utkal new --web`.
+const WEB_STYLES: &str = "body {
+  font-family: system-ui, sans-serif;
+  max-width: 40rem;
+  margin: 3rem auto;
+  padding: 0 1rem;
+}
+
+button {
+  font-size: 1rem;
+  padding: 0.4rem 1rem;
+  cursor: pointer;
+}
+";
 
 /// Value of `--flag value` in `args`.
 fn flag<'a>(args: &[&'a str], name: &str) -> Option<&'a str> {
@@ -242,9 +305,8 @@ fn set_entry(text: &str, section: &str, name: &str, line: Option<&str>) -> Strin
     out
 }
 
-/// Fetches packages, then compiles `src/main.kl` to `target/<name>`.
-fn build(dir: &Path) -> CliResult<PathBuf> {
-    let manifest = project::read_manifest(dir)?;
+/// Fetches packages and finds `src/main.kl`.
+fn main_file(dir: &Path) -> CliResult<PathBuf> {
     project::resolve(dir, Mode::Fetch)?;
     let main = dir.join("src").join("main.kl");
     if !main.is_file() {
@@ -254,6 +316,22 @@ fn build(dir: &Path) -> CliResult<PathBuf> {
         )
         .into());
     }
+    Ok(main)
+}
+
+/// Whether the project is a web app (`target = "web"`).
+fn is_web(dir: &Path) -> CliResult<bool> {
+    Ok(project::read_manifest(dir)?.target == project::Target::Web)
+}
+
+/// Fetches packages, then compiles `src/main.kl` to `target/<name>`, or for a web app to
+/// `dist/` (returning its `index.html`).
+fn build(dir: &Path) -> CliResult<PathBuf> {
+    let manifest = project::read_manifest(dir)?;
+    let main = main_file(dir)?;
+    if manifest.target == project::Target::Web {
+        return Ok(driver::build_web(&main, None)?.join("index.html"));
+    }
     let target = dir.join("target");
     std::fs::create_dir_all(&target).map_err(|e| format!("cannot create {}: {}", target.display(), e))?;
     let exe = target.join(format!("{}{}", manifest.name, std::env::consts::EXE_SUFFIX));
@@ -262,9 +340,28 @@ fn build(dir: &Path) -> CliResult<PathBuf> {
 
 fn run(args: &[&str]) -> CliResult<i32> {
     let dir = project_dir()?;
+    if is_web(&dir)? {
+        return Ok(driver::run_web(&main_file(&dir)?, false)?);
+    }
     let exe = build(&dir)?;
     let status = Command::new(&exe).args(args).status().map_err(|e| format!("cannot run {}: {}", exe.display(), e))?;
     Ok(status.code().unwrap_or(1))
+}
+
+/// `utkal serve [--port <n>]`: serves the web app and builds it again on every change.
+fn serve(args: &[&str]) -> CliResult<i32> {
+    let dir = project_dir()?;
+    if !is_web(&dir)? {
+        return Err(
+            format!("`utkal serve` is for web apps: add `target = \"web\"` to [package] in {}", MANIFEST).into()
+        );
+    }
+    let port = match flag(args, "--port") {
+        Some(p) => p.parse().map_err(|_| format!("`{}` is not a port number", p))?,
+        None => 8080,
+    };
+    driver::web::serve(&main_file(&dir)?, None, port)?;
+    Ok(0)
 }
 
 /// Updates the project's code for this Kalinga version, and its `kalinga = "..."` line.
@@ -325,13 +422,14 @@ fn language_version() -> String {
 fn check() -> CliResult<i32> {
     let dir = project_dir()?;
     project::resolve(&dir, Mode::Fetch)?;
+    let backend = if is_web(&dir)? { driver::Backend::Web } else { driver::Backend::Native };
     let mut checked = 0;
     for file in ["main.kl", "lib.kl"] {
         let path = dir.join("src").join(file);
         if path.is_file() {
             let source =
                 std::fs::read_to_string(&path).map_err(|e| format!("cannot read {}: {}", path.display(), e))?;
-            driver::check(&path.display().to_string(), &source)?;
+            driver::check_for(&path.display().to_string(), &source, backend)?;
             checked += 1;
         }
     }
@@ -353,6 +451,7 @@ fn test() -> CliResult<i32> {
             files.extend(driver::kl_files(&dir.join(folder))?.into_iter().map(|f| (folder, f)));
         }
     }
+    let web = is_web(&dir)?;
     let mut ran = 0;
     let mut failed = vec![];
     for (folder, file) in &files {
@@ -360,9 +459,9 @@ fn test() -> CliResult<i32> {
         let shown = file.strip_prefix(&dir).unwrap_or(file).display().to_string();
         let ok = if driver::has_tests(&source) {
             println!("\n{}", shown);
-            run_file(&dir, driver::build_tests(file))?
+            if web { run_web_file(file, true) } else { run_file(&dir, driver::build_tests(file))? }
         } else if *folder == "tests" {
-            let ok = run_file(&dir, driver::build(file, None))?;
+            let ok = if web { run_web_file(file, false) } else { run_file(&dir, driver::build(file, None))? };
             let name = file.file_name().map_or(shown.clone(), |n| n.to_string_lossy().into_owned());
             println!("test {} ... {}", name, if ok { "ok" } else { "FAILED" });
             ok
@@ -383,6 +482,18 @@ fn test() -> CliResult<i32> {
         println!("    {}", f);
     }
     Ok(if failed.is_empty() { 0 } else { 1 })
+}
+
+/// Runs a file of a web app with Node.js (its `test fn`s with `tests`); `true` when it
+/// passed.
+fn run_web_file(file: &Path, tests: bool) -> bool {
+    match driver::run_web(file, tests) {
+        Ok(code) => code == 0,
+        Err(e) => {
+            eprintln!("{}", e);
+            false
+        }
+    }
 }
 
 /// Runs a built test program in the project folder; `true` when it passed.

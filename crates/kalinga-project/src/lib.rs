@@ -26,8 +26,23 @@ pub struct Manifest {
     pub version: String,
     /// `kalinga = "0.5"`: the language version the code is written for.
     pub kalinga: Option<String>,
+    /// `target = "web"`: what `utkal build`, `run` and `test` make.
+    pub target: Target,
+    /// `styles = ["styles.css"]`: CSS files (relative to the project) a web build copies
+    /// and links from its page. `None` when not given.
+    pub styles: Option<Vec<String>>,
     pub deps: Vec<Dep>,
     pub rust_deps: Vec<CrateDep>,
+}
+
+/// What a project builds.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Target {
+    /// A native executable.
+    #[default]
+    Native,
+    /// A web page: JavaScript, HTML and CSS in `dist/`.
+    Web,
 }
 
 pub struct Dep {
@@ -112,6 +127,22 @@ pub fn parse_manifest(text: &str) -> Result<Manifest> {
     }
     let version = package.get("version").and_then(|v| v.as_str()).unwrap_or("0.1.0").to_string();
     let kalinga = package.get("kalinga").and_then(|v| v.as_str()).map(str::to_string);
+    let target = match package.get("target") {
+        None => Target::Native,
+        Some(t) => match t.as_str() {
+            Some("native") => Target::Native,
+            Some("web") => Target::Web,
+            _ => return Err(bad("`target` must be \"native\" or \"web\"")),
+        },
+    };
+    let styles = match package.get("styles") {
+        None => None,
+        Some(s) => Some(
+            s.as_array()
+                .and_then(|a| a.iter().map(|x| x.as_str().map(str::to_string)).collect::<Option<Vec<_>>>())
+                .ok_or_else(|| bad("`styles` must be a list of CSS file paths, e.g. styles = [\"styles.css\"]"))?,
+        ),
+    };
 
     let mut deps = vec![];
     if let Some(table) = doc.get("dependencies") {
@@ -185,7 +216,7 @@ pub fn parse_manifest(text: &str) -> Result<Manifest> {
             rust_deps.push(CrateDep { name: cname.clone(), version, features, pos: Span::default() });
         }
     }
-    Ok(Manifest { name, version, kalinga, deps, rust_deps })
+    Ok(Manifest { name, version, kalinga, target, styles, deps, rust_deps })
 }
 
 pub fn valid_package_name(n: &str) -> bool {

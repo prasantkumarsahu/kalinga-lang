@@ -10,24 +10,24 @@ fn main() {
     count = signal(0)
     doubled = computed(fn() => count.get() * 2)
 
-    title = app.append(Document.create("h1"))
+    title = app.append(Document.create(Tag.H1))
     title.set_text("Counter")
 
-    shown = app.append(Document.create("p"))
+    shown = app.append(Document.create(Tag.P))
     effect(fn() {
         shown.set_text("{count.get()} (doubled: {doubled.get()})")
         shown.toggle_class("big", count.get() >= 10)
     })
 
-    buttons = app.append(Document.create("div"))
+    buttons = app.append(Document.create(Tag.Div))
     buttons.add_class("buttons")
-    minus = buttons.append(Document.create("button"))
+    minus = buttons.append(Document.create(Tag.Button))
     minus.set_text("-1")
-    minus.on("click", fn(e: Event) { count.update(fn(n) => n - 1) })
-    plus = buttons.append(Document.create("button"))
+    minus.on(EventKind.Click, fn(e: Event) { count.update(fn(n) => n - 1) })
+    plus = buttons.append(Document.create(Tag.Button))
     plus.set_text("+1")
-    plus.on("click", fn(e: Event) { count.update(fn(n) => n + 1) })
-    reset = buttons.append(Document.create("button"))
+    plus.on(EventKind.Click, fn(e: Event) { count.update(fn(n) => n + 1) })
+    reset = buttons.append(Document.create(Tag.Button))
     reset.set_text("Reset")
-    reset.on("click", fn(e: Event) { count.set(0) })
+    reset.on(EventKind.Click, fn(e: Event) { count.set(0) })
 }

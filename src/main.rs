@@ -13,7 +13,11 @@ usage:
                 --web                  with run, build, test or emit: compile to JavaScript
                                        (run and test use Node.js; build writes a folder,
                                        `dist` by default, with index.html, app.js and the
-                                       .css files next to the program)
+                                       .css files next to the program); not needed in a
+                                       utkal project with `target = \"web\"`
+  kalinga serve <file.kl> [-o <dir>] [--port <n>]
+                                       build for the web, serve it at http://localhost:8080
+                                       and build again (reloading the page) on every change
   kalinga check <file.kl> [--stdin]    report errors only; `fn main()` is optional, so files
                                        meant to be imported can be checked (--stdin reads the
                                        source from stdin)
@@ -90,10 +94,47 @@ fn fix(args: &[String]) -> CliResult<i32> {
     Ok(0)
 }
 
+/// `kalinga build <file.kl> [-o <out>]`: an executable, or with `web` a `dist` folder.
+fn build(args: &[String], file: &Path, web: bool) -> CliResult<i32> {
+    let out = match args.get(2).map(String::as_str) {
+        Some("-o") => match args.get(3) {
+            Some(o) => Some(PathBuf::from(o)),
+            None => {
+                eprintln!("`-o` needs a file name");
+                exit(2);
+            }
+        },
+        Some(other) => {
+            eprintln!("unexpected argument `{}`\n\n{}", other, USAGE);
+            exit(2);
+        }
+        None => None,
+    };
+    if web {
+        let dir = driver::build_web(file, out)?;
+        println!("built {}", dir.join("index.html").display());
+    } else {
+        let out = out.or_else(|| Some(file.with_extension(std::env::consts::EXE_EXTENSION)));
+        let exe = driver::build(file, out)?;
+        println!("built {}", exe.display());
+    }
+    Ok(0)
+}
 fn main() {
     let mut args: Vec<String> = std::env::args().skip(1).collect();
-    let web = args.iter().any(|a| a == "--web");
+    let mut web = args.iter().any(|a| a == "--web");
     args.retain(|a| a != "--web");
+    let port = match args.iter().position(|a| a == "--port") {
+        Some(i) => {
+            let Some(n) = args.get(i + 1).and_then(|p| p.parse::<u16>().ok()) else {
+                eprintln!("`--port` needs a port number, e.g. `--port 3000`");
+                exit(2);
+            };
+            args.drain(i..i + 2);
+            n
+        }
+        None => 8080,
+    };
     if let Some("-v" | "-version" | "--version" | "version") = args.first().map(String::as_str) {
         println!("kalinga {}", env!("CARGO_PKG_VERSION"));
         return;
@@ -113,39 +154,24 @@ fn main() {
         }
     };
 
+    // A file in a web project builds for the web without `--web`.
+    if matches!(cmd, "run" | "test" | "build" | "emit") && driver::project_backend(&file) == Some(driver::Backend::Web)
+    {
+        web = true;
+    }
     let result: CliResult<i32> = match cmd {
+        "serve" => {
+            let out = match args.get(2).map(String::as_str) {
+                Some("-o") => args.get(3).map(PathBuf::from),
+                _ => None,
+            };
+            driver::web::serve(&file, out, port).map_err(Into::into).map(|_| 0)
+        }
         "run" if web => driver::run_web(&file, false).map_err(Into::into),
         "test" if web => driver::run_web(&file, true).map_err(Into::into),
         "run" => driver::run(&file).map_err(Into::into),
         "test" => driver::test(&file).map_err(Into::into),
-        "build" => {
-            let out = match args.get(2).map(String::as_str) {
-                Some("-o") => match args.get(3) {
-                    Some(o) => Some(PathBuf::from(o)),
-                    None => {
-                        eprintln!("`-o` needs a file name");
-                        exit(2);
-                    }
-                },
-                Some(other) => {
-                    eprintln!("unexpected argument `{}`\n\n{}", other, USAGE);
-                    exit(2);
-                }
-                None => None,
-            };
-            if web {
-                driver::build_web(&file, out).map_err(Into::into).map(|dir| {
-                    println!("built {}", dir.join("index.html").display());
-                    0
-                })
-            } else {
-                let out = out.or_else(|| Some(file.with_extension(std::env::consts::EXE_EXTENSION)));
-                driver::build(&file, out).map_err(Into::into).map(|exe| {
-                    println!("built {}", exe.display());
-                    0
-                })
-            }
-        }
+        "build" => build(&args, &file, web),
         "emit" if web => {
             read(&file).and_then(|src| Ok(driver::to_js(&file.display().to_string(), &src, false)?)).map(|js| {
                 print!("{}", js);
@@ -167,7 +193,13 @@ fn main() {
             } else {
                 read(&file)
             };
-            source.and_then(|src| Ok(driver::check(&file.display().to_string(), &src)?)).map(|_| 0)
+            let name = file.display().to_string();
+            source
+                .and_then(|src| match driver::project_backend(&file) {
+                    Some(backend) => Ok(driver::check_for(&name, &src, backend)?),
+                    None => Ok(driver::check(&name, &src)?),
+                })
+                .map(|_| 0)
         }
         _ => {
             eprintln!("unknown command `{}`\n\n{}", cmd, USAGE);
