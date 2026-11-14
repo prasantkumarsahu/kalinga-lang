@@ -2,7 +2,7 @@
   "name": "kalinga-lang",
   "displayName": "Kalinga Language",
   "description": "Kalinga language support (.kl) from the Kalinga language server: errors as you type, completion, hover, signature help, go to definition, find references, rename, outline and quick fixes; plus syntax highlighting, snippets, run, build and serve commands (native and web), and utkal.toml hints",
-  "version": "0.7.4",
+  "version": "0.7.5",
   "publisher": "PrasantKumarSahu",
   "license": "MIT",
   "repository": {

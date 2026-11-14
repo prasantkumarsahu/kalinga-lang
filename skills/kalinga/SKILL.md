@@ -1,12 +1,13 @@
 ---
 name: kalinga
-description: Read, write, fix, explain and review code in Kalinga, the object-oriented language that compiles to Rust (`.kl` files, `kalinga` and `utkal` commands, `utkal.toml` projects). Use this skill whenever the user mentions Kalinga, a `.kl` file, utkal, or pastes code that uses `fn main()` with `println`, `init(...)`, `override fn`, `var` and `T?` optionals together — even if they only ask to "fix this error", "add a feature" or "port this to Kalinga". Kalinga looks like Swift, Kotlin and Rust but differs in many small ways, so do not write it from memory of those languages.
+description: Read, write, fix, explain and review code in Kalinga, the object-oriented language that compiles to Rust, or to JavaScript for web pages (`.kl` files, `kalinga` and `utkal` commands, `utkal.toml` projects). Use this skill whenever the user mentions Kalinga, a `.kl` file, utkal, or pastes code that uses `fn main()` with `println`, `init(...)`, `override fn`, `var` and `T?` optionals together — even if they only ask to "fix this error", "add a feature" or "port this to Kalinga". Kalinga looks like Swift, Kotlin and Rust but differs in many small ways, so do not write it from memory of those languages.
 ---
 
 # Kalinga
 
-Kalinga (version 0.6) is a small, statically typed, object-oriented language that compiles
-to native code through Rust. Programs are `.kl` files with a `fn main()`. It has classes
+Kalinga (version 0.7) is a small, statically typed, object-oriented language that compiles
+to native code through Rust, or to JavaScript for web pages (`std/web`). Programs are `.kl`
+files with a `fn main()`. It has classes
 with inheritance and interfaces, generics with bounds, enums with `match`, value-type
 structs with operators, optionals instead of null, `Result` and `?` instead of exceptions,
 lambdas, tuples, threads, async, and a standard library (`Math`, `Random`, `Time`,
@@ -40,6 +41,15 @@ kalinga run main.kl
   on code you write.
 - Projects have a `utkal.toml` and `src/main.kl` (or `src/lib.kl`): use `utkal check`,
   `utkal run`, `utkal test`, `utkal fmt`.
+- Web code: a file that imports `std/web`, or a project with `target = "web"` in
+  `utkal.toml`, builds for the web without a flag. `kalinga build file.kl` (or `utkal
+  build`) writes `dist/` with `index.html`, `app.js` and the styles; `kalinga run` runs it
+  under Node.js on a stand-in page; `kalinga serve file.kl` / `utkal serve` serve it at
+  `http://localhost:8080` with live reload. A web build rejects threads, channels,
+  `Shared`, `par_map`, `input()`, `std/fs`, `std/game` and Rust interop; JavaScript goes in
+  `extern fn name(x: str) -> str = js { return x; }`. `std/web` uses enums for fixed names:
+  `el.on(EventKind.Click, fn(e: Event) { ... })`, `Document.create(Tag.Div)`, never strings.
+  See "Web pages: std/web" in `references/standard-library.md`.
 - Exit codes: 0 success, 1 compile error, 101 runtime error.
 - If the compiler is not available, be extra careful with the rules below, and say the code
   was not compiled.
@@ -345,7 +355,8 @@ Read these when the task needs more than the rules above:
   surprises you.
 - `references/standard-library.md`: `Math`, `Random`, `Time`, threads (`Thread`,
   `Channel`, `Shared`), async, files (`std/fs`), 2D math (`std/math2d`), reactive values
-  (`std/reactive`), tests (`test fn`), modules and packages, and Rust interop.
+  (`std/reactive`), web pages (`std/web`, web builds, `js { }` externs), tests (`test fn`),
+  modules and packages, and Rust interop.
 - `references/examples.md`: complete idiomatic programs (inheritance, structs with
   operators, interfaces with generics, threads and channels, `std/reactive`) to copy
   patterns from.
