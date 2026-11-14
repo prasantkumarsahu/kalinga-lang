@@ -91,6 +91,8 @@ struct Loader<'a> {
     file_units: HashMap<PathBuf, String>,
     /// Files still to read: (path, display name, text, unit).
     queue: Vec<(PathBuf, String, String, String)>,
+    /// Some file imports `std/web`.
+    uses_web: bool,
 }
 
 /// Parses `root` and, transitively, every file it imports, into one program.
@@ -122,6 +124,9 @@ pub struct Analysis {
     pub index: Index,
     /// Every problem found, in all files.
     pub diagnostics: Vec<Diagnostic>,
+    /// The build the file was checked for: its project's `target`, else a web build when
+    /// it imports `std/web`; `None` allows both.
+    pub backend: Option<Backend>,
 }
 
 /// Analyses `file` with the text `source` (and its imports, reading files open in the
@@ -135,8 +140,16 @@ pub fn analyze(file: &str, source: &str, open: &HashMap<PathBuf, String>) -> Ana
         model: None,
         index: Index::default(),
         diagnostics: vec![],
+        backend: None,
     };
-    let mut l = match Loader::new(file, source, open) {
+    let new = |backend| {
+        Loader::new(file, source, open).map(|mut l| {
+            l.backend = backend;
+            l
+        })
+    };
+    let backend = project_backend(Path::new(file));
+    let mut l = match new(backend) {
         Ok(l) => l,
         Err(e) => {
             out.sources.files.push((file.to_string(), source.to_string()));
@@ -144,7 +157,18 @@ pub fn analyze(file: &str, source: &str, open: &HashMap<PathBuf, String>) -> Ana
             return out;
         }
     };
-    let loaded = l.load_all();
+    let mut loaded = l.load_all();
+    // Outside a project, a program that imports `std/web` is checked as a web build.
+    let mut backend = backend;
+    if backend.is_none()
+        && l.uses_web
+        && let Ok(mut web) = new(Some(Backend::Web))
+    {
+        loaded = web.load_all();
+        l = web;
+        backend = Some(Backend::Web);
+    }
+    out.backend = backend;
     (out.sources, out.paths, out.units) = (l.map, l.paths, l.units);
     match loaded {
         Ok(()) => {}
@@ -164,7 +188,14 @@ pub fn analyze(file: &str, source: &str, open: &HashMap<PathBuf, String>) -> Ana
     out.diagnostics = rules;
     if let Some(model) = model {
         let (typed, index) = kalinga_sema::typeck::analyze(&program, &model);
-        out.diagnostics.extend(typed.err().unwrap_or_default());
+        match typed {
+            Ok(typed) if backend == Some(Backend::Web) => {
+                let web = kalinga_sema::web::web_errors(&typed);
+                out.diagnostics.extend(web.into_iter().map(|(d, name)| on_name(&out.sources, d, &name)));
+            }
+            Ok(_) => {}
+            Err(ds) => out.diagnostics.extend(ds),
+        }
         let warnings = kalinga_sema::warnings::warnings(&program, &model, &index);
         out.diagnostics.extend(warnings.into_iter().map(|(d, name)| on_name(&out.sources, d, &name)));
         out.index = index;
@@ -188,6 +219,7 @@ impl<'a> Loader<'a> {
             seen: HashSet::from([canonical(&root_path)]),
             file_units: HashMap::new(),
             queue: vec![(root_path, root_name.to_string(), root_source.to_string(), String::new())],
+            uses_web: false,
         })
     }
 
@@ -327,6 +359,9 @@ impl<'a> Loader<'a> {
             if module == "game" {
                 self.program.main_thread = true;
             }
+            if module == "web" {
+                self.uses_web = true;
+            }
             if !stdlib::has(module) {
                 return Err(fail(format!("there is no standard module `std/{}`", module)));
             }
@@ -335,7 +370,7 @@ impl<'a> Loader<'a> {
             }
             if self.backend == Some(Backend::Native) && module == "web" {
                 return Err(fail(
-                    "`std/web` needs a web build: `kalinga run --web` or `kalinga build --web`".to_string(),
+                    "`std/web` needs a web build, and this project builds a native program: set `target = \"web\"` in [package] of utkal.toml".to_string(),
                 ));
             }
             return Ok((stdlib::dir()?.join(format!("{}.kl", module)), format!("std_{}", module)));
@@ -514,6 +549,24 @@ pub fn build_web(input: &Path, dir: Option<PathBuf>) -> Result<PathBuf> {
     let plan = web::plan(input, dir)?;
     web::write(input, &plan, false)?;
     Ok(plan.out)
+}
+
+/// What `file` builds for when no `--web` is given: its project's `target`, else a web
+/// build when it imports `std/web` (directly or through its imports), else `None`.
+pub fn detect_backend(file: &Path) -> Option<Backend> {
+    let source = std::fs::read_to_string(file).ok()?;
+    backend_of(&file.display().to_string(), &source)
+}
+
+/// [`detect_backend`] for the source `source` of `file`.
+pub fn backend_of(file: &str, source: &str) -> Option<Backend> {
+    if let Some(b) = project_backend(Path::new(file)) {
+        return Some(b);
+    }
+    let open = HashMap::new();
+    let mut l = Loader::new(file, source, &open).ok()?;
+    let _ = l.load_all();
+    l.uses_web.then_some(Backend::Web)
 }
 
 /// What the project holding `file` builds (its `target`), when it is in one.

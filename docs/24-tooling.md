@@ -167,7 +167,7 @@ test result: FAILED. 1 passed; 1 failed
   `test fn`s of imported files are run only by testing those files.
 - The exit code is 0 when every test passed, 1 otherwise, so `kalinga test` works in CI.
 - `utkal test` runs the tests of every file in `src/` and `tests/`; in VS Code,
-  **Kalinga: Run Tests in File**.
+  **Kalinga: Run Tests**.
 - `assert` and `assert_eq` work in any program too: a failure stops it with a runtime error
   that says where.
 
@@ -202,9 +202,23 @@ Language Server Protocol (Neovim, Helix, Zed, Emacs, ...) can use it by running
 - Syntax highlighting; inline `= rust { ... }` bodies are highlighted as Rust, `= js { ... }`
   bodies as JavaScript
 - ▶ **Run** button in the editor title bar, and `Ctrl+F5`
-- Commands (Ctrl+Shift+P): **Kalinga: Run File**, **Kalinga: Run Tests in File**,
-  **Kalinga: Build Executable**,
+- Commands (Ctrl+Shift+P): **Kalinga: Run File or Project**, **Kalinga: Run Tests**,
+  **Kalinga: Build**,
   **Kalinga: Show Generated Rust**, **Kalinga: Restart Language Server**
+- Web pages: **Kalinga: Build for Web** (`kalinga build --web`), **Kalinga: Serve Web App**
+  (`kalinga serve`; the page opens in VS Code's Simple Browser and reloads on save; also the
+  🌐 button in the title bar of a web file), **Kalinga: Show Generated JavaScript**. The
+  `kalinga.webPort` setting picks the port (8080).
+- In a `utkal` project the commands work on the whole project, whichever of its files is
+  open: Run is `utkal run`, Run Tests `utkal test`, Build and Build for Web `utkal build`,
+  Serve Web App `utkal serve` (set `kalinga.utkalPath` if `utkal` is not next to the
+  compiler). A file outside a project runs on its own with `kalinga`.
+- The status bar says whether the open file builds for the **web** or **native**, by the
+  compiler's rule: `target` in the project's `utkal.toml`, else whether the file imports
+  `std/web`. Errors follow the same target, so a web file shows "not available in a web
+  build" for `Thread.spawn`, `input()`, `std/fs` and the like while you type.
+- Where an enum is wanted, such as `el.on(|)` or `Document.create(|)`, completion offers
+  its variants first, written in full (`EventKind.Click`, `Tag.Div`).
 - Comment toggling (`Ctrl+/`), bracket matching, auto-closing pairs, auto-indent
 - Hints for `utkal.toml` keys and values (with a TOML extension that reads JSON schemas,
   such as Even Better TOML)
@@ -239,6 +253,10 @@ Type the prefix and press Tab:
 | `spawn`, `channel` | a thread and its `join()`; a channel fed by a thread |
 | `asyncfn` | an `async fn` with an `await` |
 | `gameclass` | a complete `std/game` program |
+| `webapp` | a `std/web` page with a counter kept in a `signal` |
+| `on`, `elem` | an event listener; an element added to another |
+| `signal`, `computed`, `effect` | `std/reactive` values and effects |
+| `externjs` | an `extern fn` with an inline JavaScript body |
 
 ### Installing
 

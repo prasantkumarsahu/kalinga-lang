@@ -1,8 +1,8 @@
 {
   "name": "kalinga-lang",
   "displayName": "Kalinga Language",
-  "description": "Kalinga language support (.kl) from the Kalinga language server: errors as you type, completion, hover, signature help, go to definition, find references, rename, outline and quick fixes; plus syntax highlighting, snippets, run commands and utkal.toml hints",
-  "version": "0.7.2",
+  "description": "Kalinga language support (.kl) from the Kalinga language server: errors as you type, completion, hover, signature help, go to definition, find references, rename, outline and quick fixes; plus syntax highlighting, snippets, run, build and serve commands (native and web), and utkal.toml hints",
+  "version": "0.7.4",
   "publisher": "PrasantKumarSahu",
   "license": "MIT",
   "repository": {
@@ -77,13 +77,13 @@
     "commands": [
       {
         "command": "kalinga.run",
-        "title": "Run File",
+        "title": "Run File or Project",
         "category": "Kalinga",
         "icon": "$(play)"
       },
       {
         "command": "kalinga.test",
-        "title": "Run Tests in File",
+        "title": "Run Tests",
         "category": "Kalinga"
       },
       {
@@ -93,12 +93,28 @@
       },
       {
         "command": "kalinga.build",
-        "title": "Build Executable",
+        "title": "Build",
         "category": "Kalinga"
       },
       {
         "command": "kalinga.restartServer",
         "title": "Restart Language Server",
+        "category": "Kalinga"
+      },
+      {
+        "command": "kalinga.buildWeb",
+        "title": "Build for Web",
+        "category": "Kalinga"
+      },
+      {
+        "command": "kalinga.serveWeb",
+        "title": "Serve Web App",
+        "category": "Kalinga",
+        "icon": "$(globe)"
+      },
+      {
+        "command": "kalinga.emitJs",
+        "title": "Show Generated JavaScript",
         "category": "Kalinga"
       }
     ],
@@ -107,6 +123,10 @@
         {
           "command": "kalinga.run",
           "when": "editorLangId == kalinga"
+        },
+        {
+          "command": "kalinga.serveWeb",
+          "when": "editorLangId == kalinga && kalinga.isWeb"
         }
       ],
       "commandPalette": [
@@ -124,6 +144,18 @@
         },
         {
           "command": "kalinga.test",
+          "when": "editorLangId == kalinga"
+        },
+        {
+          "command": "kalinga.buildWeb",
+          "when": "editorLangId == kalinga"
+        },
+        {
+          "command": "kalinga.serveWeb",
+          "when": "editorLangId == kalinga"
+        },
+        {
+          "command": "kalinga.emitJs",
           "when": "editorLangId == kalinga"
         }
       ]
@@ -143,6 +175,18 @@
           "type": "string",
           "default": "kalinga",
           "description": "Path to the `kalinga` compiler executable (or just `kalinga` if it is on PATH). The extension runs `kalinga lsp` for its language features."
+        },
+        "kalinga.utkalPath": {
+          "type": "string",
+          "default": "",
+          "description": "Path to the `utkal` executable. Empty: the `utkal` next to `kalinga.compilerPath`, or on PATH. Inside a utkal project, Run, Run Tests, Build and Serve Web App use `utkal run`, `utkal test`, `utkal build` and `utkal serve`."
+        },
+        "kalinga.webPort": {
+          "type": "number",
+          "default": 8080,
+          "minimum": 1,
+          "maximum": 65535,
+          "description": "The port `Kalinga: Serve Web App` serves the page on (http://localhost:<port>)."
         }
       }
     },
