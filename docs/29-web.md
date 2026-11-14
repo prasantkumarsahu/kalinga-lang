@@ -19,15 +19,15 @@ fn main() {
     app = Document.app()
     count = signal(0)
 
-    shown = app.append(Document.create("p"))
+    shown = app.append(Document.create(Tag.P))
     effect(fn() {
         shown.set_text("Clicked {count.get()} times")
         shown.toggle_class("big", count.get() >= 10)
     })
 
-    plus = app.append(Document.create("button"))
+    plus = app.append(Document.create(Tag.Button))
     plus.set_text("+1")
-    plus.on("click", fn(e: Event) { count.update(fn(n) => n + 1) })
+    plus.on(EventKind.Click, fn(e: Event) { count.update(fn(n) => n + 1) })
 }
 ```
 
@@ -43,14 +43,50 @@ This writes a `dist` folder next to `counter.kl`:
 | `dist/app.js` | The program as JavaScript |
 | `dist/*.css` | Every `.css` file next to `counter.kl`, linked from the page |
 
-`-o folder` writes somewhere else. Open `index.html` through any static web server (a
-browser runs scripts of a page opened from a file only in some cases), for example
-`python -m http.server --directory dist`.
+`-o folder` writes somewhere else. To try the page while working on it, serve it:
+
+```bash
+kalinga serve counter.kl
+```
+
+This builds the page, serves it at `http://localhost:8080` (`--port` picks another), and
+builds it again whenever a `.kl` or `.css` file in the folder changes; the open page reloads
+itself. A build with errors shows them in the page until they are fixed. Addresses the app
+makes up itself (`History.push("/items/3")`) get the page too, so reloading them works.
+
+Any static web server can serve `dist` instead (opening `index.html` as a file does not run
+its script in every browser).
 
 Clicking the button changes `count`; the effect that reads it runs again and changes the
 one text it shows. Nothing else on the page is touched: there is no virtual DOM to compare.
 
 The whole example, with its CSS, is in `examples/web/`.
+
+## Web projects
+
+`utkal new site --web` starts a web app as a project:
+
+```text
+site/
+├── utkal.toml       target = "web", styles = ["styles.css"]
+├── styles.css
+├── .gitignore       ignores target/ and dist/
+└── src/
+    └── main.kl      a page with a button and a counter
+```
+
+```bash
+utkal serve
+```
+
+In a project with `target = "web"`, every command builds for the web: `utkal build` writes
+the project's `dist/`, `utkal run` runs the program with Node.js, `utkal test` runs the tests
+with Node.js, and `utkal check` reports what a browser does not have. `kalinga run`, `build`
+and `check` on the project's files do the same without `--web`.
+
+`styles` lists the project's CSS files, relative to `utkal.toml`; each one is copied into
+`dist/` at the same path and linked from the page, in that order. Without `styles`, the
+`.css` files next to the main file are used.
 
 ## Styling
 
@@ -61,7 +97,7 @@ Put CSS in `.css` files next to the main file; `kalinga build --web` copies them
 import "std/web"
 
 fn main() {
-    note = Document.app().append(Document.create("p"))
+    note = Document.app().append(Document.create(Tag.P))
     note.set_text("Saved")
     note.add_class("note")
     note.toggle_class("error", false)
@@ -75,14 +111,20 @@ inserted value.
 
 ## Elements
 
-`Document.create(tag)` makes an element; `append` puts it inside another one and gives it
-back, so a new element can be made and placed in one line.
+`Document.create(Tag.Button)` makes an element; `append` puts it inside another one and
+gives it back, so a new element can be made and placed in one line. `Tag` lists the common
+elements (`Div`, `Span`, `P`, `H1` to `H6`, `A`, `Button`, `Input`, `TextArea`, `Select`,
+`Option`, `Label`, `Form`, `Ul`, `Ol`, `Li`, `Img`, `Table` and its parts, `Section`,
+`Header`, `Footer`, `Nav`, `Main`, `Canvas`, ...); `Tag.Other("details")` makes any other.
+Names the editor can complete are used wherever the browser has a fixed list: tags, event
+kinds, keys, mouse buttons, input kinds and HTTP methods.
 
 | `Document` | Gives |
 |---|---|
 | `Document.app()` | The `<div id="app">` of the page (the body when there is none) |
 | `Document.body()` | The page's `<body>` |
-| `Document.create(tag)` | A new element |
+| `Document.create(tag)` | A new element: `Document.create(Tag.Div)` |
+| `Document.input(kind)` | A new `<input>`: `Document.input(InputType.Checkbox)` (also `Text`, `Number`, `Password`, `Email`, `Search`, `Range`, `Date`, `Color`, `File`, ...) |
 | `Document.text(text)` | A new text node |
 | `Document.find(selector)` / `find_all(selector)` | Elements of the page matching a CSS selector |
 | `Document.add_styles(css)` | Adds CSS rules to the page |
@@ -92,7 +134,7 @@ back, so a new element can be made and placed in one line.
 |---|---|
 | `text()` / `set_text(text)` | The text inside (`set_text` never reads HTML) |
 | `html()` | The element as HTML |
-| `tag()` | The tag, in lowercase |
+| `tag()` | What it is: `Tag.Div`, ...; `Tag.Text` for text |
 | `attr(name)` / `set_attr(name, value)` / `remove_attr(name)` | Attributes (`attr` gives `str?`) |
 | `add_class(name)` / `remove_class(name)` / `toggle_class(name, on)` / `has_class(name)` | Classes |
 | `set_style(property, value)` / `remove_style(property)` | Inline styles |
@@ -107,17 +149,19 @@ back, so a new element can be made and placed in one line.
 
 ## Events
 
-`el.on(kind, fn(e: Event) { ... })` runs the handler on each event of that kind (`"click"`,
-`"input"`, `"keydown"`, `"submit"`, ...). It gives back a `Listener`; `listener.remove()`
-stops it.
+`el.on(EventKind.Click, fn(e: Event) { ... })` runs the handler on each event of that kind.
+`EventKind` has `Click`, `DoubleClick`, `ContextMenu`, `Input`, `Change`, `Submit`,
+`KeyDown`, `KeyUp`, `Focus`, `Blur`, the `Mouse...`, `Pointer...`, `Touch...` and drag
+events, `Wheel`, `Scroll` and `Load`; `EventKind.Other("animationend")` is any other. `on`
+gives back a `Listener`; `listener.remove()` stops it.
 
 | `Event` method | Gives |
 |---|---|
-| `kind()` | `"click"`, `"input"`, ... |
-| `key()` | The key of a keyboard event: `"a"`, `"Enter"`, `"ArrowLeft"` |
+| `kind()` | `EventKind.Click`, `EventKind.Input`, ... |
+| `key()` | The key of a keyboard event: `Key.Enter`, `Key.Escape`, `Key.Space`, `Key.ArrowLeft`, ..., `Key.Char("a")` for a key that types, `Key.Other("F5")` |
 | `value()` | The value of the input the event happened on |
 | `x()` / `y()` | The mouse position, in pixels |
-| `button()` | The mouse button: 0 left, 1 middle, 2 right |
+| `button()` | `MouseButton.Left`, `Middle`, `Right` or `Other(number)` |
 | `target()` | The element the event happened on (`Element?`) |
 | `prevent_default()` | Stops the browser's own action (following a link, sending a form) |
 | `stop()` | Stops the event reaching the elements around this one |
@@ -127,9 +171,16 @@ import "std/web"
 
 fn main() {
     app = Document.app()
-    name = app.append(Document.create("input"))
-    greeting = app.append(Document.create("p"))
-    name.on("input", fn(e: Event) { greeting.set_text("Hello, {e.value()}!") })
+    name = app.append(Document.create(Tag.Input))
+    greeting = app.append(Document.create(Tag.P))
+    name.on(EventKind.Input, fn(e: Event) { greeting.set_text("Hello, {e.value()}!") })
+    Window.on_key(fn(e: Event) {
+        match e.key() {
+            Key.Escape => name.set_value("")
+            Key.Enter => greeting.add_class("sent")
+            _ => {}
+        }
+    })
 }
 ```
 
@@ -147,7 +198,8 @@ An animation asks for the next frame at the end of each one.
 
 ## HTTP
 
-`Http.get(url)`, `Http.post(url, body)` and `Http.send(method, url, body, headers)` are
+`Http.get(url)`, `Http.post(url, body)` and `Http.send(method, url, body, headers)` (with
+`Method.Get`, `Post`, `Put`, `Patch`, `Delete`, `Head` or `Options`) are
 `async` and give `Result<Response, str>`. The error is a network failure; a response of any
 status, 404 included, is `Ok`. A `Response` has the fields `status` and `text`, and the
 methods `ok()` (status 200 to 299) and `header(name)` (`str?`).
@@ -163,7 +215,7 @@ async fn load(shown: Element) {
 }
 
 fn main() {
-    shown = Document.app().append(Document.create("p"))
+    shown = Document.app().append(Document.create(Tag.P))
     Async.run(load(shown))
 }
 ```

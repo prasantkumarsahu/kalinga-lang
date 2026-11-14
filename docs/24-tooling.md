@@ -9,6 +9,8 @@
 | `kalinga build <file.kl>` | Compile to an executable next to the source (`file.exe` on Windows). |
 | `kalinga build <file.kl> -o <name>` | Compile to the given output path. |
 | `kalinga emit <file.kl>` | Print the generated Rust code. |
+| `--web` with `run`, `test`, `build` or `emit` | Compile to JavaScript instead: `run` and `test` use Node.js, `build` writes `dist/` with `index.html`, `app.js` and the styles (see [29. Web](29-web.md)). Not needed in a project with `target = "web"`. |
+| `kalinga serve <file.kl> [-o <dir>] [--port <n>]` | Build for the web, serve the page at `http://localhost:8080`, and build it again on every change (the open page reloads itself). |
 | `kalinga check <file.kl>` | Report errors only; does not invoke `rustc`. `fn main()` is optional here, so files that are only imported can be checked too. |
 | `kalinga -v` (also `-version`, `--version`) | Print the installed version, e.g. `kalinga 0.7.0`. |
 | `kalinga check <name.kl> --stdin` | Check source read from stdin, reporting errors under `<name.kl>`. |
@@ -61,13 +63,14 @@ checks work there too.
 
 | Command | What it does |
 |---|---|
-| `utkal new <name> [--lib]` | Create a project: an app (`src/main.kl`) or a library (`src/lib.kl`, `tests/`) |
+| `utkal new <name> [--lib \| --web]` | Create a project: an app (`src/main.kl`), a library (`src/lib.kl`, `tests/`) or a web app (`src/main.kl`, `styles.css`) |
 | `utkal add <name> --git <url> [--tag t \| --branch b \| --rev c \| --version req]` | Add a git package |
 | `utkal add <name> --path <folder>` | Add a package from a folder |
 | `utkal add <crate> --rust <version> [--features a,b]` | Add a crates.io crate to `[rust-dependencies]` |
 | `utkal remove <name>` | Remove a package or crate |
 | `utkal build` | Download what is missing, compile `src/main.kl` to `target/<name>` |
-| `utkal run [args...]` | Build and run, passing the arguments on |
+| `utkal run [args...]` | Build and run, passing the arguments on (a web app runs with Node.js) |
+| `utkal serve [--port <n>]` | Serve a web app at `http://localhost:8080`, building it again on every change |
 | `utkal check` | Report errors in `src/main.kl` and `src/lib.kl` |
 | `utkal fmt [--check]` | Format (or check) every `.kl` file in `src/` and `tests/` |
 | `utkal fix` | Update `src/` and `tests/` for this Kalinga version |

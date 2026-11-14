@@ -7,6 +7,7 @@ mod error;
 pub mod fix;
 pub mod fmt;
 mod stdlib;
+pub mod web;
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::{Path, PathBuf};
@@ -424,6 +425,12 @@ pub fn check(file: &str, source: &str) -> Result<()> {
     compile(file, source, Purpose::Check).map(|_| ())
 }
 
+/// Like [`check`], with the errors of a build for `backend` too (a web build cannot use
+/// threads or `std/fs`, a native one cannot use `std/web`).
+pub fn check_for(file: &str, source: &str, backend: Backend) -> Result<()> {
+    check_program(file, source, Purpose::Check, Some(backend)).map(|_| ())
+}
+
 /// A loaded and type-checked program, ready for a code generator.
 struct Checked {
     program: kalinga_syntax::ast::Program,
@@ -500,61 +507,24 @@ pub fn run_web(input: &Path, tests: bool) -> Result<i32> {
     Ok(status.code().unwrap_or(1))
 }
 
-/// Compiles `input` for the browser: `dir/app.js`, `dir/index.html` loading it, and every
-/// `.css` file next to `input` (linked from the page). `dir` defaults to `dist` next to
-/// `input`.
+/// Compiles `input` for the browser: `dir/app.js`, `dir/index.html` loading it, and the
+/// styles (see [`web::plan`]: a project's `dist` and `styles`, or `dist` and the `.css`
+/// files next to `input`). Returns the folder written.
 pub fn build_web(input: &Path, dir: Option<PathBuf>) -> Result<PathBuf> {
-    let source = std::fs::read_to_string(input).map_err(DriverError::io("read", input))?;
-    let js = to_js(&input.display().to_string(), &source, false)?;
-    let base = input.parent().filter(|p| !p.as_os_str().is_empty()).unwrap_or(Path::new("."));
-    let dir = dir.unwrap_or_else(|| base.join("dist"));
-    std::fs::create_dir_all(&dir).map_err(DriverError::io("create", &dir))?;
-    let app = dir.join("app.js");
-    std::fs::write(&app, js).map_err(DriverError::io("write", &app))?;
-    let mut styles = vec![];
-    if let Ok(entries) = std::fs::read_dir(base) {
-        let mut css: Vec<PathBuf> =
-            entries.flatten().map(|e| e.path()).filter(|p| p.extension().is_some_and(|x| x == "css")).collect();
-        css.sort();
-        for from in css {
-            let Some(name) = from.file_name() else { continue };
-            let to = dir.join(name);
-            std::fs::copy(&from, &to).map_err(DriverError::io("copy", &from))?;
-            styles.push(name.to_string_lossy().into_owned());
-        }
-    }
-    let title = input.file_stem().and_then(|s| s.to_str()).unwrap_or("app");
-    let links: String = styles
-        .iter()
-        .map(|s| {
-            format!(
-                "  <link rel=\"stylesheet\" href=\"{}\">
-",
-                s
-            )
-        })
-        .collect();
-    let html = format!(
-        "<!doctype html>
-<html>
-<head>
-  <meta charset=\"utf-8\">
-  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">
-  <title>{}</title>
-{}</head>
-<body>
-  <div id=\"app\"></div>
-  <script src=\"app.js\"></script>
-</body>
-</html>
-",
-        title, links
-    );
-    let index = dir.join("index.html");
-    std::fs::write(&index, html).map_err(DriverError::io("write", &index))?;
-    Ok(dir)
+    let plan = web::plan(input, dir)?;
+    web::write(input, &plan, false)?;
+    Ok(plan.out)
 }
 
+/// What the project holding `file` builds (its `target`), when it is in one.
+pub fn project_backend(file: &Path) -> Option<Backend> {
+    let project = kalinga_project::find_project(file)?;
+    let manifest = kalinga_project::read_manifest(&project).ok()?;
+    Some(match manifest.target {
+        kalinga_project::Target::Native => Backend::Native,
+        kalinga_project::Target::Web => Backend::Web,
+    })
+}
 /// `d` moved onto the first `name` at or after where it points (a use is recorded where its
 /// expression starts: `dog.bark()` starts at `dog`).
 fn on_name(map: &SourceMap, mut d: Diagnostic, name: &str) -> Diagnostic {

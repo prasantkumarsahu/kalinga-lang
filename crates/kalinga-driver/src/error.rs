@@ -86,6 +86,10 @@ pub enum DriverError {
     /// The generated Rust did not compile. With `uses_rust`, the program's own Rust code or
     /// `extern` declarations are the likely cause; otherwise it is a compiler bug.
     RustRejected { generated: PathBuf, stderr: String, uses_rust: bool },
+    /// `kalinga serve` could not listen on its port.
+    Port { port: u16, source: std::io::Error },
+    /// A CSS file listed in `styles` does not exist.
+    MissingStyle { path: PathBuf },
 }
 
 impl fmt::Display for DriverError {
@@ -121,6 +125,12 @@ impl fmt::Display for DriverError {
                 generated.display(),
                 stderr
             ),
+            DriverError::Port { port, source } => {
+                write!(f, "cannot serve on port {} ({}); choose another with `--port <number>`", port, source)
+            }
+            DriverError::MissingStyle { path } => {
+                write!(f, "the style file {} (listed in `styles` in utkal.toml) does not exist", path.display())
+            }
         }
     }
 }
@@ -132,7 +142,8 @@ impl std::error::Error for DriverError {
             DriverError::Io { source, .. }
             | DriverError::Copy { source, .. }
             | DriverError::ToolMissing { source, .. }
-            | DriverError::Run { source, .. } => Some(source),
+            | DriverError::Run { source, .. }
+            | DriverError::Port { source, .. } => Some(source),
             _ => None,
         }
     }

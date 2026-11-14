@@ -82,6 +82,88 @@ fn new_build_run_and_test() {
 }
 
 #[test]
+fn web_projects() {
+    let ws = workspace("web");
+    let out = ok(&utkal(&ws, &["new", "site", "--web"]));
+    assert!(out.contains("utkal serve"), "{}", out);
+    let app = ws.join("site");
+    let manifest = std::fs::read_to_string(app.join("utkal.toml")).unwrap();
+    assert!(manifest.contains("target = \"web\"") && manifest.contains("styles = [\"styles.css\"]"), "{}", manifest);
+    ok(&utkal(&app, &["check"]));
+    ok(&utkal(&app, &["build"]));
+    let page = std::fs::read_to_string(app.join("dist/index.html")).unwrap();
+    assert!(page.contains("<link rel=\"stylesheet\" href=\"styles.css\">") && page.contains("app.js"), "{}", page);
+    assert!(app.join("dist/styles.css").is_file() && app.join("dist/app.js").is_file());
+    assert!(!page.contains("__kalinga"), "only `serve` adds the reload script");
+    ok(&utkal(&app, &["run"]));
+
+    // `kalinga` follows the project's target without `--web`.
+    std::fs::remove_dir_all(app.join("dist")).unwrap();
+    ok(&kalinga(&app, &["build", "src/main.kl"]));
+    assert!(app.join("dist/index.html").is_file(), "a project's web build goes to its own dist/");
+
+    // Tests run with Node.js, on the stand-in page.
+    write(
+        &app.join("tests/page.kl"),
+        "import \"std/web\"\n\ntest fn makes_a_button() {\n    b = Document.app().append(Document.create(Tag.Button))\n    b.set_text(\"Go\")\n    assert_eq(Document.app().html(), \"<div id=\\\"app\\\"><button>Go</button></div>\")\n}\n",
+    );
+    let out = ok(&utkal(&app, &["test"]));
+    assert!(out.contains("test makes_a_button ... ok"), "{}", out);
+
+    // A web app cannot use what a browser lacks; `check` says so.
+    let main = std::fs::read_to_string(app.join("src/main.kl")).unwrap();
+    write(&app.join("src/main.kl"), &format!("import \"std/fs\"\n{}", main));
+    assert!(fails(&utkal(&app, &["check"])).contains("web build"));
+    write(&app.join("src/main.kl"), &main);
+
+    // Listed styles must exist, and keep their folder in the build.
+    write(&app.join("styles/extra.css"), "p { color: red; }\n");
+    write(&app.join("utkal.toml"), &manifest.replace("[\"styles.css\"]", "[\"styles.css\", \"styles/extra.css\"]"));
+    ok(&utkal(&app, &["build"]));
+    assert!(app.join("dist/styles/extra.css").is_file());
+    write(&app.join("utkal.toml"), &manifest.replace("styles.css", "missing.css"));
+    assert!(fails(&utkal(&app, &["build"])).contains("missing.css"));
+    write(&app.join("utkal.toml"), &manifest.replace("\"web\"", "\"phone\""));
+    assert!(fails(&utkal(&app, &["build"])).contains("`target` must be"));
+    write(&app.join("utkal.toml"), &manifest);
+
+    // `utkal serve` serves the build and reloads it on changes.
+    let port = std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
+    let mut server = Command::new(env!("CARGO_BIN_EXE_utkal"))
+        .args(["serve", "--port", &port.to_string()])
+        .current_dir(&app)
+        .env("UTKAL_HOME", home(&app))
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .unwrap();
+    let get = |path: &str| -> Option<String> {
+        use std::io::{Read, Write};
+        let mut s = std::net::TcpStream::connect(("127.0.0.1", port)).ok()?;
+        write!(s, "GET {} HTTP/1.1\r\nHost: localhost\r\n\r\n", path).ok()?;
+        let mut text = String::new();
+        s.read_to_string(&mut text).ok()?;
+        Some(text)
+    };
+    let mut page = None;
+    for _ in 0..100 {
+        page = get("/");
+        if page.is_some() {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    }
+    let served = (page, get("/styles.css"), get("/items/3"));
+    let _ = server.kill();
+    let _ = server.wait();
+    let (page, css, route) = served;
+    let page = page.expect("utkal serve did not answer");
+    assert!(page.starts_with("HTTP/1.1 200 OK") && page.contains("/__kalinga/version"), "{}", page);
+    assert!(css.unwrap().contains("text/css"));
+    assert!(route.unwrap().contains("<div id=\"app\">"), "an app's own paths get the page");
+}
+
+#[test]
 fn path_packages_and_namespaces() {
     let ws = workspace("paths");
     ok(&utkal(&ws, &["new", "geo", "--lib"]));

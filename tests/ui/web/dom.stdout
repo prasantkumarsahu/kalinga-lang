@@ -1,11 +1,18 @@
 <div id="app"><ul class="items" data-kind="fruit"><li class="done" style="color: red">apple</li><li>pear</li></ul></div>
 2 true fruit none
-click on button: 1
-click on button: 2
+Click on Button: 1
+Click on Button: 2
 app saw a click
 typed hello
 <ul class="items" data-kind="fruit"></ul> 0 true
 Asha none
 /items/3 1024.0
 Shop
+checkbox Input Other(details) Text
+enter
+space
+char a
+other F5
+named ArrowLeft
+custom: Other(custom)
 timer ran

@@ -27,7 +27,8 @@ space-game/
 ```
 
 `utkal new mylib --lib` creates a library instead: `src/lib.kl` (what other projects get when
-they import it) and `tests/greet.kl`.
+they import it) and `tests/greet.kl`. `utkal new site --web` creates a web app: a page in
+`src/main.kl` and `styles.css` (see [29. Web](29-web.md#web-projects)).
 
 ## utkal.toml
 
@@ -48,7 +49,7 @@ macroquad = { version = "0.4", features = ["audio"] }
 
 | Section | Meaning |
 |---|---|
-| `[package]` | the project's name (letters, digits, `-`, `_`) and version |
+| `[package]` | the project's name (letters, digits, `-`, `_`) and version; for a web app also `target = "web"` and `styles = [...]` |
 | `[dependencies]` | Kalinga packages, from a `git` repository or a `path` on disk |
 | `[rust-dependencies]` | crates.io crates for the project's Rust code; no `use crate` lines needed |
 
@@ -170,6 +171,7 @@ commit, shared by all projects.
 |---|---|
 | `utkal build` | downloads what is missing, compiles `src/main.kl` to `target/<name>` (`.exe` on Windows) |
 | `utkal run [args...]` | builds, then runs with the arguments |
+| `utkal serve [--port n]` | for a web app: serves it at `http://localhost:8080`, building again on every change |
 | `utkal check` | reports errors in `src/main.kl` / `src/lib.kl` |
 | `utkal test` | runs the `test fn`s in `src/` and `tests/` (see [Testing](24-tooling.md#testing)), and every other `tests/*.kl` program, which passes when it exits with code 0 |
 | `utkal update` | refreshes `utkal.lock` |
