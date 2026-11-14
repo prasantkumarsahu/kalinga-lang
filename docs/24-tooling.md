@@ -12,7 +12,7 @@
 | `--web` with `run`, `test`, `build` or `emit` | Compile to JavaScript instead: `run` and `test` use Node.js, `build` writes `dist/` with `index.html`, `app.js` and the styles (see [29. Web](29-web.md)). Not needed in a project with `target = "web"`. |
 | `kalinga serve <file.kl> [-o <dir>] [--port <n>]` | Build for the web, serve the page at `http://localhost:8080`, and build it again on every change (the open page reloads itself). |
 | `kalinga check <file.kl>` | Report errors only; does not invoke `rustc`. `fn main()` is optional here, so files that are only imported can be checked too. |
-| `kalinga -v` (also `-version`, `--version`) | Print the installed version, e.g. `kalinga 0.7.0`. |
+| `kalinga -v` (also `-version`, `--version`) | Print the installed version, e.g. `kalinga 0.7.1`. |
 | `kalinga check <name.kl> --stdin` | Check source read from stdin, reporting errors under `<name.kl>`. |
 | `kalinga fix [--from <version>] <file.kl or folder>...` | Update code written for an earlier version of Kalinga, in place. The code's version comes from the nearest `utkal.toml` (`kalinga = "0.4"`) or `--from 0.4`; changes that only suit older code are skipped when it is unknown, with a note saying so. |
 | `kalinga fmt [--check] <file.kl or folder>...` | Lay out code in the standard style, in place (see [Formatting](#formatting)). With `--check`, list the files that are not formatted and fail, changing nothing. |
@@ -280,7 +280,7 @@ code --install-extension PrasantKumarSahu.kalinga-lang
 cd editors/vscode
 npm install
 npm run package
-code --install-extension kalinga-lang-0.7.0.vsix
+code --install-extension kalinga-lang-0.7.5.vsix
 ```
 
 ### Settings

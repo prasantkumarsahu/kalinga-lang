@@ -1,5 +1,62 @@
 # Changelog
 
+## 0.7.1
+
+**Kalinga for the web.** Programs can now be compiled to JavaScript and run in a browser
+(or under Node.js), alongside native builds. Nothing changes for existing code. See
+[29. Web](docs/29-web.md).
+
+### Web builds
+- **JavaScript backend**: `kalinga run --web` and `test --web` run a program under Node.js,
+  `emit --web` prints the JavaScript, and `build --web` writes `dist/` with `index.html`,
+  `app.js` and the program's `.css` files. The rules stay the same as native: ints stop
+  outside ±2^53 with the overflow error, values are copied, maps iterate sorted, printing
+  matches, runtime errors give the same messages and exit 101, and seeded `Random` gives
+  the same numbers. Only the code reachable from `main` (or the tests) is written out.
+- **What a browser lacks is a compile error** in a web build: threads, channels, `Shared`,
+  `par_map`, `input()`, `import "std/fs"` and `"std/game"`, `use rust`, `use crate` and
+  Rust externs. See [What a web build leaves out](docs/29-web.md#what-a-web-build-leaves-out).
+- **`extern fn ... = js { ... }`** gives a function a JavaScript body; `extern type` works
+  for JavaScript objects. See [Your own JavaScript](docs/29-web.md#your-own-javascript).
+- **The target is detected**: a project's `target`, or else a file that imports `std/web`,
+  makes `kalinga run`, `test`, `build`, `emit` and `check` build for the web without `--web`.
+- **`kalinga serve file.kl [--port n]`** serves the page on localhost, rebuilds on every
+  change and reloads the open page; build errors show in the page.
+
+### std/web
+- New standard module for the page: elements, events, timers and animation frames, HTTP,
+  storage, the address and history, and the window. It is small and stands alone; add
+  [`std/reactive`](docs/28-reactive.md) for values that update the page.
+- Fixed lists are enums, so the editor completes them: `Tag`, `EventKind`, `Key`,
+  `MouseButton`, `InputType` and `Method` (`el.on(EventKind.Click, ...)`,
+  `Document.create(Tag.Div)`, `Document.input(InputType.Email)`), each with `Other(...)`
+  where the browser allows any name.
+- Example: [examples/web/counter.kl](examples/web/counter.kl).
+
+### utkal
+- `utkal.toml` takes `target = "web"` and `styles = ["styles.css"]`. `utkal new --web`
+  creates a web app; `utkal build`, `run`, `test` and `check` follow the target. Builds go
+  to the project's `dist/`.
+- **`utkal serve [--port n]`** serves the project with live reload.
+
+### Editor (VS Code extension 0.7.5)
+- Errors follow the file's target while typing ("not available in a web build"), and the
+  status bar says `web` or `native`, with the reason.
+- New commands: **Build for Web**, **Serve Web App** (opens the page in VS Code's Simple
+  Browser, reloading it on save; also the globe button of a web file) and **Show Generated
+  JavaScript**; setting `kalinga.webPort`.
+- Inside a utkal project, Run, Run Tests, Build and Serve work on the whole project with
+  `utkal run`, `utkal test`, `utkal build` and `utkal serve`; setting `kalinga.utkalPath`.
+  The commands are now called **Run File or Project**, **Run Tests** and **Build**.
+- Where an enum is wanted (`el.on(|)`, `Document.create(|)`) completion offers its
+  variants first, written in full; completion inside a call's arguments works while the
+  call is still missing some.
+- `js { }` bodies are highlighted as JavaScript; snippets `webapp`, `on`, `elem`, `signal`,
+  `computed`, `effect` and `externjs`; `utkal.toml` hints for `target` and `styles`.
+
+### Fixes
+- `std/reactive`'s doc comments no longer use `let`.
+
 ## 0.7.0
 
 **Breaking: fixed by default.** Code written for 0.6 needs `kalinga fix` (below); after
