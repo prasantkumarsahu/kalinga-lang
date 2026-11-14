@@ -98,6 +98,9 @@ fn member(
 fn expression(world: &mut World, uri: &Url, text: &str, word_start: usize, offset: usize) -> Vec<CompletionItem> {
     let probed = probe::probe(world, uri, text, word_start, offset);
     let mut out = vec![];
+    if let Some((snap, Probe::Scope { expected: Some(kalinga_sema::Type::Enum(e, _)), .. })) = &probed {
+        out.extend(expected_variants(snap, e));
+    }
     if let Some((_, Probe::Scope { locals, owner, is_static, .. })) = &probed {
         for (name, ty) in locals.iter().filter(|(n, _)| n != PROBE) {
             out.push(item(name, CompletionItemKind::VARIABLE, Some(format!("{}: {}", name, ty)), None));

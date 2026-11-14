@@ -173,6 +173,27 @@ fn variant_item(snap: &Snapshot, enum_name: &str, v: &str, fields: &[(String, Ty
     with_docs(item(v, CompletionItemKind::ENUM_MEMBER, Some(detail), snippet), member_docs(snap, enum_name, v))
 }
 
+/// Where a value of the enum `name` is wanted (`el.on(|)`): its variants written in full
+/// (`EventKind.Click`), listed first.
+pub fn expected_variants(snap: &Snapshot, name: &str) -> Vec<CompletionItem> {
+    let Some(info) = snap.model().and_then(|m| m.enums.get(name)) else { return vec![] };
+    info.variants
+        .iter()
+        .enumerate()
+        .map(|(i, (v, fs))| {
+            let mut it = variant_item(snap, name, v, fs);
+            let full = format!("{}.{}", name, v);
+            if let Some(s) = it.insert_text.take() {
+                it.insert_text = Some(format!("{}.{}", name, s));
+            }
+            it.label = full;
+            it.sort_text = Some(format!("0{:04}", i));
+            it.preselect = Some(i == 0);
+            it
+        })
+        .collect()
+}
+
 /// The patterns a `match` on a value of type `ty` can use.
 pub fn patterns(snap: &Snapshot, ty: &Type) -> Vec<CompletionItem> {
     let mut out: Vec<CompletionItem> = match ty {

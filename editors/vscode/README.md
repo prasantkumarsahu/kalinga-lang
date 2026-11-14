@@ -30,16 +30,30 @@ compiler itself, so what the editor shows is exactly what the compiler sees:
 - Quick fixes: mark a method `override fn`, remove a wrong `override`, add a missing
   interface or abstract method, make a fixed variable or field `var`
 - Format Document (`kalinga fmt`)
-- Syntax highlighting, snippets (`main`, `fn`, `class`, `struct`, `match`, `gameclass`, ...),
+- Web code: a file that imports `std/web`, or a project with `target = "web"`, is checked
+  as a web build, so threads, `std/fs` and `use rust` are reported while you type; where an
+  enum is wanted (`el.on(`, `Document.create(`), its values are offered first
+  (`EventKind.Click`, `Tag.Div`). The status bar shows `web` or `native` for the active file.
+- Syntax highlighting, snippets (`main`, `fn`, `class`, `struct`, `match`, `gameclass`, and
+  for web pages `webapp`, `on`, `elem`, `signal`, `computed`, `effect`, `externjs`, ...),
   comment toggling, bracket matching and auto-indent
 - `utkal.toml`: key and value hints, with an extension that reads JSON schemas for TOML
   (such as Even Better TOML)
 - Commands:
-  - **Kalinga: Run File**: the ▶ button in the editor title, or `Ctrl+F5`
-  - **Kalinga: Run Tests in File** (`kalinga test`)
-  - **Kalinga: Build Executable**
-  - **Kalinga: Show Generated Rust**
+  - **Kalinga: Run File or Project**: the ▶ button in the editor title, or `Ctrl+F5`
+  - **Kalinga: Run Tests** (`kalinga test` on the file)
+  - **Kalinga: Build** (an executable)
+  - **Kalinga: Show Generated Rust** / **Show Generated JavaScript**
+  - **Kalinga: Build for Web** (`kalinga build --web`: `dist/` with `index.html`, `app.js`
+    and the styles)
+  - **Kalinga: Serve Web App** (`kalinga serve`): builds the page, serves it, opens it in
+    VS Code's Simple Browser and rebuilds (reloading the page) on every change; the globe
+    button in the editor title of a web file, or click `web` in the status bar
   - **Kalinga: Restart Language Server**
+- Inside a `utkal` project (a folder with `utkal.toml` above the file) the commands work on
+  the whole project, whichever of its files is open: Run is `utkal run`, Run Tests is
+  `utkal test`, Build and Build for Web are `utkal build`, Serve Web App is `utkal serve`.
+  The `kalinga.utkalPath` setting points at `utkal` when it is not next to the compiler.
 
 ## Setup
 
@@ -89,8 +103,10 @@ compiler itself, so what the editor shows is exactly what the compiler sees:
 | Setting                | Default   | Meaning                                           |
 | ---------------------- | --------- | ------------------------------------------------- |
 | `kalinga.compilerPath` | `kalinga` | The compiler, which also runs the language server |
+| `kalinga.webPort`      | `8080`    | The port **Serve Web App** serves the page on     |
 
-Running a program needs `rustc` on PATH, because Kalinga compiles through Rust.
+Running a program needs `rustc` on PATH, because Kalinga compiles through Rust. Running a
+web program (or its tests) needs Node.js; building and serving one needs nothing else.
 
 ## File icon
 

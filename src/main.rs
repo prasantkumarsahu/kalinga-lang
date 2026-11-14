@@ -154,9 +154,9 @@ fn main() {
         }
     };
 
-    // A file in a web project builds for the web without `--web`.
-    if matches!(cmd, "run" | "test" | "build" | "emit") && driver::project_backend(&file) == Some(driver::Backend::Web)
-    {
+    // A file in a web project, or one that imports `std/web`, builds for the web without
+    // `--web`.
+    if matches!(cmd, "run" | "test" | "build" | "emit") && driver::detect_backend(&file) == Some(driver::Backend::Web) {
         web = true;
     }
     let result: CliResult<i32> = match cmd {
@@ -195,7 +195,7 @@ fn main() {
             };
             let name = file.display().to_string();
             source
-                .and_then(|src| match driver::project_backend(&file) {
+                .and_then(|src| match driver::backend_of(&name, &src) {
                     Some(backend) => Ok(driver::check_for(&name, &src, backend)?),
                     None => Ok(driver::check(&name, &src)?),
                 })

@@ -264,8 +264,12 @@ fn main() {
 - Threads, channels, `Shared`, `par_map`, reading the console, `std/fs`, `std/game`,
   `use rust` and `rust { }` bodies are not available, and are compile errors in a web
   build (chapter 23).
-- `std/web` needs a web build: a native `kalinga run` of a program that imports it is an
-  error.
+- A program that imports `std/web` (directly or through its imports) is built for the web
+  without `--web`: `kalinga run app.kl` runs it with Node.js and `kalinga build app.kl`
+  writes `dist/`. In a utkal project, `target` decides instead, and a native project that
+  imports `std/web` is an error.
+- The editor checks each file for the same target, so what a web build lacks is reported
+  while you type.
 
 ---
 

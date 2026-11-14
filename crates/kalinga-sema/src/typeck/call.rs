@@ -208,6 +208,7 @@ impl Checker<'_> {
         let args = &*self.by_position(args, &info.fields, name)?;
         let (min, max) = (info.required_args(), info.fields.len());
         if args.len() < min || args.len() > max {
+            self.check_for_probe(cx, args, &info.fields);
             let generic = !info.tparams.is_empty();
             let range = if min == max && !generic { format!("{}", max) } else { format!("{} to {}", min, max) };
             return err(
@@ -340,6 +341,7 @@ impl Checker<'_> {
         let params = self.m.find_init(name).map(|(_, s)| s.params).unwrap_or_default();
         let args = self.by_position(args, &params, name)?;
         if args.len() != params.len() {
+            self.check_for_probe(cx, &args, &params);
             return err(
                 format!("`{}(...)` takes {} argument(s) but {} were given", name, params.len(), args.len()),
                 pos,
@@ -379,6 +381,18 @@ impl Checker<'_> {
         Ok(texpr(TExprKind::Call { callee: Callee::Value(Box::new(f)), args }, ret.clone(), pos))
     }
 
+    /// The arguments of a call that has the wrong number of them, checked only so that a
+    /// completion probe among them is seen (`el.on(EventKind.|)` while the call is being
+    /// written); their errors are dropped, as the call is wrong anyway.
+    fn check_for_probe(&self, cx: &mut Ctx, args: &[Expr], params: &[(String, Type)]) {
+        for (i, a) in args.iter().enumerate() {
+            let _ = match params.get(i) {
+                Some((_, t)) => self.expr_to(cx, a, t),
+                None => self.expr(cx, a, None),
+            };
+        }
+    }
+
     /// The arguments of a call, each converted to its parameter's type.
     pub(super) fn args(
         &self,
@@ -390,6 +404,7 @@ impl Checker<'_> {
     ) -> Result<Vec<TExpr>> {
         let args = self.by_position(args, &sig.params, what)?;
         if args.len() != sig.params.len() {
+            self.check_for_probe(cx, &args, &sig.params);
             return err(
                 format!("`{}` takes {} argument(s) but {} were given", what, sig.params.len(), args.len()),
                 pos,
@@ -414,6 +429,7 @@ impl Checker<'_> {
     ) -> Result<Inferred> {
         let args = &*self.by_position(args, &sig.params, what)?;
         if args.len() != sig.params.len() {
+            self.check_for_probe(cx, args, &sig.params);
             return err(
                 format!("`{}` takes {} argument(s) but {} were given", what, sig.params.len(), args.len()),
                 pos,

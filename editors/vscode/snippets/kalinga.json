@@ -264,5 +264,61 @@
     "prefix": "test",
     "body": ["test fn ${1:name}() {", "\tassert_eq(${2:value}, ${3:expected})$0", "}"],
     "description": "A test, run by `kalinga test` / `utkal test`"
+  },
+  "web app": {
+    "prefix": "webapp",
+    "body": [
+      "import \"std/reactive\"",
+      "import \"std/web\"",
+      "",
+      "fn main() {",
+      "\tapp = Document.app()",
+      "\t${1:count} = signal(${2:0})",
+      "",
+      "\tshown = app.append(Document.create(Tag.P))",
+      "\teffect(fn() {",
+      "\t\tshown.set_text(\"${3:Clicked} {${1:count}.get()}\")",
+      "\t})",
+      "",
+      "\tbutton = app.append(Document.create(Tag.Button))",
+      "\tbutton.set_text(\"${4:+1}\")",
+      "\tbutton.on(EventKind.Click, fn(e: Event) { ${1:count}.update(fn(n) => n + 1) })$0",
+      "}"
+    ],
+    "description": "A web page (std/web) whose text follows a signal (std/reactive)"
+  },
+  "event listener": {
+    "prefix": "on",
+    "body": [
+      "${1:el}.on(EventKind.${2|Click,Input,Change,Submit,KeyDown,KeyUp,Focus,Blur,MouseMove|}, fn(e: Event) {",
+      "\t$0",
+      "})"
+    ],
+    "description": "Handle an event of an element (std/web)"
+  },
+  "element": {
+    "prefix": "elem",
+    "body": ["${1:el} = ${2:app}.append(Document.create(Tag.${3|Div,P,Span,Button,Input,H1,Ul,Li,A,Img|}))$0"],
+    "description": "Create an element and add it to another (std/web)"
+  },
+  "signal": {
+    "prefix": "signal",
+    "body": ["${1:name} = signal(${2:0})$0"],
+    "description": "A reactive value (std/reactive)"
+  },
+  "computed": {
+    "prefix": "computed",
+    "body": ["${1:name} = computed(fn() => ${2:value})$0"],
+    "description": "A value worked out from signals, kept up to date (std/reactive)"
+  },
+  "effect": {
+    "prefix": "effect",
+    "body": ["effect(fn() {", "\t$0", "})"],
+    "description": "Code that runs again whenever the signals it reads change (std/reactive)"
+  },
+  "extern js": {
+    "prefix": "externjs",
+    "body": ["extern fn ${1:name}(${2:x}: ${3:str}) -> ${4:str} = js {", "\treturn ${2:x};$0", "}"],
+    "description": "A function written in JavaScript (web builds)"
   }
 }
