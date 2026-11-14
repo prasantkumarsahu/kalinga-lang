@@ -1,0 +1,529 @@
+// The browser, for web builds (`kalinga build --web`). Use with `import "std/web"`.
+//
+// Low-level building blocks only: elements of the page, events, timers, HTTP requests,
+// storage, the address bar and the window. Elements, events and listeners are small
+// handles: copies of one are the same thing on the page. This module does not depend on
+// any other; frameworks (components, routers) belong in packages built on top of it.
+
+/// A node of the page (an element or a text node), for your own `js { }` code.
+extern type JsNode
+/// A browser event, for your own `js { }` code.
+extern type JsEvent
+/// What `removeEventListener` needs to undo an `on`.
+extern type JsListener
+/// An HTTP response's headers.
+extern type JsHeaders
+
+/// An element (or text node) of the page.
+struct Element {
+    node: JsNode
+
+    /// The text inside, without tags.
+    fn text() -> str {
+        return web_text(self.node)
+    }
+
+    /// Replaces everything inside with `text` (shown as text, never as HTML).
+    fn set_text(text: str) {
+        web_set_text(self.node, text)
+    }
+
+    /// The element as HTML: `<p class="note">Hi</p>`.
+    fn html() -> str {
+        return web_html(self.node)
+    }
+
+    /// The element's tag in lowercase (`"div"`); `"#text"` for text.
+    fn tag() -> str {
+        return web_tag(self.node)
+    }
+
+    /// An attribute's value, or `none` when it is not set.
+    fn attr(name: str) -> str? {
+        return web_attr(self.node, name)
+    }
+
+    fn set_attr(name: str, value: str) {
+        web_set_attr(self.node, name, value)
+    }
+
+    fn remove_attr(name: str) {
+        web_remove_attr(self.node, name)
+    }
+
+    fn add_class(name: str) {
+        web_class(self.node, name, 1)
+    }
+
+    fn remove_class(name: str) {
+        web_class(self.node, name, 0)
+    }
+
+    /// Adds the class when `on` is true, removes it otherwise.
+    fn toggle_class(name: str, on: bool) {
+        web_class(self.node, name, if on { 1 } else { 0 })
+    }
+
+    fn has_class(name: str) -> bool {
+        return web_has_class(self.node, name)
+    }
+
+    /// Sets a CSS property: `el.set_style("color", "red")`.
+    fn set_style(property: str, value: str) {
+        web_set_style(self.node, property, value)
+    }
+
+    fn remove_style(property: str) {
+        web_set_style(self.node, property, "")
+    }
+
+    /// What is typed in an input, text area or select.
+    fn value() -> str {
+        return web_value(self.node)
+    }
+
+    fn set_value(value: str) {
+        web_set_value(self.node, value)
+    }
+
+    /// Whether a checkbox is ticked.
+    fn checked() -> bool {
+        return web_checked(self.node)
+    }
+
+    fn set_checked(on: bool) {
+        web_set_checked(self.node, on)
+    }
+
+    /// Adds `child` at the end; returns `child`.
+    fn append(child: Element) -> Element {
+        web_append(self.node, child.node)
+        return child
+    }
+
+    /// Adds `child` just before `before`, which is inside this element.
+    fn insert_before(child: Element, before: Element) {
+        web_insert_before(self.node, child.node, before.node)
+    }
+
+    /// Takes the element off the page.
+    fn remove() {
+        web_remove(self.node)
+    }
+
+    /// Removes everything inside.
+    fn clear() {
+        web_set_text(self.node, "")
+    }
+
+    /// The element containing this one.
+    fn parent() -> Element? {
+        if n = web_parent(self.node) {
+            return Element(n)
+        }
+        return none
+    }
+
+    /// The elements directly inside.
+    fn children() -> [Element] {
+        return web_children(self.node).map(fn(n) => Element(n))
+    }
+
+    /// The first element inside matching a CSS selector (`"#name"`, `".item"`, `"li"`).
+    fn find(selector: str) -> Element? {
+        if n = web_find(self.node, selector) {
+            return Element(n)
+        }
+        return none
+    }
+
+    /// Every element inside matching a CSS selector.
+    fn find_all(selector: str) -> [Element] {
+        return web_find_all(self.node, selector).map(fn(n) => Element(n))
+    }
+
+    /// Calls `handler` on every `kind` event (`"click"`, `"input"`, `"keydown"`, ...).
+    fn on(kind: str, handler: fn(Event)) -> Listener {
+        return Listener(web_on(self.node, kind, fn(e: JsEvent) { handler(Event(e)) }))
+    }
+
+    fn focus() {
+        web_focus(self.node)
+    }
+
+    /// Sends a `click` to the element, as if it was clicked.
+    fn click() {
+        web_trigger(self.node, "click")
+    }
+
+    /// Sends an event of this kind to the element (useful in tests).
+    fn trigger(kind: str) {
+        web_trigger(self.node, kind)
+    }
+}
+
+/// What happened, given to an event handler.
+struct Event {
+    event: JsEvent
+
+    /// `"click"`, `"input"`, ...
+    fn kind() -> str {
+        return web_ev_str(self.event, "type")
+    }
+
+    /// The key of a keyboard event: `"a"`, `"Enter"`, `"ArrowLeft"`.
+    fn key() -> str {
+        return web_ev_str(self.event, "key")
+    }
+
+    /// The value of the input the event happened on.
+    fn value() -> str {
+        return web_ev_value(self.event)
+    }
+
+    /// The mouse position in the window, in pixels.
+    fn x() -> float {
+        return web_ev_num(self.event, "clientX")
+    }
+
+    fn y() -> float {
+        return web_ev_num(self.event, "clientY")
+    }
+
+    /// The mouse button: 0 left, 1 middle, 2 right.
+    fn button() -> int {
+        return int(web_ev_num(self.event, "button"))
+    }
+
+    /// The element the event happened on.
+    fn target() -> Element? {
+        if n = web_ev_target(self.event) {
+            return Element(n)
+        }
+        return none
+    }
+
+    /// Stops the browser's own action (following a link, sending a form).
+    fn prevent_default() {
+        web_ev_call(self.event, "preventDefault")
+    }
+
+    /// Stops the event reaching the elements around this one.
+    fn stop() {
+        web_ev_call(self.event, "stopPropagation")
+    }
+}
+
+/// An event handler added with `on`.
+struct Listener {
+    listener: JsListener
+
+    /// Stops calling the handler.
+    fn remove() {
+        web_off(self.listener)
+    }
+}
+
+/// The page.
+class Document {
+    /// A new element: `Document.create("button")`.
+    static fn create(tag: str) -> Element {
+        return Element(web_create(tag))
+    }
+
+    /// A new text node.
+    static fn text(text: str) -> Element {
+        return Element(web_create_text(text))
+    }
+
+    /// The first element of the page matching a CSS selector.
+    static fn find(selector: str) -> Element? {
+        if n = web_find(web_document(), selector) {
+            return Element(n)
+        }
+        return none
+    }
+
+    static fn find_all(selector: str) -> [Element] {
+        return web_find_all(web_document(), selector).map(fn(n) => Element(n))
+    }
+
+    static fn body() -> Element {
+        return Element(web_body())
+    }
+
+    /// Where the app goes: the `<div id="app">` of the page `kalinga build --web` writes
+    /// (the body when there is none).
+    static fn app() -> Element {
+        if n = web_find(web_document(), "#app") {
+            return Element(n)
+        }
+        return Document.body()
+    }
+
+    /// Adds CSS rules to the page.
+    static fn add_styles(css: str) {
+        web_add_styles(css)
+    }
+
+    static fn title() -> str {
+        return web_title()
+    }
+
+    static fn set_title(title: str) {
+        web_set_title(title)
+    }
+}
+
+/// Code that runs later, once or again and again.
+struct Timer {
+    id: int
+
+    /// Runs `f` once, `seconds` from now.
+    static fn after(seconds: float, f: fn()) -> Timer {
+        return Timer(web_timer(seconds, f, false))
+    }
+
+    /// Runs `f` every `seconds`.
+    static fn every(seconds: float, f: fn()) -> Timer {
+        return Timer(web_timer(seconds, f, true))
+    }
+
+    fn cancel() {
+        web_cancel_timer(self.id)
+    }
+}
+
+/// The browser's next screen update, for animation.
+struct Frame {
+    id: int
+
+    /// Runs `f` before the next frame is drawn, with the time in seconds.
+    static fn next(f: fn(float)) -> Frame {
+        return Frame(web_frame(f))
+    }
+
+    fn cancel() {
+        web_cancel_frame(self.id)
+    }
+}
+
+/// The answer to an HTTP request.
+struct Response {
+    /// `200`, `404`, ...
+    status: int
+    /// The body as text.
+    text: str
+    headers: JsHeaders
+
+    /// Whether the status is a success (200 to 299).
+    fn ok() -> bool {
+        return self.status >= 200 && self.status < 300
+    }
+
+    /// A header's value, or `none`.
+    fn header(name: str) -> str? {
+        return web_header(self.headers, name)
+    }
+}
+
+/// HTTP requests (`fetch`). The error of the `Result` is a network failure; a response
+/// with any status, including 404, is `Ok`.
+class Http {
+    /// `GET url`.
+    static async fn get(url: str) -> Result<Response, str> {
+        return await Http.send("GET", url, "", {})
+    }
+
+    /// `POST url` with `body`.
+    static async fn post(url: str, body: str) -> Result<Response, str> {
+        return await Http.send("POST", url, body, {})
+    }
+
+    /// Any request; `body` is left out when it is empty.
+    static async fn send(method: str, url: str, body: str, headers: {str: str}) -> Result<Response, str> {
+        answer = await web_fetch(method, url, body, headers)
+        reply = answer?
+        return Ok(Response(web_res_status(reply), web_res_text(reply), web_res_headers(reply)))
+    }
+}
+
+/// Text saved in the browser (`localStorage`), kept after the page is closed.
+class Storage {
+    static fn get(key: str) -> str? {
+        return web_storage_get(key)
+    }
+
+    static fn set(key: str, value: str) {
+        web_storage_set(key, value)
+    }
+
+    static fn remove(key: str) {
+        web_storage_remove(key)
+    }
+}
+
+/// The address of the page.
+class Location {
+    /// `"/items/3"`
+    static fn path() -> str {
+        return web_location("pathname")
+    }
+
+    /// `"?page=2"`, or `""`.
+    static fn query() -> str {
+        return web_location("search")
+    }
+
+    /// `"#top"`, or `""`.
+    static fn hash() -> str {
+        return web_location("hash")
+    }
+
+    /// The whole address.
+    static fn href() -> str {
+        return web_location("href")
+    }
+}
+
+/// Moving between addresses without loading a new page.
+class History {
+    /// Shows `path` in the address bar, as a new entry (the back button returns).
+    static fn push(path: str) {
+        web_history(path, true)
+    }
+
+    /// Shows `path` in the address bar, replacing the current entry.
+    static fn replace(path: str) {
+        web_history(path, false)
+    }
+
+    /// Calls `handler` with the new path when the user goes back or forward.
+    static fn on_change(handler: fn(str)) -> Listener {
+        return Listener(web_on(web_window(), "popstate", fn(e: JsEvent) { handler(Location.path()) }))
+    }
+}
+
+/// The browser window.
+class Window {
+    /// The size of the page area, in pixels.
+    static fn width() -> float {
+        return web_window_size(true)
+    }
+
+    static fn height() -> float {
+        return web_window_size(false)
+    }
+
+    static fn on_resize(handler: fn()) -> Listener {
+        return Listener(web_on(web_window(), "resize", fn(e: JsEvent) { handler() }))
+    }
+
+    /// Calls `handler` for every key pressed anywhere on the page.
+    static fn on_key(handler: fn(Event)) -> Listener {
+        return Listener(web_on(web_window(), "keydown", fn(e: JsEvent) { handler(Event(e)) }))
+    }
+}
+
+// The browser calls, kept small; everything above is Kalinga.
+
+extern fn web_document() -> JsNode = js { return document; }
+extern fn web_window() -> JsNode = js { return window; }
+extern fn web_body() -> JsNode = js { return document.body; }
+extern fn web_create(tag: str) -> JsNode = js { return document.createElement(tag); }
+extern fn web_create_text(text: str) -> JsNode = js { return document.createTextNode(text); }
+extern fn web_text(n: JsNode) -> str = js { return n.textContent ?? ""; }
+extern fn web_set_text(n: JsNode, text: str) = js { n.textContent = text; }
+extern fn web_html(n: JsNode) -> str = js { return n.outerHTML ?? n.textContent ?? ""; }
+extern fn web_tag(n: JsNode) -> str = js { return n.nodeType === 3 ? "#text" : n.tagName.toLowerCase(); }
+extern fn web_attr(n: JsNode, name: str) -> str? = js { return n.getAttribute(name); }
+extern fn web_set_attr(n: JsNode, name: str, value: str) = js { n.setAttribute(name, value); }
+extern fn web_remove_attr(n: JsNode, name: str) = js { n.removeAttribute(name); }
+extern fn web_class(n: JsNode, name: str, on: int) = js { n.classList.toggle(name, on === 1); }
+extern fn web_has_class(n: JsNode, name: str) -> bool = js { return n.classList.contains(name); }
+
+extern fn web_set_style(n: JsNode, property: str, value: str) = js {
+    if (value === "") n.style.removeProperty(property);
+    else n.style.setProperty(property, value);
+}
+
+extern fn web_value(n: JsNode) -> str = js { return String(n.value ?? ""); }
+extern fn web_set_value(n: JsNode, value: str) = js { n.value = value; }
+extern fn web_checked(n: JsNode) -> bool = js { return n.checked === true; }
+extern fn web_set_checked(n: JsNode, on: bool) = js { n.checked = on; }
+extern fn web_append(n: JsNode, child: JsNode) = js { n.appendChild(child); }
+extern fn web_insert_before(n: JsNode, child: JsNode, before: JsNode) = js { n.insertBefore(child, before); }
+extern fn web_remove(n: JsNode) = js { n.remove(); }
+extern fn web_parent(n: JsNode) -> JsNode? = js { return n.parentElement ?? null; }
+extern fn web_children(n: JsNode) -> [JsNode] = js { return [...n.children]; }
+extern fn web_find(n: JsNode, selector: str) -> JsNode? = js { return n.querySelector(selector); }
+extern fn web_find_all(n: JsNode, selector: str) -> [JsNode] = js { return [...n.querySelectorAll(selector)]; }
+extern fn web_focus(n: JsNode) = js { n.focus(); }
+
+extern fn web_trigger(n: JsNode, kind: str) = js {
+    if (kind === "click" && typeof n.click === "function") n.click();
+    else n.dispatchEvent(new Event(kind, { bubbles: true }));
+}
+
+extern fn web_on(n: JsNode, kind: str, handler: fn(JsEvent)) -> JsListener = js {
+    const f = $kl.guard(handler);
+    n.addEventListener(kind, f);
+    return { n, kind, f };
+}
+
+extern fn web_off(l: JsListener) = js { l.n.removeEventListener(l.kind, l.f); }
+extern fn web_ev_str(e: JsEvent, name: str) -> str = js { return String(e[name] ?? ""); }
+extern fn web_ev_num(e: JsEvent, name: str) -> float = js { return Number(e[name] ?? 0); }
+extern fn web_ev_value(e: JsEvent) -> str = js { return String(e.target?.value ?? ""); }
+extern fn web_ev_target(e: JsEvent) -> JsNode? = js { return e.target ?? null; }
+extern fn web_ev_call(e: JsEvent, name: str) = js { e[name](); }
+
+extern fn web_add_styles(css: str) = js {
+    const s = document.createElement("style");
+    s.textContent = css;
+    document.head.appendChild(s);
+}
+
+extern fn web_title() -> str = js { return document.title; }
+extern fn web_set_title(title: str) = js { document.title = title; }
+
+extern fn web_timer(seconds: float, f: fn(), repeat: bool) -> int = js {
+    const g = $kl.guard(f);
+    const ms = Math.max(0, seconds * 1000);
+    return repeat ? setInterval(g, ms) : setTimeout(g, ms);
+}
+
+extern fn web_cancel_timer(id: int) = js { clearTimeout(id); clearInterval(id); }
+extern fn web_frame(f: fn(float)) -> int = js { const g = $kl.guard(f); return requestAnimationFrame((t) => g(t / 1000)); }
+extern fn web_cancel_frame(id: int) = js { cancelAnimationFrame(id); }
+
+extern fn web_fetch(method: str, url: str, body: str, headers: {str: str}) -> Async<Result<JsNode, str>> = js {
+    const h = {};
+    for (const k of headers.keys()) h[k] = headers.m.get(k);
+    const init = { method, headers: h };
+    if (body !== "") init.body = body;
+    return $kl.lazy(async () => {
+        try {
+            const r = await fetch(url, init);
+            return $kl.ok({ status: r.status, text: await r.text(), headers: r.headers });
+        } catch (e) {
+            return $kl.err("network error: " + (e && e.message ? e.message : String(e)));
+        }
+    });
+}
+
+extern fn web_res_status(r: JsNode) -> int = js { return r.status; }
+extern fn web_res_text(r: JsNode) -> str = js { return r.text; }
+extern fn web_res_headers(r: JsNode) -> JsHeaders = js { return r.headers; }
+extern fn web_header(h: JsHeaders, name: str) -> str? = js { return h.get(name); }
+extern fn web_storage_get(key: str) -> str? = js { return localStorage.getItem(key); }
+extern fn web_storage_set(key: str, value: str) = js { localStorage.setItem(key, value); }
+extern fn web_storage_remove(key: str) = js { localStorage.removeItem(key); }
+extern fn web_location(part: str) -> str = js { return String(location[part] ?? ""); }
+
+extern fn web_history(path: str, push: bool) = js {
+    if (push) history.pushState(null, "", path);
+    else history.replaceState(null, "", path);
+}
+
+extern fn web_window_size(width: bool) -> float = js { return width ? window.innerWidth : window.innerHeight; }

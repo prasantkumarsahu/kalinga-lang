@@ -14,6 +14,7 @@ pub mod suggest;
 pub mod tast;
 pub mod typeck;
 pub mod types;
+pub mod visit;
 pub mod warnings;
 pub mod web;
 

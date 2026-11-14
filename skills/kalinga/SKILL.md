@@ -10,7 +10,7 @@ to native code through Rust. Programs are `.kl` files with a `fn main()`. It has
 with inheritance and interfaces, generics with bounds, enums with `match`, value-type
 structs with operators, optionals instead of null, `Result` and `?` instead of exceptions,
 lambdas, tuples, threads, async, and a standard library (`Math`, `Random`, `Time`,
-`std/fs`, `std/reactive`, `std/math2d`, `std/game`). Memory is managed by reference
+`std/fs`, `std/reactive`, `std/web`, `std/math2d`, `std/game`). Memory is managed by reference
 counting; there is no garbage collector.
 
 It borrows syntax from Swift, Kotlin and Rust, but it is its own language. Most mistakes come
