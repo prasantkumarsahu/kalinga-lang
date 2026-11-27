@@ -110,3 +110,13 @@ test fn sections_for_search() {
     assert(r.sections[1].text.contains("Some code here."))
     assert(r.sections[2].text.contains("c"))
 }
+
+test fn served_under_a_path() {
+    assert_eq(base_path("https://kalinga-lang.org"), "")
+    assert_eq(base_path("https://kalinga-lang.org/"), "")
+    assert_eq(base_path("https://prasantkumarsahu.github.io/kalinga-lang"), "/kalinga-lang")
+    assert_eq(base_path("https://prasantkumarsahu.github.io/kalinga-lang/"), "/kalinga-lang")
+    page = "<a href=\"/docs/\">x</a><img src=\"/assets/logo.svg\"><a href=\"https://github.com\">y</a><a href=\"#top\">z</a>"
+    assert_eq(rebase(page, ""), page)
+    assert_eq(rebase(page, "/kalinga-lang"), "<a href=\"/kalinga-lang/docs/\">x</a><img src=\"/kalinga-lang/assets/logo.svg\"><a href=\"https://github.com\">y</a><a href=\"#top\">z</a>")
+}

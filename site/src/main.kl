@@ -1,6 +1,10 @@
 // kalinga-lang.org: builds the website from the repository.
 //
-//     utkal run -- <repo root> <out dir>
+//     utkal run -- <repo root> <out dir> [<site url>]
+//
+// The site URL (kalinga-lang.org unless given) sets the sitemap's addresses and the path
+// the pages are served under: on https://prasantkumarsahu.github.io/kalinga-lang every
+// `/docs/` link becomes `/kalinga-lang/docs/`.
 //
 // The book is docs/*.md, the changelog is CHANGELOG.md and the live examples are
 // examples/web/*.kl, so the site always says what the repository says. A link to a page
@@ -51,11 +55,12 @@ fn extension_version(root: str) -> Result<str, str> {
     return Err("no version in editors/vscode/package.json")
 }
 
-/// Writes `text` to `out/path`, making the folders it needs.
-fn write(out: str, path: str, text: str) -> Result<void, str> {
+/// Writes `text` to `out/path`, making the folders it needs. A page's links are moved
+/// under `base`.
+fn write(out: str, base: str, path: str, text: str) -> Result<void, str> {
     full = join_path(out, path)
     Dir.create(folder(full))?
-    File.write(full, text)?
+    File.write(full, if path.ends_with(".html") { rebase(text, base) } else { text })?
     return Ok()
 }
 
@@ -79,23 +84,26 @@ fn render(links: Links, root: str, path: str, footer: bool) -> Result<Rendered, 
 }
 
 /// One line per section, `title \t url \t text`, for the search box.
-fn search_lines(page: str, url: str, sections: [Section]) -> [str] {
+fn search_lines(base: str, page: str, url: str, sections: [Section]) -> [str] {
     var out: [str] = []
     for s in sections {
         title = if s.title == page || s.title == "" { page } else { page + " › " + s.title }
         link = if s.id == "" || s.title == page { url } else { url + "#" + s.id }
-        out.push(title + "\t" + link + "\t" + s.text)
+        out.push(title + "\t" + base + link + "\t" + s.text)
     }
     return out
 }
 
 fn main() -> Result<void, str> {
     a = args().filter(fn(x) => x != "--")
-    if len(a) != 2 {
-        return Err("usage: utkal run -- <repo root> <out dir>")
+    if len(a) != 2 && len(a) != 3 {
+        return Err("usage: utkal run -- <repo root> <out dir> [<site url>]")
     }
     root = a[0]
     out = a[1]
+    given = if len(a) == 3 { a[2] } else { SITE }
+    site = if given.ends_with("/") { given[0..len(given) - 1] } else { given }
+    base = base_path(site)
     links = Links(root)
     book = chapters(root)?
     var search: [str] = []
@@ -103,15 +111,15 @@ fn main() -> Result<void, str> {
 
     // The book: the index, then every chapter.
     index = render(links, root, "docs/README.md", true)?
-    write(out, "docs/index.html", book_page(book, -1, "The Kalinga book", index.html, index.headings))?
-    for l in search_lines("The Kalinga book", "/docs/", index.sections) {
+    write(out, base, "docs/index.html", book_page(book, -1, "The Kalinga book", index.html, index.headings))?
+    for l in search_lines(base, "The Kalinga book", "/docs/", index.sections) {
         search.push(l)
     }
     for i, c in book {
         page = render(links, root, c.path, false)?
         url = page_url(c.path)
-        write(out, url[1..] + "index.html", book_page(book, i, c.title, page.html, page.headings))?
-        for l in search_lines(c.title, url, page.sections) {
+        write(out, base, url[1..] + "index.html", book_page(book, i, c.title, page.html, page.headings))?
+        for l in search_lines(base, c.title, url, page.sections) {
             search.push(l)
         }
         urls.push(url)
@@ -119,8 +127,8 @@ fn main() -> Result<void, str> {
 
     // The changelog.
     changes = render(links, root, "CHANGELOG.md", true)?
-    write(out, "changelog/index.html", plain_page("Changelog", "What changed in each Kalinga release.", "changelog", changes.html))?
-    for l in search_lines("Changelog", "/changelog/", changes.sections) {
+    write(out, base, "changelog/index.html", plain_page("Changelog", "What changed in each Kalinga release.", "changelog", changes.html))?
+    for l in search_lines(base, "Changelog", "/changelog/", changes.sections) {
         search.push(l)
     }
 
@@ -133,13 +141,13 @@ fn main() -> Result<void, str> {
     }
 
     v = version(root)?
-    write(out, "index.html", home_page(root, v)?)?
-    write(out, "install/index.html", install_page(v, extension_version(root)?))?
-    write(out, "play/index.html", play_page(root)?)?
-    write(out, "404.html", plain_page("Page not found", "This page does not exist.", "", "<h1>Page not found</h1><p>There is nothing at this address. Try the <a href=\"/docs/\">book</a> or the search at the top.</p>"))?
-    write(out, "search.txt", search.join("\n") + "\n")?
-    write(out, "sitemap.xml", sitemap(urls))?
-    write(out, "CNAME", "kalinga-lang.org\n")?
+    write(out, base, "index.html", home_page(root, v)?)?
+    write(out, base, "install/index.html", install_page(v, extension_version(root)?))?
+    write(out, base, "play/index.html", play_page(root)?)?
+    write(out, base, "404.html", plain_page("Page not found", "This page does not exist.", "", "<h1>Page not found</h1><p>There is nothing at this address. Try the <a href=\"/docs/\">book</a> or the search at the top.</p>"))?
+    write(out, base, "search.txt", search.join("\n") + "\n")?
+    write(out, base, "sitemap.xml", sitemap(site, urls))?
+    write(out, base, "CNAME", "kalinga-lang.org\n")?
     Dir.create(join_path(out, "assets"))?
     for name in Dir.list(join_path(root, "site/assets"))? {
         File.copy(join_path(root, "site/assets/" + name), join_path(out, "assets/" + name))?
@@ -148,10 +156,10 @@ fn main() -> Result<void, str> {
     return Ok()
 }
 
-fn sitemap(urls: [str]) -> str {
+fn sitemap(site: str, urls: [str]) -> str {
     var lines: [str] = ["<?xml version=\"1.0\" encoding=\"UTF-8\"?>", "<urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\">"]
     for u in urls {
-        lines.push("<url><loc>" + SITE + u + "</loc></url>")
+        lines.push("<url><loc>" + site + u + "</loc></url>")
     }
     lines.push("</urlset>")
     return lines.join("\n") + "\n"

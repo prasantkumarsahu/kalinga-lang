@@ -1,4 +1,4 @@
-// The search box: it fills the `<div id="search">` of the top bar, loads /search.txt (one
+// The search box: it fills the `<div id="search">` of the top bar, loads search.txt (one
 // line per section of the book, `title \t url \t text`, written by the site generator) and
 // lists the sections that contain every word typed.
 
@@ -94,8 +94,21 @@ fn show(results: Element, entries: [Entry], query: str) {
     }
 }
 
+/// The path the site is served under (`""` on kalinga-lang.org, `"/kalinga-lang"` on
+/// GitHub's own address), from where the page's stylesheet is: `<base>/assets/style.css`.
+fn base() -> str {
+    if link = Document.find("link[rel=stylesheet]") {
+        if href = link.attr("href") {
+            if at = href.find("/assets/") {
+                return href[0..at]
+            }
+        }
+    }
+    return ""
+}
+
 async fn load(entries: Signal<[Entry]>) {
-    match await Http.get("/search.txt") {
+    match await Http.get(base() + "/search.txt") {
         Ok(r) => {
             if r.ok() {
                 entries.set(parse(r.text))
