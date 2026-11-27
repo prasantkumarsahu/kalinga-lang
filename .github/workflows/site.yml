@@ -41,8 +41,17 @@ jobs:
   build:
     name: Build the site
     runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      pages: read
     steps:
       - uses: actions/checkout@v7
+      # Where Pages serves the site: https://kalinga-lang.org once the custom domain is
+      # set, https://prasantkumarsahu.github.io/kalinga-lang until then. The pages link
+      # under that address. Pull requests build for kalinga-lang.org.
+      - id: pages
+        if: github.event_name != 'pull_request'
+        uses: actions/configure-pages@v6
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - name: Build kalinga and utkal
@@ -53,7 +62,7 @@ jobs:
         working-directory: site
         run: utkal test
       - name: Build the pages
-        run: bash site/build.sh _site
+        run: bash site/build.sh _site "${{ steps.pages.outputs.base_url || 'https://kalinga-lang.org' }}"
       - uses: actions/upload-pages-artifact@v5
         with:
           path: _site
@@ -70,6 +79,5 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - uses: actions/configure-pages@v6
       - id: deployment
         uses: actions/deploy-pages@v5

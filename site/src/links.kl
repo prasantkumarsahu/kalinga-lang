@@ -16,6 +16,25 @@ struct Wanted {
     link: str
 }
 
+/// The path the site is served under: `""` for `https://kalinga-lang.org`,
+/// `"/kalinga-lang"` for `https://prasantkumarsahu.github.io/kalinga-lang/`.
+fn base_path(site: str) -> str {
+    rest = if site.starts_with("https://") { site["https://".len()..] } else { site }
+    if at = rest.find("/") {
+        path = rest[at..]
+        return if path.ends_with("/") { path[0..len(path) - 1] } else { path }
+    }
+    return ""
+}
+
+/// `html` with its site links (`href="/docs/"`, `src="/assets/..."`) moved under `base`.
+fn rebase(html: str, base: str) -> str {
+    if base == "" {
+        return html
+    }
+    return html.replace("href=\"/", "href=\"" + base + "/").replace("src=\"/", "src=\"" + base + "/")
+}
+
 /// The page of a docs file: `docs/09-classes.md` → `/docs/09-classes/`, `docs/README.md`
 /// → `/docs/`, `CHANGELOG.md` → `/changelog/`.
 fn page_url(path: str) -> str {
