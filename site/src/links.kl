@@ -1,0 +1,97 @@
+// Links in the docs are written for GitHub (`09-classes.md#fixed-and-var-fields`,
+// `../examples/pong`). On the site they point at the chapter pages, and everything else
+// in the repository points at GitHub. A link to a chapter or heading that does not exist
+// stops the build.
+
+import "std/fs"
+import "text.kl"
+
+GITHUB: str = "https://github.com/prasantkumarsahu/kalinga-lang"
+
+/// A link to check once every page is rendered: `anchor` (maybe empty) in `file`.
+struct Wanted {
+    file: str
+    anchor: str
+    from: str
+    link: str
+}
+
+/// The page of a docs file: `docs/09-classes.md` → `/docs/09-classes/`, `docs/README.md`
+/// → `/docs/`, `CHANGELOG.md` → `/changelog/`.
+fn page_url(path: str) -> str {
+    if path == "docs/README.md" {
+        return "/docs/"
+    }
+    if path == "CHANGELOG.md" {
+        return "/changelog/"
+    }
+    name = path["docs/".len()..path.len() - ".md".len()]
+    return "/docs/" + name + "/"
+}
+
+class Links {
+    /// The repository folder on disk, to check that linked files exist.
+    root: str
+    /// The ids of the headings of each rendered file, by repository path.
+    var anchors: {str: [str]}
+    var wanted: [Wanted]
+    var errors: [str]
+    /// The repository path of the file being rendered.
+    var current: str = ""
+
+    init(root: str) {
+        self.root = root
+    }
+
+    fn on_disk(path: str) -> str {
+        return join_path(self.root, path)
+    }
+
+    /// Where `url`, written in the current file, points on the site.
+    fn href(url: str) -> str {
+        if url.starts_with("http://") || url.starts_with("https://") || url.starts_with("mailto:") {
+            return url
+        }
+        var path = url
+        var anchor = ""
+        if h = url.find("#") {
+            path = url[0..h]
+            anchor = url[h + 1..]
+        }
+        if path == "" {
+            self.wanted.push(Wanted(self.current, anchor, self.current, url))
+            return "#" + anchor
+        }
+        full = normalize(join_path(folder(self.current), path))
+        tail = if anchor == "" { "" } else { "#" + anchor }
+        if full == "CHANGELOG.md" || full.starts_with("docs/") && full.ends_with(".md") {
+            self.wanted.push(Wanted(full, anchor, self.current, url))
+            return page_url(full) + tail
+        }
+        if Dir.exists(self.on_disk(full)) {
+            return GITHUB + "/tree/main/" + full + tail
+        }
+        if !File.exists(self.on_disk(full)) {
+            self.errors.push("{self.current}: the link `{url}` points at {full}, which does not exist")
+        }
+        return GITHUB + "/blob/main/" + full + tail
+    }
+
+    /// Records the heading ids of a rendered file.
+    fn add_anchors(path: str, ids: [str]) {
+        self.anchors[path] = ids
+    }
+
+    /// Reports every link to a missing page or heading, after all pages are rendered.
+    fn check() {
+        for w in self.wanted {
+            if ids = self.anchors.get(w.file) {
+                if w.anchor != "" && !ids.contains(w.anchor) {
+                    self.errors.push("{w.from}: the link `{w.link}` names `#{w.anchor}`, which is not a heading of {w.file}")
+                }
+            } else {
+                self.errors.push("{w.from}: the link `{w.link}` points at {w.file}, which is not a page of the site")
+            }
+        }
+    }
+}

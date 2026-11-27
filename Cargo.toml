@@ -6,6 +6,8 @@ resolver = "3"
 version = "0.7.1"
 edition = "2024"
 license = "MIT"
+homepage = "https://kalinga-lang.org"
+repository = "https://github.com/prasantkumarsahu/kalinga-lang"
 
 [workspace.dependencies]
 toml = "1.1.8"
@@ -26,6 +28,8 @@ description = "Kalinga: a simple, safe, object-oriented language that compiles t
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+homepage.workspace = true
+repository.workspace = true
 # `cargo run -- run file.kl` runs the compiler (`utkal` with `--bin utkal`).
 default-run = "kalinga"
 

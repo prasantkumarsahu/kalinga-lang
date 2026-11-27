@@ -23,7 +23,7 @@ jobs:
         run: rustfmt --check --edition 2024 --config-path rustfmt.toml crates/kalinga-codegen/runtime/*.rs
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - name: Kalinga code is in the `kalinga fmt` layout
-        run: cargo run --quiet -- fmt --check examples crates/kalinga-driver/std
+        run: cargo run --quiet -- fmt --check examples crates/kalinga-driver/std site
 
   test:
     name: Tests (${{ matrix.os }})

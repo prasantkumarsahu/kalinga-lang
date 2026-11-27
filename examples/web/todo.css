@@ -1,0 +1,63 @@
+/* Styles for todo.kl. A single-file web build takes every .css file next to the program,
+   so these are kept inside `.todo` and leave the counter's page alone. */
+
+#app.todo {
+  text-align: left;
+  width: min(420px, 100% - 32px);
+}
+
+.todo form {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.todo input[type="text"] {
+  flex: 1;
+  font: inherit;
+  padding: 0.4rem 0.6rem;
+  border: 1px solid #888;
+  border-radius: 6px;
+}
+
+.todo button {
+  font: inherit;
+  padding: 0.4rem 0.9rem;
+  border: 1px solid #888;
+  border-radius: 6px;
+  background: white;
+  cursor: pointer;
+}
+
+.todo ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.todo li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 0;
+  border-bottom: 1px solid #ddd;
+}
+
+.todo li span {
+  flex: 1;
+}
+
+.todo li.done span {
+  text-decoration: line-through;
+  color: #888;
+}
+
+.todo li button {
+  padding: 0 0.5rem;
+  line-height: 1.6;
+}
+
+.todo p.left {
+  font-size: 0.95rem;
+  color: #666;
+}

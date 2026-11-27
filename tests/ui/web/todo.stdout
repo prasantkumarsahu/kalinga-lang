@@ -1,0 +1,4 @@
+<p class="left">2 of 3 left</p>
+<p class="left">1 of 3 left</p>
+<ul><li class="done"><input type="checkbox" aria-label="Done"><span>Make a page with std/web</span><button aria-label="Remove">×</button></li><li><input type="checkbox" aria-label="Done"><span>Write a test</span><button aria-label="Remove">×</button></li></ul>
+true

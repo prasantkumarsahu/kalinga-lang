@@ -1,0 +1,96 @@
+// Kalinga code to HTML with `<span class="...">` around each kind of token: `k` keywords,
+// `t` types, `f` called functions, `s` strings, `n` numbers, `c` comments. The colours are
+// in assets/style.css and follow the VS Code theme of the extension.
+
+import "text.kl"
+
+KEYWORDS: [str] = [
+    "abstract", "as", "async", "await", "break", "class", "continue", "else", "enum", "extern",
+    "false", "fn", "for", "if", "import", "in", "init", "interface", "is", "match", "mut",
+    "none", "op", "override", "private", "return", "self", "static", "struct", "super",
+    "test", "true", "use", "var", "while", "js", "rust", "crate",
+]
+
+TYPES: [str] = ["int", "float", "bool", "str", "void"]
+
+fn span(kind: str, text: str) -> str {
+    return "<span class=\"" + kind + "\">" + escape(text) + "</span>"
+}
+
+/// `code` as HTML, its tokens wrapped in spans.
+fn highlight(code: str) -> str {
+    cs = code.chars()
+    n = len(cs)
+    var out: [str] = []
+    var i = 0
+    while i < n {
+        c = cs[i]
+        if c == "/" && i + 1 < n && cs[i + 1] == "/" {
+            var j = i
+            while j < n && cs[j] != "\n" {
+                j += 1
+            }
+            out.push(span("c", joined(cs, i, j)))
+            i = j
+            continue
+        }
+        if c == "/" && i + 1 < n && cs[i + 1] == "*" {
+            end = find_at(cs, i + 2, "*/")
+            j = if end < 0 { n } else { end + 2 }
+            out.push(span("c", joined(cs, i, j)))
+            i = j
+            continue
+        }
+        if c == "\"" {
+            var j = i + 1
+            while j < n && cs[j] != "\"" && cs[j] != "\n" {
+                if cs[j] == "\\" && j + 1 < n {
+                    j += 1
+                }
+                j += 1
+            }
+            if j < n && cs[j] == "\"" {
+                j += 1
+            }
+            out.push(span("s", joined(cs, i, j)))
+            i = j
+            continue
+        }
+        if is_digit(c) {
+            var j = i
+            while j < n && (is_digit(cs[j]) || cs[j] == "_" || cs[j] == "." && j + 1 < n && is_digit(cs[j + 1])) {
+                j += 1
+            }
+            out.push(span("n", joined(cs, i, j)))
+            i = j
+            continue
+        }
+        if is_letter(c) {
+            var j = i
+            while j < n && (is_letter(cs[j]) || is_digit(cs[j])) {
+                j += 1
+            }
+            word = joined(cs, i, j)
+            // Whether a `(` follows, so the word is called.
+            var k = j
+            while k < n && cs[k] == " " {
+                k += 1
+            }
+            called = k < n && cs[k] == "("
+            if KEYWORDS.contains(word) {
+                out.push(span("k", word))
+            } else if TYPES.contains(word) || c >= "A" && c <= "Z" {
+                out.push(span("t", word))
+            } else if called {
+                out.push(span("f", word))
+            } else {
+                out.push(escape(word))
+            }
+            i = j
+            continue
+        }
+        out.push(escape(c))
+        i += 1
+    }
+    return out.join("")
+}

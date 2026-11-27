@@ -1,0 +1,134 @@
+// The search box: it fills the `<div id="search">` of the top bar, loads /search.txt (one
+// line per section of the book, `title \t url \t text`, written by the site generator) and
+// lists the sections that contain every word typed.
+
+import "std/reactive"
+import "std/web"
+
+struct Entry {
+    title: str
+    url: str
+    text: str
+    /// The title and the text in lower case, to match against.
+    lower: str
+}
+
+struct Hit {
+    score: int
+    index: int
+}
+
+/// The entries of search.txt.
+fn parse(text: str) -> [Entry] {
+    var out: [Entry] = []
+    for line in text.split("\n") {
+        parts = line.split("\t")
+        if len(parts) == 3 {
+            out.push(Entry(parts[0], parts[1], parts[2], (parts[0] + " " + parts[2]).lower()))
+        }
+    }
+    return out
+}
+
+/// How well `e` matches: -1 unless it has every word. A word in the title counts most,
+/// then how often it appears (up to 5 times), so the section about a name comes before a
+/// section that only mentions it.
+fn score(e: Entry, words: [str]) -> int {
+    title = e.title.lower()
+    var total = 0
+    for w in words {
+        if !e.lower.contains(w) {
+            return -1
+        }
+        times = len(e.lower.split(w)) - 1
+        total += if title.contains(w) { 20 } else { 0 }
+        total += if times > 5 { 5 } else { times }
+    }
+    return total
+}
+
+/// A short part of `text` around the first `word`.
+fn snippet(text: str, word: str) -> str {
+    n = len(text)
+    var start = 0
+    if at = text.lower().find(word) {
+        start = if at > 50 { at - 50 } else { 0 }
+    }
+    end = if start + 140 < n { start + 140 } else { n }
+    lead = if start > 0 { "…" } else { "" }
+    tail = if end < n { "…" } else { "" }
+    return lead + text[start..end].trim() + tail
+}
+
+/// Shows the best matches of `query` in `results`.
+fn show(results: Element, entries: [Entry], query: str) {
+    results.clear()
+    words = query.lower().split(" ").filter(fn(w) => w != "")
+    if len(words) == 0 {
+        return
+    }
+    var hits: [Hit] = []
+    for i, e in entries {
+        s = score(e, words)
+        if s >= 0 {
+            hits.push(Hit(s, i))
+        }
+    }
+    if len(hits) == 0 {
+        none_found = results.append(Document.create(Tag.P))
+        none_found.set_text(if len(entries) == 0 { "Loading…" } else { "Nothing found for “{query.trim()}”." })
+        return
+    }
+    hits.sort_by(fn(a, b) => a.score > b.score || a.score == b.score && a.index < b.index)
+    for k, h in hits {
+        if k >= 8 {
+            break
+        }
+        e = entries[h.index]
+        link = results.append(Document.create(Tag.A))
+        link.set_attr("href", e.url)
+        title = link.append(Document.create(Tag.Strong))
+        title.set_text(e.title)
+        about = link.append(Document.create(Tag.Other("small")))
+        about.set_text(snippet(e.text, words[0]))
+    }
+}
+
+async fn load(entries: Signal<[Entry]>) {
+    match await Http.get("/search.txt") {
+        Ok(r) => {
+            if r.ok() {
+                entries.set(parse(r.text))
+            }
+        }
+        Err(e) => {}
+    }
+}
+
+/// Puts the search box in `host`; the entries come later, from `load`.
+fn start_search(host: Element) -> Signal<[Entry]> {
+    entries: Signal<[Entry]> = signal([])
+    query = signal("")
+    box = host.append(Document.input(InputType.Search))
+    box.set_attr("placeholder", "Search the book")
+    box.set_attr("aria-label", "Search the book")
+    results = host.append(Document.create(Tag.Div))
+    results.add_class("results")
+    box.on(EventKind.Input, fn(e: Event) { query.set(box.value()) })
+    box.on(EventKind.KeyDown, fn(e: Event) {
+        match e.key() {
+            Escape => {
+                box.set_value("")
+                query.set("")
+            }
+            Enter => {
+                if first = results.find("a") {
+                    first.click()
+                }
+            }
+            _ => {}
+        }
+    })
+    effect(fn() { show(results, entries.get(), query.get()) })
+    return entries
+}

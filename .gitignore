@@ -4,3 +4,6 @@ node_modules/
 editors/vscode/dist/
 skills/kalinga/evals/results/
 examples/**/dist/
+/_site/
+site/**/target/
+site/**/dist/

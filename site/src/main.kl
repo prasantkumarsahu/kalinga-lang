@@ -1,0 +1,250 @@
+// kalinga-lang.org: builds the website from the repository.
+//
+//     utkal run -- <repo root> <out dir>
+//
+// The book is docs/*.md, the changelog is CHANGELOG.md and the live examples are
+// examples/web/*.kl, so the site always says what the repository says. A link to a page
+// or heading that does not exist stops the build. The examples' pages (`/play/<name>/`)
+// and the page script (site/script) are built by `kalinga build --web` (see .github/workflows/site.yml).
+
+import "std/fs"
+import "highlight.kl"
+import "links.kl"
+import "markdown.kl"
+import "pages.kl"
+import "text.kl"
+
+SITE: str = "https://kalinga-lang.org"
+
+/// The chapters in file order, titled by their first line (`# 9. Classes`).
+fn chapters(root: str) -> Result<[Chapter], str> {
+    var out: [Chapter] = []
+    for name in Dir.list(join_path(root, "docs"))? {
+        if name.ends_with(".md") && name != "README.md" && is_digit(name[0]) {
+            first = File.read_lines(join_path(root, "docs/" + name))? [0]
+            title = if first.starts_with("# ") { first[2..].trim() } else { name }
+            out.push(Chapter("docs/" + name, title))
+        }
+    }
+    return Ok(out)
+}
+
+/// `version = "..."` from the workspace Cargo.toml: the release the downloads point at.
+fn version(root: str) -> Result<str, str> {
+    for line in File.read_lines(join_path(root, "Cargo.toml"))? {
+        t = line.trim()
+        if t.starts_with("version = \"") {
+            return Ok(t["version = \"".len()..t.len() - 1])
+        }
+    }
+    return Err("no version in Cargo.toml")
+}
+
+/// The extension's version, from editors/vscode/package.json.
+fn extension_version(root: str) -> Result<str, str> {
+    for line in File.read_lines(join_path(root, "editors/vscode/package.json"))? {
+        t = line.trim()
+        if t.starts_with("\"version\": \"") {
+            return Ok(t["\"version\": \"".len()..t.len() - 2])
+        }
+    }
+    return Err("no version in editors/vscode/package.json")
+}
+
+/// Writes `text` to `out/path`, making the folders it needs.
+fn write(out: str, path: str, text: str) -> Result<void, str> {
+    full = join_path(out, path)
+    Dir.create(folder(full))?
+    File.write(full, text)?
+    return Ok()
+}
+
+/// What a rendered Markdown file gives the site.
+struct Rendered {
+    html: str
+    headings: [Heading]
+    sections: [Section]
+}
+
+fn render(links: Links, root: str, path: str, footer: bool) -> Result<Rendered, str> {
+    var source = File.read(join_path(root, path))?
+    if !footer {
+        source = without_footer(source)
+    }
+    links.current = path
+    r = Renderer(links)
+    html = r.render(source)
+    links.add_anchors(path, r.headings.map(fn(h) => h.id))
+    return Ok(Rendered(html, r.headings, r.sections))
+}
+
+/// One line per section, `title \t url \t text`, for the search box.
+fn search_lines(page: str, url: str, sections: [Section]) -> [str] {
+    var out: [str] = []
+    for s in sections {
+        title = if s.title == page || s.title == "" { page } else { page + " › " + s.title }
+        link = if s.id == "" || s.title == page { url } else { url + "#" + s.id }
+        out.push(title + "\t" + link + "\t" + s.text)
+    }
+    return out
+}
+
+fn main() -> Result<void, str> {
+    a = args().filter(fn(x) => x != "--")
+    if len(a) != 2 {
+        return Err("usage: utkal run -- <repo root> <out dir>")
+    }
+    root = a[0]
+    out = a[1]
+    links = Links(root)
+    book = chapters(root)?
+    var search: [str] = []
+    var urls: [str] = ["/", "/docs/", "/install/", "/play/", "/changelog/"]
+
+    // The book: the index, then every chapter.
+    index = render(links, root, "docs/README.md", true)?
+    write(out, "docs/index.html", book_page(book, -1, "The Kalinga book", index.html, index.headings))?
+    for l in search_lines("The Kalinga book", "/docs/", index.sections) {
+        search.push(l)
+    }
+    for i, c in book {
+        page = render(links, root, c.path, false)?
+        url = page_url(c.path)
+        write(out, url[1..] + "index.html", book_page(book, i, c.title, page.html, page.headings))?
+        for l in search_lines(c.title, url, page.sections) {
+            search.push(l)
+        }
+        urls.push(url)
+    }
+
+    // The changelog.
+    changes = render(links, root, "CHANGELOG.md", true)?
+    write(out, "changelog/index.html", plain_page("Changelog", "What changed in each Kalinga release.", "changelog", changes.html))?
+    for l in search_lines("Changelog", "/changelog/", changes.sections) {
+        search.push(l)
+    }
+
+    links.check()
+    if len(links.errors) > 0 {
+        for e in links.errors {
+            println("error:", e)
+        }
+        return Err("{len(links.errors)} broken links")
+    }
+
+    v = version(root)?
+    write(out, "index.html", home_page(root, v)?)?
+    write(out, "install/index.html", install_page(v, extension_version(root)?))?
+    write(out, "play/index.html", play_page(root)?)?
+    write(out, "404.html", plain_page("Page not found", "This page does not exist.", "", "<h1>Page not found</h1><p>There is nothing at this address. Try the <a href=\"/docs/\">book</a> or the search at the top.</p>"))?
+    write(out, "search.txt", search.join("\n") + "\n")?
+    write(out, "sitemap.xml", sitemap(urls))?
+    write(out, "CNAME", "kalinga-lang.org\n")?
+    Dir.create(join_path(out, "assets"))?
+    for name in Dir.list(join_path(root, "site/assets"))? {
+        File.copy(join_path(root, "site/assets/" + name), join_path(out, "assets/" + name))?
+    }
+    println("built {len(urls)} pages in {out}")
+    return Ok()
+}
+
+fn sitemap(urls: [str]) -> str {
+    var lines: [str] = ["<?xml version=\"1.0\" encoding=\"UTF-8\"?>", "<urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\">"]
+    for u in urls {
+        lines.push("<url><loc>" + SITE + u + "</loc></url>")
+    }
+    lines.push("</urlset>")
+    return lines.join("\n") + "\n"
+}
+
+/// The first `kalinga` program in docs/README.md, as the sample on the home page.
+fn sample(root: str) -> Result<str, str> {
+    var code: [str] = []
+    var inside = false
+    for line in File.read_lines(join_path(root, "docs/README.md"))? {
+        if inside {
+            if line.starts_with("```") {
+                return Ok(code.join("\n"))
+            }
+            code.push(line)
+        } else if line.trim() == "```kalinga" {
+            inside = true
+        }
+    }
+    return Err("docs/README.md has no kalinga block")
+}
+
+fn home_page(root: str, v: str) -> Result<str, str> {
+    code = highlight(sample(root)?)
+    cards = [
+        ("Classes you already know", "Classes with <code>init</code>, inheritance with <code>override</code>, interfaces with default methods, generics with bounds, enums with exhaustive <code>match</code>."),
+        ("No null, no exceptions", "A missing value is <code>T?</code> and must be checked; failure is <code>Result</code> with <code>?</code>. Integer overflow and bad indexes stop the program with a clear message."),
+        ("Native, through Rust", "Programs compile to Rust and then to a fast native executable, with Rust crates and inline Rust when you need them."),
+        ("The web, through JavaScript", "<code>kalinga build --web</code> makes a page; <code>std/web</code> and <code>std/reactive</code> update exactly the parts that change."),
+        ("Errors that help", "Every error says what is wrong and how to fix it, with <em>did you mean</em> for misspelt names, and <code>kalinga fix</code> updates code for new versions."),
+        ("Tools included", "<code>kalinga fmt</code>, <code>kalinga test</code>, the <code>utkal</code> package manager and a VS Code extension with completion, hover and rename."),
+    ]
+    var grid: [str] = []
+    for (title, text) in cards {
+        grid.push("<div class=\"card\"><h3>" + title + "</h3><p>" + text + "</p></div>")
+    }
+    body = [
+        "<main class=\"home\">",
+        "<section class=\"hero\">",
+        "<div class=\"pitch\">",
+        "<h1>Kalinga</h1>",
+        "<p class=\"lead\">A small, safe, object-oriented language. Classes and clear errors on top, the speed of Rust underneath, and the web when you want it.</p>",
+        "<p class=\"actions\"><a class=\"button primary\" href=\"/install/\">Install " + v + "</a><a class=\"button\" href=\"/docs/\">Read the book</a><a class=\"button\" href=\"/play/\">See it run</a></p>",
+        "</div>",
+        "<figure class=\"code kalinga sample\"><figcaption>greeter.kl</figcaption><pre><code>" + code + "</code></pre></figure>",
+        "</section>",
+        "<section class=\"cards\">" + grid.join("") + "</section>",
+        "<section class=\"start\"><h2>Try it</h2><figure class=\"code shell\"><pre><code>kalinga run greeter.kl\nutkal new hello\nutkal new site --web &amp;&amp; cd site &amp;&amp; utkal serve</code></pre></figure></section>",
+        "</main>",
+    ]
+    return Ok(layout("Kalinga", "Kalinga is a small, safe, object-oriented programming language that compiles to native code through Rust and to JavaScript for the web.", "", body.join("\n")))
+}
+
+fn install_page(v: str, ext: str) -> str {
+    base = GITHUB + "/releases/download/v" + v + "/"
+    var rows: [str] = []
+    for (system, target, kind) in [("Windows (x64)", "x86_64-pc-windows-msvc", ".zip"), ("Linux (x64)", "x86_64-unknown-linux-gnu", ".tar.gz"), ("macOS (Apple silicon)", "aarch64-apple-darwin", ".tar.gz"), ("macOS (Intel)", "x86_64-apple-darwin", ".tar.gz")] {
+        file = "kalinga-" + v + "-" + target + kind
+        rows.push("<tr><td>" + system + "</td><td><a href=\"" + base + file + "\">" + file + "</a></td></tr>")
+    }
+    html = [
+        "<h1>Install Kalinga " + v + "</h1>",
+        "<p>Kalinga compiles to Rust, so native programs need a Rust toolchain: install it from <a href=\"https://rustup.rs\">rustup.rs</a>. Web builds also run with <a href=\"https://nodejs.org\">Node.js</a> (only for <code>kalinga run --web</code> and tests).</p>",
+        "<h2 id=\"download\">Download</h2>",
+        "<p>Each archive holds <code>kalinga</code> and <code>utkal</code>. Unpack it and put the folder on your <code>PATH</code>.</p>",
+        "<div class=\"table\"><table><thead><tr><th>System</th><th>Archive</th></tr></thead><tbody>" + rows.join("") + "</tbody></table></div>",
+        "<p>Checksums: <a href=\"" + base + "SHA256SUMS\">SHA256SUMS</a> · All files: <a href=\"" + GITHUB + "/releases/tag/v" + v + "\">release " + v + "</a></p>",
+        "<h2 id=\"source\">Or build from source</h2>",
+        "<figure class=\"code shell\"><pre><code>git clone " + GITHUB + "\ncd kalinga-lang\ncargo install --path .</code></pre></figure>",
+        "<h2 id=\"check\">Check it works</h2>",
+        "<figure class=\"code shell\"><pre><code>kalinga -v</code></pre></figure>",
+        "<p>It prints <code>kalinga " + v + "</code>. Then follow <a href=\"/docs/01-getting-started/\">Getting Started</a>.</p>",
+        "<h2 id=\"editor\">Editor</h2>",
+        "<p>The VS Code extension (" + ext + ") gives errors as you type, completion, hover, rename, formatting and run buttons. Install <a href=\"https://marketplace.visualstudio.com/items?itemName=PrasantKumarSahu.kalinga-lang\">Kalinga from the Marketplace</a>, or from <a href=\"https://open-vsx.org/extension/kalinga-lang/kalinga-lang\">Open VSX</a> for VSCodium and other editors. Other editors can run <code>kalinga lsp</code>, a standard language server.</p>",
+    ]
+    return plain_page("Install", "Download Kalinga " + v + " for Windows, Linux and macOS.", "install", html.join("\n"))
+}
+
+/// Every examples/web program: its source, and the page it makes running beside it.
+fn play_page(root: str) -> Result<str, str> {
+    var html: [str] = [
+        "<h1>Examples</h1>",
+        "<p>These pages are Kalinga programs built with <code>kalinga build --web</code>: <code>std/web</code> makes the elements and <code>std/reactive</code> keeps them up to date. Try them, then read <a href=\"/docs/29-web/\">the Web chapter</a>.</p>",
+    ]
+    for name in Dir.list(join_path(root, "examples/web"))? {
+        if name.ends_with(".kl") {
+            stem = name[0..len(name) - 3]
+            source = File.read(join_path(root, "examples/web/" + name))?
+            html.push("<section class=\"example\" id=\"" + stem + "\"><h2>" + stem + ".kl</h2><div class=\"pair\">")
+            html.push("<figure class=\"code kalinga\"><pre><code>" + highlight(source.replace("\r\n", "\n").trim()) + "</code></pre></figure>")
+            html.push("<iframe src=\"/play/" + stem + "/\" title=\"" + stem + " running\" loading=\"lazy\"></iframe>")
+            html.push("</div><p><a href=\"" + GITHUB + "/blob/main/examples/web/" + name + "\">" + name + " on GitHub</a></p></section>")
+        }
+    }
+    return Ok(plain_page("Examples", "Kalinga programs running in your browser.", "play", html.join("\n")))
+}
