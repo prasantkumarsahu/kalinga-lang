@@ -1,0 +1,142 @@
+// Small text helpers shared by the Markdown renderer, the highlighter and the pages.
+
+/// `s` with `&`, `<`, `>` and `"` written as HTML entities.
+fn escape(s: str) -> str {
+    return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;")
+}
+
+/// The index of `pat` in `cs` at or after `from`, or -1.
+fn find_at(cs: [str], from: int, pat: str) -> int {
+    p = pat.chars()
+    var i = from
+    while i + len(p) <= len(cs) {
+        var same = true
+        for j in 0..len(p) {
+            if cs[i + j] != p[j] {
+                same = false
+                break
+            }
+        }
+        if same {
+            return i
+        }
+        i += 1
+    }
+    return -1
+}
+
+/// The characters `cs[a..b]` as one string.
+fn joined(cs: [str], a: int, b: int) -> str {
+    return cs[a..b].join("")
+}
+
+/// How many spaces `line` starts with.
+fn indent_of(line: str) -> int {
+    cs = line.chars()
+    var n = 0
+    while n < len(cs) && cs[n] == " " {
+        n += 1
+    }
+    return n
+}
+
+/// `line` without up to `n` leading spaces.
+fn dedent(line: str, n: int) -> str {
+    k = if indent_of(line) < n { indent_of(line) } else { n }
+    return line[k..]
+}
+
+fn is_digit(c: str) -> bool {
+    return c >= "0" && c <= "9"
+}
+
+fn is_letter(c: str) -> bool {
+    return c >= "a" && c <= "z" || c >= "A" && c <= "Z" || c == "_"
+}
+
+/// `s` repeated `n` times.
+fn repeat(s: str, n: int) -> str {
+    var parts: [str] = []
+    for i in 0..n {
+        parts.push(s)
+    }
+    return parts.join("")
+}
+
+/// The text of `md` without Markdown marks: code ticks, `**`, and link targets.
+fn plain(md: str) -> str {
+    cs = md.chars()
+    n = len(cs)
+    var out: [str] = []
+    var i = 0
+    while i < n {
+        c = cs[i]
+        if c == "`" {
+            i += 1
+            continue
+        }
+        if c == "*" && i + 1 < n && cs[i + 1] == "*" {
+            i += 2
+            continue
+        }
+        if c == "]" && i + 1 < n && cs[i + 1] == "(" {
+            close = find_at(cs, i + 2, ")")
+            if close >= 0 {
+                i = close + 1
+                continue
+            }
+        }
+        if c == "[" || c == "\\" {
+            i += 1
+            continue
+        }
+        out.push(c)
+        i += 1
+    }
+    return out.join("")
+}
+
+/// A heading's id, by GitHub's rule: lower case, spaces to `-`, and only letters, digits,
+/// `-` and `_` kept, so links written for GitHub (`09-classes.md#fixed-and-var-fields`)
+/// work on the site too.
+fn slug(text: str) -> str {
+    var out: [str] = []
+    for c in text.lower().chars() {
+        if c == " " {
+            out.push("-")
+        } else if is_digit(c) || c >= "a" && c <= "z" || c == "-" || c == "_" || c.code_at(0) > 127 {
+            out.push(c)
+        }
+    }
+    return out.join("")
+}
+
+/// `a/b` joined with `/` (paths inside the repository, written the same on every system).
+fn join_path(a: str, b: str) -> str {
+    if a == "" {
+        return b
+    }
+    return if a.ends_with("/") { a + b } else { a + "/" + b }
+}
+
+/// The folder part of a repository path (`docs/09-classes.md` → `docs`; `README.md` → ``).
+fn folder(path: str) -> str {
+    parts = path.split("/")
+    if len(parts) <= 1 {
+        return ""
+    }
+    return parts[0..len(parts) - 1].join("/")
+}
+
+/// `path` with `.` and `..` worked out (`docs/../examples/a.kl` → `examples/a.kl`).
+fn normalize(path: str) -> str {
+    var out: [str] = []
+    for part in path.split("/") {
+        if part == ".." {
+            out.pop()
+        } else if part != "." && part != "" {
+            out.push(part)
+        }
+    }
+    return out.join("/")
+}

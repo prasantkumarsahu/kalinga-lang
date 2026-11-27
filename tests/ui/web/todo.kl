@@ -1,0 +1,95 @@
+// ui: web
+// The to-do list of examples/web/todo.kl, used under Node.
+// A to-do list page: `kalinga build --web examples/web/todo.kl`, then open
+// examples/web/dist/index.html. The list is one signal of values; the effect that reads it
+// draws the list again whenever an item is added, ticked or removed.
+
+import "std/reactive"
+import "std/web"
+
+struct Todo {
+    text: str
+    done: bool
+}
+
+/// `list` with the item at `index` ticked or unticked.
+fn toggled(list: [Todo], index: int) -> [Todo] {
+    var out: [Todo] = []
+    for i, t in list {
+        out.push(if i == index { Todo(t.text, !t.done) } else { t })
+    }
+    return out
+}
+
+/// `list` without the item at `index`.
+fn without(list: [Todo], index: int) -> [Todo] {
+    var out: [Todo] = []
+    for i, t in list {
+        if i != index {
+            out.push(t)
+        }
+    }
+    return out
+}
+
+fn main() {
+    app = Document.app()
+    app.add_class("todo")
+    todos: Signal<[Todo]> = signal([Todo("Read the Kalinga book", true), Todo("Make a page with std/web", false)])
+
+    title = app.append(Document.create(Tag.H1))
+    title.set_text("To do")
+
+    form = app.append(Document.create(Tag.Form))
+    field = form.append(Document.input(InputType.Text))
+    field.set_attr("placeholder", "Something to do")
+    field.set_attr("aria-label", "Something to do")
+    add = form.append(Document.create(Tag.Button))
+    add.set_text("Add")
+    form.on(EventKind.Submit, fn(e: Event) {
+        e.prevent_default()
+        text = field.value().trim()
+        if text != "" {
+            todos.update(fn(list: [Todo]) -> [Todo] {
+                var more = list
+                more.push(Todo(text, false))
+                return more
+            })
+            field.set_value("")
+        }
+    })
+
+    items = app.append(Document.create(Tag.Ul))
+    left = app.append(Document.create(Tag.P))
+    left.add_class("left")
+    effect(fn() {
+        list = todos.get()
+        items.clear()
+        for i, t in list {
+            item = items.append(Document.create(Tag.Li))
+            item.toggle_class("done", t.done)
+            tick = item.append(Document.input(InputType.Checkbox))
+            tick.set_checked(t.done)
+            tick.set_attr("aria-label", "Done")
+            tick.on(EventKind.Change, fn(e: Event) { todos.update(fn(l: [Todo]) -> [Todo] { return toggled(l, i) }) })
+            label = item.append(Document.create(Tag.Span))
+            label.set_text(t.text)
+            remove = item.append(Document.create(Tag.Button))
+            remove.set_text("×")
+            remove.set_attr("aria-label", "Remove")
+            remove.on(EventKind.Click, fn(e: Event) { todos.update(fn(l: [Todo]) -> [Todo] { return without(l, i) }) })
+        }
+        open = list.filter(fn(t) => !t.done)
+        left.set_text("{len(open)} of {len(list)} left")
+    })
+
+    // Add one, tick the second, remove the first.
+    field.set_value("Write a test")
+    form.trigger(EventKind.Submit)
+    println(left.html())
+    app.find_all("input[type=checkbox]")[1].trigger(EventKind.Change)
+    println(left.html())
+    app.find_all("li button")[0].click()
+    println(items.html())
+    println(field.value() == "")
+}

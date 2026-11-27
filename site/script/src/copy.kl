@@ -1,0 +1,43 @@
+// A "Copy" button on every code block (not on a program's output): it puts the code on
+// the clipboard and says "Copied" for a moment.
+
+import "std/web"
+
+/// Puts `text` on the clipboard. Browsers allow it on https pages and on localhost; where
+/// the clipboard API is missing, a hidden text box and the copy command do it.
+extern fn copy_text(text: str) = js {
+    if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(text);
+        return;
+    }
+    const area = document.createElement("textarea");
+    area.value = text;
+    area.style.position = "fixed";
+    area.style.opacity = "0";
+    document.body.appendChild(area);
+    area.select();
+    document.execCommand("copy");
+    area.remove();
+}
+
+/// Adds the buttons to the code blocks of the page.
+fn add_copy_buttons() {
+    for block in Document.find_all("figure.code:not(.output)") {
+        if code = block.find("pre") {
+            button = block.append(Document.create(Tag.Button))
+            button.add_class("copy")
+            button.set_attr("type", "button")
+            button.set_attr("aria-label", "Copy the code")
+            button.set_text("Copy")
+            button.on(EventKind.Click, fn(e: Event) {
+                copy_text(code.text())
+                button.set_text("Copied")
+                button.add_class("done")
+                Timer.after(1.5, fn() {
+                    button.set_text("Copy")
+                    button.remove_class("done")
+                })
+            })
+        }
+    }
+}

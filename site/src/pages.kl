@@ -1,0 +1,112 @@
+// The HTML around every page: the top bar, the chapter sidebar of the book, the
+// "on this page" list and the footer.
+
+import "links.kl"
+import "markdown.kl"
+import "text.kl"
+
+/// A chapter of the book: `docs/09-classes.md`, titled `9. Classes`.
+struct Chapter {
+    path: str
+    title: str
+}
+
+/// The whole page, with `body` inside the layout. `section` marks the top-bar link of the
+/// part of the site the page is in ("docs", "play", "install", "changelog" or "").
+fn layout(title: str, description: str, section: str, body: str) -> str {
+    var nav: [str] = []
+    for (key, label, href) in [("docs", "Docs", "/docs/"), ("play", "Examples", "/play/"), ("install", "Install", "/install/"), ("changelog", "Changelog", "/changelog/")] {
+        mark = if key == section { " aria-current=\"page\"" } else { "" }
+        nav.push("<a href=\"" + href + "\"" + mark + ">" + label + "</a>")
+    }
+    nav.push("<a href=\"" + GITHUB + "\">GitHub</a>")
+    full_title = if title == "Kalinga" { title } else { title + " · Kalinga" }
+    lines = [
+        "<!doctype html>",
+        "<html lang=\"en\">",
+        "<head>",
+        "<meta charset=\"utf-8\">",
+        "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">",
+        "<title>" + escape(full_title) + "</title>",
+        "<meta name=\"description\" content=\"" + escape(description) + "\">",
+        "<link rel=\"icon\" href=\"/assets/logo.svg\" type=\"image/svg+xml\">",
+        "<link rel=\"stylesheet\" href=\"/assets/style.css\">",
+        "<script type=\"module\" src=\"/assets/site.js\"></script>",
+        "</head>",
+        "<body>",
+        "<header class=\"top\">",
+        "<a class=\"brand\" href=\"/\"><img src=\"/assets/logo.svg\" alt=\"\" width=\"28\" height=\"28\">Kalinga</a>",
+        "<nav class=\"links\">" + nav.join("") + "</nav>",
+        "<div id=\"search\" class=\"search\"></div>",
+        "</header>",
+        body,
+        "<footer class=\"bottom\"><p>Kalinga is free software under the MIT license. " + "<a href=\"" + GITHUB + "\">Source on GitHub</a> · " + "<a href=\"" + GITHUB + "/issues\">Report a problem</a></p></footer>",
+        "</body>",
+        "</html>",
+        "",
+    ]
+    return lines.join("\n")
+}
+
+/// A chapter (or the docs index) inside the book layout: the chapter list on the left,
+/// the text, previous / next links, and the page's sections on the right.
+fn book_page(chapters: [Chapter], index: int, title: str, html: str, headings: [Heading]) -> str {
+    var side: [str] = ["<nav class=\"chapters\" aria-label=\"Chapters\"><a href=\"/docs/\"" + current(index == -1) + ">Contents</a>"]
+    for i, c in chapters {
+        side.push("<a href=\"" + page_url(c.path) + "\"" + current(i == index) + ">" + escape(c.title) + "</a>")
+    }
+    side.push("</nav>")
+    var toc: [str] = []
+    for h in headings {
+        if h.level == 2 {
+            toc.push("<a href=\"#" + h.id + "\">" + escape(h.text) + "</a>")
+        }
+    }
+    var around: [str] = []
+    if index >= 0 {
+        if index > 0 {
+            p = chapters[index - 1]
+            around.push("<a class=\"prev\" href=\"" + page_url(p.path) + "\"><small>Previous</small>" + escape(p.title) + "</a>")
+        } else {
+            around.push("<a class=\"prev\" href=\"/docs/\"><small>Previous</small>Contents</a>")
+        }
+        if index + 1 < len(chapters) {
+            nx = chapters[index + 1]
+            around.push("<a class=\"next\" href=\"" + page_url(nx.path) + "\"><small>Next</small>" + escape(nx.title) + "</a>")
+        }
+    } else if len(chapters) > 0 {
+        around.push("<a class=\"next\" href=\"" + page_url(chapters[0].path) + "\"><small>Start reading</small>" + escape(chapters[0].title) + "</a>")
+    }
+    on_page = if len(toc) > 1 { "<aside class=\"toc\" aria-label=\"On this page\"><p>On this page</p>" + toc.join("") + "</aside>" } else { "" }
+    body = "<div class=\"book\"><aside class=\"side\">" + side.join("") + "</aside><main class=\"text\">" + html + "<nav class=\"around\">" + around.join("") + "</nav></main>" + on_page + "</div>"
+    return layout(title, "The Kalinga book: " + title, "docs", body)
+}
+
+fn current(yes: bool) -> str {
+    return if yes { " aria-current=\"page\"" } else { "" }
+}
+
+/// A page outside the book (install, examples, changelog): one column of text.
+fn plain_page(title: str, description: str, section: str, html: str) -> str {
+    return layout(title, description, section, "<main class=\"text single\">" + html + "</main>")
+}
+
+/// `source` without the "Previous / Next" footer that every chapter ends with on GitHub
+/// (the site has its own), so a chapter ends at its last section.
+fn without_footer(source: str) -> str {
+    lines = source.replace("\r\n", "\n").split("\n")
+    var end = len(lines)
+    var i = len(lines) - 1
+    while i >= 0 {
+        t = lines[i].trim()
+        if t.starts_with("Previous:") || t.starts_with("Next:") {
+            end = i
+        } else if t == "---" && end < len(lines) {
+            return lines[0..i].join("\n")
+        } else if t != "" {
+            break
+        }
+        i -= 1
+    }
+    return lines[0..end].join("\n")
+}

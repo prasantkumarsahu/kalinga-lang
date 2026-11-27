@@ -1,0 +1,112 @@
+// `utkal test` in site/: the Markdown renderer, the highlighter, heading ids and links.
+// The tests run in site/, so the repository root is `..`.
+
+import "../src/highlight.kl"
+import "../src/links.kl"
+import "../src/markdown.kl"
+import "../src/pages.kl"
+import "../src/text.kl"
+
+fn md(source: str) -> str {
+    links = Links("..")
+    links.current = "docs/test.md"
+    return Renderer(links).render(source)
+}
+
+test fn ids_follow_github() {
+    assert_eq(slug("Fixed and var fields"), "fixed-and-var-fields")
+    assert_eq(slug("Comparing objects: Eq and Ord"), "comparing-objects-eq-and-ord")
+    assert_eq(slug(plain("`private(set)` fields")), "privateset-fields")
+    assert_eq(slug("Show, Eq and Ord"), "show-eq-and-ord")
+    assert_eq(slug("Grammar (EBNF)"), "grammar-ebnf")
+}
+
+test fn repeated_headings_get_numbers() {
+    html = md("## Example\n\n## Example\n")
+    assert(html.contains("id=\"example\""))
+    assert(html.contains("id=\"example-1\""))
+}
+
+test fn inline_marks() {
+    links = Links("..")
+    assert_eq(inline("a `<T>` b", links), "a <code>&lt;T&gt;</code> b")
+    assert_eq(inline("**bold** and *em*", links), "<strong>bold</strong> and <em>em</em>")
+    assert_eq(inline("a * b * c", links), "a * b * c")
+    assert_eq(inline("`` `x` ``", links), "<code>`x`</code>")
+    assert_eq(inline("see <https://rustup.rs>.", links), "see <a href=\"https://rustup.rs\">https://rustup.rs</a>.")
+}
+
+test fn links_to_chapters_and_the_repository() {
+    links = Links("..")
+    links.current = "docs/29-web.md"
+    assert_eq(links.href("09-classes.md#fixed-and-var-fields"), "/docs/09-classes/#fixed-and-var-fields")
+    assert_eq(links.href("README.md"), "/docs/")
+    assert_eq(links.href("#a-counter"), "#a-counter")
+    assert_eq(links.href("../examples/web/counter.kl"), GITHUB + "/blob/main/examples/web/counter.kl")
+    assert_eq(links.href("../examples/web"), GITHUB + "/tree/main/examples/web")
+    assert_eq(links.href("https://example.com/x"), "https://example.com/x")
+    links.current = "CHANGELOG.md"
+    assert_eq(links.href("docs/29-web.md"), "/docs/29-web/")
+}
+
+test fn broken_links_are_errors() {
+    links = Links("..")
+    links.current = "docs/a.md"
+    links.href("../no/such/file.kl")
+    links.href("b.md#missing")
+    links.href("c.md")
+    links.add_anchors("docs/b.md", ["present"])
+    links.check()
+    assert_eq(len(links.errors), 3)
+    assert(links.errors[0].contains("does not exist"))
+    assert(links.errors[1].contains("#missing"))
+    assert(links.errors[2].contains("not a page"))
+}
+
+test fn tables() {
+    html = md("| Op | Meaning |\n|---|---|\n| `\\|\\|` | or |\n| `+` | add |\n")
+    assert(html.contains("<thead><tr><th>Op</th><th>Meaning</th></tr></thead>"))
+    assert(html.contains("<td><code>||</code></td><td>or</td>"))
+    assert(html.contains("<td><code>+</code></td><td>add</td>"))
+}
+
+test fn lists_with_code_inside() {
+    html = md("1. Install:\n\n   ```bash\n   cargo install --path .\n   ```\n\n2. Check:\n   - one\n   - two\n")
+    assert(html.contains("<ol>"))
+    assert(html.contains("<li><p>Install:</p>\n<figure class=\"code shell\"><pre><code>cargo install --path .</code></pre></figure></li>"))
+    assert(html.contains("<ul>\n<li><p>one</p></li>\n<li><p>two</p></li>\n</ul>"))
+    assert_eq(len(html.split("<li>")), 5)
+}
+
+test fn programs_and_their_output() {
+    html = md("```kalinga\nfn main() {{\n    println(\"hi\")\n}}\n```\n\n```text\nhi\n```\n")
+    assert(html.contains("<span class=\"k\">fn</span> <span class=\"f\">main</span>()"))
+    assert(html.contains("<figcaption>Output</figcaption>"))
+    error = md("```kalinga error\nx = 1\nx = 2\n```\n\n```text\nerror\n```\n")
+    assert(error.contains("Does not compile"))
+    assert(error.contains("Compiler says"))
+}
+
+test fn highlighting() {
+    assert_eq(highlight("var n: int = 1_000 // big"), "<span class=\"k\">var</span> n: <span class=\"t\">int</span> = <span class=\"n\">1_000</span> <span class=\"c\">// big</span>")
+    assert_eq(highlight("s = \"a \\\"q\\\" <b>\""), "s = <span class=\"s\">&quot;a \\&quot;q\\&quot; &lt;b&gt;&quot;</span>")
+    assert_eq(highlight("for i in 0..n"), "<span class=\"k\">for</span> i <span class=\"k\">in</span> <span class=\"n\">0</span>..n")
+}
+
+test fn chapter_footers_are_dropped() {
+    source = "# 1. A\n\nText.\n\n---\n\nPrevious: [x](x.md) · Next: [y](y.md)\n"
+    assert_eq(without_footer(source), "# 1. A\n\nText.\n")
+    assert_eq(without_footer("# 1. A\n\n---\n\nmore\n"), "# 1. A\n\n---\n\nmore\n")
+}
+
+test fn sections_for_search() {
+    links = Links("..")
+    links.current = "docs/test.md"
+    r = Renderer(links)
+    r.render("# Title\n\nIntro.\n\n## Part one\n\nSome `code` here.\n\n## Part two\n\n| a | b |\n|---|---|\n| c | d |\n")
+    assert_eq(len(r.sections), 3)
+    assert_eq(r.sections[1].title, "Part one")
+    assert_eq(r.sections[1].id, "part-one")
+    assert(r.sections[1].text.contains("Some code here."))
+    assert(r.sections[2].text.contains("c"))
+}

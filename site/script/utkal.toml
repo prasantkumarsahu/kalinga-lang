@@ -1,0 +1,9 @@
+[package]
+name = "kalinga-site-script"
+version = "0.1.0"
+kalinga = "0.7"
+target = "web"
+
+[dependencies]
+
+[rust-dependencies]

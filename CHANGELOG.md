@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+### Website
+- **[kalinga-lang.org](https://kalinga-lang.org)**: the book (every chapter of `docs/`, with
+  a chapter list, "on this page" links and search), live examples running in the page,
+  downloads for each system and this changelog. It is built by a site generator written in
+  Kalinga (`site/`), and its search box and Copy buttons are Kalinga compiled for the web
+  (`site/script`). `.github/workflows/site.yml` publishes it to GitHub Pages; a broken
+  link in the docs stops the build.
+- New example [`examples/web/todo.kl`](examples/web/todo.kl): a to-do list with
+  `std/web` and `std/reactive`.
+- VS Code extension 0.7.6: links to the website.
+
 ## 0.7.1
 
 **Kalinga for the web.** Programs can now be compiled to JavaScript and run in a browser

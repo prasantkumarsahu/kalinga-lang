@@ -1,0 +1,75 @@
+name: Website
+
+# Builds kalinga-lang.org with site/build.sh: the generator in site/ (written in Kalinga)
+# turns docs/ and CHANGELOG.md into pages, site/script is the search box and the Copy
+# buttons (Kalinga for the web), and examples/web/*.kl run live on /play/. Pushes to main publish it to GitHub Pages
+# (a release's version bump changes Cargo.toml, so the download links follow); pull
+# requests only build it, and fail on a broken link.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "docs/**"
+      - "site/**"
+      - "examples/web/**"
+      - "CHANGELOG.md"
+      - "Cargo.toml"
+      - "editors/vscode/package.json"
+      - "crates/**"
+      - ".github/workflows/site.yml"
+  pull_request:
+    paths:
+      - "docs/**"
+      - "site/**"
+      - "examples/web/**"
+      - "CHANGELOG.md"
+      - ".github/workflows/site.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: Build the site
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Build kalinga and utkal
+        run: |
+          cargo build --release --bin kalinga --bin utkal
+          echo "$GITHUB_WORKSPACE/target/release" >> "$GITHUB_PATH"
+      - name: Test the site generator
+        working-directory: site
+        run: utkal test
+      - name: Build the pages
+        run: bash site/build.sh _site
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: _site
+
+  deploy:
+    name: Publish to GitHub Pages
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/configure-pages@v6
+      - id: deployment
+        uses: actions/deploy-pages@v5
