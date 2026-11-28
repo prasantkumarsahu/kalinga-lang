@@ -1,24 +1,25 @@
-/* kalinga-lang.prasantkumarsahu.com. Light and dark follow the system; colours of code follow the
-   VS Code extension's highlighting (k keyword, t type, f function, s string, n number,
+/* kalinga-lang.prasantkumarsahu.com. Light and dark follow the system. The accent is the logo's
+   wheel: navy (#000080) on light pages, #8fa6ff on dark, as in editors/vscode/icons. Colours of
+   code follow the VS Code extension's highlighting (k keyword, t type, f function, s string, n number,
    c comment). */
 
 :root {
-  --bg: #fffdfa;
-  --bg-soft: #f6f1ea;
-  --bg-code: #f8f5f0;
-  --line: #e7ddd0;
-  --text: #2b2420;
-  --muted: #6b5f55;
-  --accent: #c2410c;
-  --accent-soft: #fde7d7;
+  --bg: #fbfcff;
+  --bg-soft: #f0f3fb;
+  --bg-code: #f5f7fd;
+  --line: #dce2f0;
+  --text: #151a33;
+  --muted: #545c79;
+  --accent: #000080;
+  --accent-soft: #e5e9ff;
   --on-accent: #ffffff;
-  --link: #b23a0b;
+  --link: #1d2aa6;
   --k: #a626a4;
   --t: #0b7a8a;
   --f: #3157c9;
   --s: #3d7a1c;
   --n: #b25a00;
-  --c: #8a7f74;
+  --c: #646c8a;
   --error: #b42318;
   --radius: 10px;
   --mono: ui-monospace, "Cascadia Code", "SF Mono", Menlo, Consolas, monospace;
@@ -28,22 +29,22 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #17130f;
-    --bg-soft: #211b16;
-    --bg-code: #1d1813;
-    --line: #3a3029;
-    --text: #ece4da;
-    --muted: #a99a8c;
-    --accent: #fb923c;
-    --accent-soft: #3a2417;
-    --on-accent: #1a110a;
-    --link: #fdba74;
+    --bg: #0b0e1a;
+    --bg-soft: #131830;
+    --bg-code: #0f1428;
+    --line: #283050;
+    --text: #e3e7f5;
+    --muted: #9aa3c2;
+    --accent: #8fa6ff;
+    --accent-soft: #1c2552;
+    --on-accent: #0b0e1a;
+    --link: #aebdff;
     --k: #d78ce0;
     --t: #5fc4d0;
     --f: #8fb0ff;
     --s: #9fd17a;
     --n: #f0a65c;
-    --c: #8c8075;
+    --c: #7f88a6;
     --error: #ff8a80;
     color-scheme: dark;
   }
