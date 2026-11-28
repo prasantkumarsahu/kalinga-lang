@@ -27,8 +27,9 @@
   color-scheme: light;
 }
 
+/* Dark: by the system's setting, unless the theme switch chose light; or chosen with it. */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     --bg: #0b0e1a;
     --bg-soft: #131830;
     --bg-code: #0f1428;
@@ -48,6 +49,26 @@
     --error: #ff8a80;
     color-scheme: dark;
   }
+}
+:root[data-theme="dark"] {
+  --bg: #0b0e1a;
+  --bg-soft: #131830;
+  --bg-code: #0f1428;
+  --line: #283050;
+  --text: #e3e7f5;
+  --muted: #9aa3c2;
+  --accent: #8fa6ff;
+  --accent-soft: #1c2552;
+  --on-accent: #0b0e1a;
+  --link: #aebdff;
+  --k: #d78ce0;
+  --t: #5fc4d0;
+  --f: #8fb0ff;
+  --s: #9fd17a;
+  --n: #f0a65c;
+  --c: #7f88a6;
+  --error: #ff8a80;
+  color-scheme: dark;
 }
 
 * { box-sizing: border-box; }
@@ -118,6 +139,30 @@ code, pre {
   color: var(--text);
 }
 .search input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* The theme switch (shown by site.js): a moon on light pages, a sun on dark ones */
+.theme {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--bg-soft);
+  color: var(--muted);
+  cursor: pointer;
+}
+.theme[hidden] { display: none; }
+.theme:hover { color: var(--text); border-color: var(--accent); }
+.theme:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.theme .sun { display: none; }
+:root[data-theme="dark"] .theme .sun { display: block; }
+:root[data-theme="dark"] .theme .moon { display: none; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .theme .sun { display: block; }
+  :root:not([data-theme="light"]) .theme .moon { display: none; }
+}
 .results {
   position: absolute;
   right: 0;
@@ -309,6 +354,7 @@ figure.code.shell pre code::before { content: none; }
   .top { flex-wrap: wrap; gap: 10px 18px; padding: 10px 16px; }
   .links { width: 100%; flex-wrap: nowrap; overflow-x: auto; gap: 16px; white-space: nowrap; }
   .search { margin-left: 0; width: 100%; }
+  .theme { position: absolute; top: 10px; right: 16px; }
   .search input { width: 100%; }
   .book { display: block; padding: 0 16px; }
   .side { position: static; max-height: none; padding: 12px 0 0; }
