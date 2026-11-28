@@ -101,8 +101,7 @@ fn main() -> Result<void, str> {
     }
     root = a[0]
     out = a[1]
-    given = if len(a) == 3 { a[2] } else { SITE }
-    site = if given.ends_with("/") { given[0..len(given) - 1] } else { given }
+    site = https_site(if len(a) == 3 { a[2] } else { SITE })
     base = base_path(site)
     links = Links(root)
     book = chapters(root)?
@@ -148,8 +147,8 @@ fn main() -> Result<void, str> {
     write(out, base, "search.txt", search.join("\n") + "\n")?
     write(out, base, "sitemap.xml", sitemap(site, urls))?
     // The custom domain, when the site is served from the root of one.
-    if base == "" && site.starts_with("https://") {
-        write(out, base, "CNAME", site["https://".len()..] + "\n")?
+    if base == "" {
+        write(out, base, "CNAME", without_scheme(site) + "\n")?
     }
     Dir.create(join_path(out, "assets"))?
     for name in Dir.list(join_path(root, "site/assets"))? {

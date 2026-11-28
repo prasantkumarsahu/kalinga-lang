@@ -116,6 +116,9 @@ test fn served_under_a_path() {
     assert_eq(base_path("https://kalinga-lang.prasantkumarsahu.com/"), "")
     assert_eq(base_path("https://prasantkumarsahu.github.io/kalinga-lang"), "/kalinga-lang")
     assert_eq(base_path("https://prasantkumarsahu.github.io/kalinga-lang/"), "/kalinga-lang")
+    assert_eq(base_path("http://kalinga-lang.prasantkumarsahu.com/"), "")
+    assert_eq(https_site("http://kalinga-lang.prasantkumarsahu.com/"), "https://kalinga-lang.prasantkumarsahu.com")
+    assert_eq(https_site("https://prasantkumarsahu.github.io/kalinga-lang/"), "https://prasantkumarsahu.github.io/kalinga-lang")
     page = "<a href=\"/docs/\">x</a><img src=\"/assets/logo.svg\"><a href=\"https://github.com\">y</a><a href=\"#top\">z</a>"
     assert_eq(rebase(page, ""), page)
     assert_eq(rebase(page, "/kalinga-lang"), "<a href=\"/kalinga-lang/docs/\">x</a><img src=\"/kalinga-lang/assets/logo.svg\"><a href=\"https://github.com\">y</a><a href=\"#top\">z</a>")
