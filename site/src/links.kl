@@ -16,7 +16,7 @@ struct Wanted {
     link: str
 }
 
-/// The path the site is served under: `""` for `https://kalinga-lang.org`,
+/// The path the site is served under: `""` for `https://kalinga-lang.prasantkumarsahu.com`,
 /// `"/kalinga-lang"` for `https://prasantkumarsahu.github.io/kalinga-lang/`.
 fn base_path(site: str) -> str {
     rest = if site.starts_with("https://") { site["https://".len()..] } else { site }

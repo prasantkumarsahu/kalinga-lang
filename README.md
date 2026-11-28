@@ -1,6 +1,6 @@
 # Kalinga
 
-**[kalinga-lang.org](https://kalinga-lang.org)**: the book, live examples and downloads.
+**[kalinga-lang.prasantkumarsahu.com](https://kalinga-lang.prasantkumarsahu.com)**: the book, live examples and downloads.
 
 A small "Rust++": simple syntax, classes with inheritance and interfaces, compiled to
 native code through Rust. It relates to Rust the way early C++ related to C — the

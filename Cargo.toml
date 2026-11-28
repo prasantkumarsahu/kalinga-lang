@@ -6,7 +6,7 @@ resolver = "3"
 version = "0.7.1"
 edition = "2024"
 license = "MIT"
-homepage = "https://kalinga-lang.org"
+homepage = "https://kalinga-lang.prasantkumarsahu.com"
 repository = "https://github.com/prasantkumarsahu/kalinga-lang"
 
 [workspace.dependencies]

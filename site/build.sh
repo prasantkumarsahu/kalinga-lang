@@ -1,16 +1,16 @@
 #!/usr/bin/env bash
-# Builds kalinga-lang.org into _site/ (or the folder given). Needs `kalinga` and `utkal` on
+# Builds kalinga-lang.prasantkumarsahu.com into _site/ (or the folder given). Needs `kalinga` and `utkal` on
 # PATH. The GitHub Pages workflow (.github/workflows/site.yml) runs this too.
 #
 #   site/build.sh [<out dir>] [<site url>]   # then serve the folder with any static file server
 #
-# The site URL (https://kalinga-lang.org unless given) can have a path, such as
+# The site URL (https://kalinga-lang.prasantkumarsahu.com unless given) can have a path, such as
 # https://prasantkumarsahu.github.io/kalinga-lang: every page then links under it.
 set -euo pipefail
 
 root="$(cd "$(dirname "$0")/.." && pwd)"
 out="${1:-$root/_site}"
-site="${2:-https://kalinga-lang.org}"
+site="${2:-https://kalinga-lang.prasantkumarsahu.com}"
 case "$out" in /*) ;; *) out="$PWD/$out" ;; esac
 rm -rf "$out"
 

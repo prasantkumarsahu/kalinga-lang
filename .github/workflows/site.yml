@@ -1,6 +1,6 @@
 name: Website
 
-# Builds kalinga-lang.org with site/build.sh: the generator in site/ (written in Kalinga)
+# Builds kalinga-lang.prasantkumarsahu.com with site/build.sh: the generator in site/ (written in Kalinga)
 # turns docs/ and CHANGELOG.md into pages, site/script is the search box and the Copy
 # buttons (Kalinga for the web), and examples/web/*.kl run live on /play/. Pushes to main publish it to GitHub Pages
 # (a release's version bump changes Cargo.toml, so the download links follow); pull
@@ -46,9 +46,9 @@ jobs:
       pages: read
     steps:
       - uses: actions/checkout@v7
-      # Where Pages serves the site: https://kalinga-lang.org once the custom domain is
+      # Where Pages serves the site: https://kalinga-lang.prasantkumarsahu.com once the custom domain is
       # set, https://prasantkumarsahu.github.io/kalinga-lang until then. The pages link
-      # under that address. Pull requests build for kalinga-lang.org.
+      # under that address. Pull requests build for kalinga-lang.prasantkumarsahu.com.
       - id: pages
         if: github.event_name != 'pull_request'
         uses: actions/configure-pages@v6
@@ -62,7 +62,7 @@ jobs:
         working-directory: site
         run: utkal test
       - name: Build the pages
-        run: bash site/build.sh _site "${{ steps.pages.outputs.base_url || 'https://kalinga-lang.org' }}"
+        run: bash site/build.sh _site "${{ steps.pages.outputs.base_url || 'https://kalinga-lang.prasantkumarsahu.com' }}"
       - uses: actions/upload-pages-artifact@v5
         with:
           path: _site

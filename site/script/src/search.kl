@@ -94,7 +94,7 @@ fn show(results: Element, entries: [Entry], query: str) {
     }
 }
 
-/// The path the site is served under (`""` on kalinga-lang.org, `"/kalinga-lang"` on
+/// The path the site is served under (`""` on kalinga-lang.prasantkumarsahu.com, `"/kalinga-lang"` on
 /// GitHub's own address), from where the page's stylesheet is: `<base>/assets/style.css`.
 fn base() -> str {
     if link = Document.find("link[rel=stylesheet]") {
