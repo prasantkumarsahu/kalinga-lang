@@ -16,15 +16,30 @@ struct Wanted {
     link: str
 }
 
-/// The path the site is served under: `""` for `https://kalinga-lang.org`,
+/// The path the site is served under: `""` for `https://kalinga-lang.prasantkumarsahu.com`,
 /// `"/kalinga-lang"` for `https://prasantkumarsahu.github.io/kalinga-lang/`.
 fn base_path(site: str) -> str {
-    rest = if site.starts_with("https://") { site["https://".len()..] } else { site }
+    rest = without_scheme(site)
     if at = rest.find("/") {
         path = rest[at..]
         return if path.ends_with("/") { path[0..len(path) - 1] } else { path }
     }
     return ""
+}
+
+/// `site` without `https://` or `http://`: `kalinga-lang.prasantkumarsahu.com/...`.
+fn without_scheme(site: str) -> str {
+    if at = site.find("://") {
+        return site[at + 3..]
+    }
+    return site
+}
+
+/// The site's address over HTTPS, without a trailing `/`. GitHub Pages reports
+/// `http://...` for a custom domain until its certificate is ready.
+fn https_site(site: str) -> str {
+    rest = without_scheme(site)
+    return "https://" + (if rest.ends_with("/") { rest[0..len(rest) - 1] } else { rest })
 }
 
 /// `html` with its site links (`href="/docs/"`, `src="/assets/..."`) moved under `base`.

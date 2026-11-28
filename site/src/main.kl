@@ -1,8 +1,8 @@
-// kalinga-lang.org: builds the website from the repository.
+// kalinga-lang.prasantkumarsahu.com: builds the website from the repository.
 //
 //     utkal run -- <repo root> <out dir> [<site url>]
 //
-// The site URL (kalinga-lang.org unless given) sets the sitemap's addresses and the path
+// The site URL (kalinga-lang.prasantkumarsahu.com unless given) sets the sitemap's addresses and the path
 // the pages are served under: on https://prasantkumarsahu.github.io/kalinga-lang every
 // `/docs/` link becomes `/kalinga-lang/docs/`.
 //
@@ -18,7 +18,7 @@ import "markdown.kl"
 import "pages.kl"
 import "text.kl"
 
-SITE: str = "https://kalinga-lang.org"
+SITE: str = "https://kalinga-lang.prasantkumarsahu.com"
 
 /// The chapters in file order, titled by their first line (`# 9. Classes`).
 fn chapters(root: str) -> Result<[Chapter], str> {
@@ -101,8 +101,7 @@ fn main() -> Result<void, str> {
     }
     root = a[0]
     out = a[1]
-    given = if len(a) == 3 { a[2] } else { SITE }
-    site = if given.ends_with("/") { given[0..len(given) - 1] } else { given }
+    site = https_site(if len(a) == 3 { a[2] } else { SITE })
     base = base_path(site)
     links = Links(root)
     book = chapters(root)?
@@ -147,7 +146,10 @@ fn main() -> Result<void, str> {
     write(out, base, "404.html", plain_page("Page not found", "This page does not exist.", "", "<h1>Page not found</h1><p>There is nothing at this address. Try the <a href=\"/docs/\">book</a> or the search at the top.</p>"))?
     write(out, base, "search.txt", search.join("\n") + "\n")?
     write(out, base, "sitemap.xml", sitemap(site, urls))?
-    write(out, base, "CNAME", "kalinga-lang.org\n")?
+    // The custom domain, when the site is served from the root of one.
+    if base == "" {
+        write(out, base, "CNAME", without_scheme(site) + "\n")?
+    }
     Dir.create(join_path(out, "assets"))?
     for name in Dir.list(join_path(root, "site/assets"))? {
         File.copy(join_path(root, "site/assets/" + name), join_path(out, "assets/" + name))?

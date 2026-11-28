@@ -10,7 +10,7 @@
     "url": "https://github.com/prasantkumarsahu/kalinga-lang",
     "directory": "editors/vscode"
   },
-  "homepage": "https://kalinga-lang.org",
+  "homepage": "https://kalinga-lang.prasantkumarsahu.com",
   "icon": "icons/kalinga.png",
   "engines": {
     "vscode": "^1.82.0"

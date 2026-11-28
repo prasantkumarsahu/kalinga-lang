@@ -3,7 +3,7 @@
 ## Unreleased
 
 ### Website
-- **[kalinga-lang.org](https://kalinga-lang.org)**: the book (every chapter of `docs/`, with
+- **[kalinga-lang.prasantkumarsahu.com](https://kalinga-lang.prasantkumarsahu.com)**: the book (every chapter of `docs/`, with
   a chapter list, "on this page" links and search), live examples running in the page,
   downloads for each system and this changelog. It is built by a site generator written in
   Kalinga (`site/`), and its search box and Copy buttons are Kalinga compiled for the web

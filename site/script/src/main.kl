@@ -1,4 +1,4 @@
-// The script of every kalinga-lang.org page, written in Kalinga and built with
+// The script of every kalinga-lang.prasantkumarsahu.com page, written in Kalinga and built with
 // `utkal build` (site/build.sh copies dist/app.js to /assets/site.js): the search box in
 // the top bar (search.kl) and a Copy button on each code block (copy.kl). The pages work
 // without it.
