@@ -13,6 +13,10 @@ struct Chapter {
 
 /// The whole page, with `body` inside the layout. `section` marks the top-bar link of the
 /// part of the site the page is in ("docs", "play", "install", "changelog" or "").
+/// The theme switch's icons: the sun shows on dark pages (switch to light), the moon on light.
+SUN: str = "<svg class=\"sun\" viewBox=\"0 0 24 24\" width=\"18\" height=\"18\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" aria-hidden=\"true\"><circle cx=\"12\" cy=\"12\" r=\"4\"/><path d=\"M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41\"/></svg>"
+MOON: str = "<svg class=\"moon\" viewBox=\"0 0 24 24\" width=\"18\" height=\"18\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z\"/></svg>"
+
 fn layout(title: str, description: str, section: str, body: str) -> str {
     var nav: [str] = []
     for (key, label, href) in [("docs", "Docs", "/docs/"), ("play", "Examples", "/play/"), ("install", "Install", "/install/"), ("changelog", "Changelog", "/changelog/")] {
@@ -31,6 +35,8 @@ fn layout(title: str, description: str, section: str, body: str) -> str {
         "<meta name=\"description\" content=\"" + escape(description) + "\">",
         "<link rel=\"icon\" href=\"/assets/logo.svg\" type=\"image/svg+xml\">",
         "<link rel=\"stylesheet\" href=\"/assets/style.css\">",
+        // The theme chosen with the switch, applied before the page is drawn.
+        "<script>try{{var t=localStorage.getItem(\"theme\");if(t)document.documentElement.dataset.theme=t}}catch(e){{}}</script>",
         "<script type=\"module\" src=\"/assets/site.js\"></script>",
         "</head>",
         "<body>",
@@ -38,6 +44,7 @@ fn layout(title: str, description: str, section: str, body: str) -> str {
         "<a class=\"brand\" href=\"/\"><img src=\"/assets/logo.svg\" alt=\"\" width=\"28\" height=\"28\">Kalinga</a>",
         "<nav class=\"links\">" + nav.join("") + "</nav>",
         "<div id=\"search\" class=\"search\"></div>",
+        "<button id=\"theme\" class=\"theme\" type=\"button\" hidden>" + SUN + MOON + "</button>",
         "</header>",
         body,
         "<footer class=\"bottom\"><p>Kalinga is free software under the MIT license. " + "<a href=\"" + GITHUB + "\">Source on GitHub</a> · " + "<a href=\"" + GITHUB + "/issues\">Report a problem</a></p></footer>",

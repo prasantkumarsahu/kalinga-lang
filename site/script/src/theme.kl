@@ -1,0 +1,41 @@
+// The light / dark switch in the top bar. The page follows the system's setting until the
+// switch is used; then `data-theme` on <html> says which, and it is saved for the next
+// pages (each page's <head> applies the saved one before drawing, so there is no flash).
+
+import "std/web"
+
+/// Whether the system asks for dark pages.
+extern fn system_dark() -> bool = js {
+    return window.matchMedia("(prefers-color-scheme: dark)").matches;
+}
+
+/// The theme shown now: "dark" or "light".
+fn shown(root: Element) -> str {
+    if t = root.attr("data-theme") {
+        return t
+    }
+    return if system_dark() { "dark" } else { "light" }
+}
+
+/// Labels the button with what it switches to.
+fn label(button: Element, theme: str) {
+    other = if theme == "dark" { "light" } else { "dark" }
+    button.set_attr("aria-label", "Switch to the " + other + " theme")
+    button.set_attr("title", "Switch to the " + other + " theme")
+}
+
+/// Shows the switch (it is hidden until this script runs) and makes it work.
+fn start_theme_switch() {
+    if button = Document.find("#theme") {
+        if root = Document.find("html") {
+            label(button, shown(root))
+            button.remove_attr("hidden")
+            button.on(EventKind.Click, fn(e: Event) {
+                theme = if shown(root) == "dark" { "light" } else { "dark" }
+                root.set_attr("data-theme", theme)
+                Storage.set("theme", theme)
+                label(button, theme)
+            })
+        }
+    }
+}

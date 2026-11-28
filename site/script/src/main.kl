@@ -1,14 +1,17 @@
 // The script of every kalinga-lang.prasantkumarsahu.com page, written in Kalinga and built with
 // `utkal build` (site/build.sh copies dist/app.js to /assets/site.js): the search box in
-// the top bar (search.kl) and a Copy button on each code block (copy.kl). The pages work
+// the top bar (search.kl), the light / dark switch (theme.kl) and a Copy button on each
+// code block (copy.kl). The pages work
 // without it.
 
 import "std/reactive"
 import "std/web"
 import "copy.kl"
 import "search.kl"
+import "theme.kl"
 
 fn main() {
+    start_theme_switch()
     add_copy_buttons()
     if host = Document.find("#search") {
         entries = start_search(host)

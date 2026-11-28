@@ -1,11 +1,9 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="Kalinga">
-  <style>
-    .rim { stroke: #000080; } .spokes { fill: #000080; }
-    @media (prefers-color-scheme: dark) { .rim { stroke: #8fa6ff; } .spokes { fill: #8fa6ff; } }
-  </style>
-  <!-- Kalinga: a 24-spoke wheel, after the Ashoka Chakra (as editors/vscode/icons) -->
-  <circle cx="16" cy="16" r="13.5" fill="none" class="rim" stroke-width="2.2"/>
-  <g class="spokes">
+  <!-- Kalinga: a 24-spoke wheel after the Ashoka Chakra, navy on a white disc in light and
+       dark mode alike (the wheel of editors/vscode/icons) -->
+  <circle cx="16" cy="16" r="15.6" fill="#ffffff"/>
+  <circle cx="16" cy="16" r="13.5" fill="none" stroke="#000080" stroke-width="2.2"/>
+  <g fill="#000080">
     <polygon points="19.200,16.140 28.600,16.625 28.600,15.375 19.200,15.860"/>
     <polygon points="19.055,16.963 28.009,19.865 28.332,18.657 19.127,16.693"/>
     <polygon points="18.701,17.721 26.599,22.841 27.224,21.759 18.841,17.479"/>
